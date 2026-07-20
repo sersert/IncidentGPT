@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "incidentgpt-enricher.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
+    app.kubernetes.io/component: "enricher"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "incidentgpt-enricher.fullname" . }}-read
+  labels:
+    app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
+    app.kubernetes.io/component: "enricher"
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "incidentgpt-enricher.fullname" . }}-read
+  labels:
+    app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
+    app.kubernetes.io/component: "enricher"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "incidentgpt-enricher.fullname" . }}-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "incidentgpt-enricher.fullname" . }}
+    namespace: {{ .Release.Namespace }}

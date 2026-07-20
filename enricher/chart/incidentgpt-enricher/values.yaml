@@ -1,0 +1,129 @@
+image:
+  repository: your-registry.example.com/incident-enricher
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Секрет для приватного registry. Оставь пустым для публичного.
+imagePullSecret: ""
+
+replicaCount: 1
+
+fullnameOverride: incidentgpt-enricher
+
+service:
+  type: ClusterIP
+  port: 9099
+
+resources: {}
+#  requests:
+#    cpu: 100m
+#    memory: 128Mi
+#  limits:
+#    cpu: 500m
+#    memory: 512Mi
+
+env:
+  # URL Prometheus для запросов метрик. Зависит от имени Helm-релиза kube-prometheus-stack:
+  # <release>-kube-prometheus-stack-prometheus.<ns>:9090. Здесь release=kps, ns=monitoring.
+  # Поставь своё (напр. prometheus-operated.monitoring:9090 или свой сервис).
+  prometheusUrl: "http://kube-prometheus-stack-prometheus.monitoring:9090"
+  # Куда enricher шлёт ОДИНОЧНЫЙ алерт (фолбэк, если Redis недоступен).
+  backendUrl: "http://ai-worker.incidentgpt.svc:8080/incident"
+  grafanaUrl: ""
+  logsBaseUrl: ""
+  # База для ссылок на runbook: <runbookBaseUrl>/<alertname>. Пусто — ссылки не добавляются.
+  runbookBaseUrl: ""
+  listenAddr: ":9099"
+  enricherVersion: "0.4.0"
+  clusterName: "my-cluster"
+  environment: "prod"
+
+  # Временные окна
+  promRangeBefore: "15m"
+  promRangeAfter: "5m"
+
+  # Лёгкая корреляция алертов через Redis (без графа)
+  redisAddr: "redis-master.incidentgpt.svc.cluster.local:6379"
+  redisPassword: ""
+  groupBackendUrl: "http://ai-worker.incidentgpt.svc:8080/incident-group"
+  rawBackendUrl: "http://ai-worker.incidentgpt.svc:8080/incident-raw"
+  corrWindow: "10m"
+  # 40s — покрывает разброс срабатывания правил (rate-окно 5xx vs мгновенный DeploymentDown).
+  corrSettle: "40s"
+
+  # Фичи (что собирать)
+  enrichClusterContext: true
+  enrichNodeContext: true
+  enrichWorkloadContext: true
+  enrichExternalContext: true
+  enrichK8sContext: true
+
+metrics:
+  # ⚙️ КАКИЕ МЕТРИКИ ТЯНУТЬ при обогащении. Становится ConfigMap /etc/enricher/metrics.yaml.
+  # Плейсхолдеры {{ .Cluster }}/{{ .Namespace }}/{{ .Service }}/{{ .Node }}/{{ .Instance }}
+  # подставляются из лейблов алерта. Результат кладётся в обогащённый алерт (node_*, svc_*…).
+  #
+  # ⚠️ ЭТО ПРИМЕРЫ — адаптируй под свои метрики:
+  #   - убери cluster="{{ .Cluster }}", если у метрик нет лейбла cluster (одиночный кластер);
+  #   - http_requests_total / pg_* / kafka_* требуют инструментированных приложений/экспортёров;
+  #   - нет метрики → запрос вернёт пусто и просто пропустится (не ошибка).
+  cluster:
+    - name: "cluster_cpu_usage"
+      kind: "capacity"
+      expr: >
+        sum(rate(container_cpu_usage_seconds_total{cluster="{{ .Cluster }}",image!=""}[5m]))
+    - name: "cluster_nodes_ready"
+      kind: "health"
+      expr: >
+        sum(kube_node_status_condition{cluster="{{ .Cluster }}",condition="Ready",status="true"})
+
+  node:
+    - name: "node_cpu_usage"
+      kind: "capacity"
+      expr: >
+        100 - (avg by (instance) (rate(node_cpu_seconds_total{{ if .Node }}{node="{{ .Node }}",mode="idle"}{{ else }}{instance="{{ .Instance }}",mode="idle"}{{ end }}[5m])) * 100)
+    - name: "node_mem_usage"
+      kind: "capacity"
+      expr: >
+        1 - (node_memory_MemAvailable_bytes{{ if .Node }}{node="{{ .Node }}"}{{ else }}{instance="{{ .Instance }}"}{{ end }} /
+             node_memory_MemTotal_bytes{{ if .Node }}{node="{{ .Node }}"}{{ else }}{instance="{{ .Instance }}"}{{ end }})
+    - name: "node_up"
+      kind: "health"
+      expr: >
+        up{{ if .Node }}{node="{{ .Node }}"}{{ else }}{instance="{{ .Instance }}"}{{ end }}
+
+  workload:
+    - name: "svc_http_rps"
+      kind: "traffic"
+      expr: >
+        sum(rate(http_requests_total{cluster="{{ .Cluster }}",namespace="{{ .Namespace }}",service="{{ .Service }}"}[5m]))
+    - name: "svc_http_5xx"
+      kind: "errors"
+      expr: >
+        sum(rate(http_requests_total{cluster="{{ .Cluster }}",namespace="{{ .Namespace }}",service="{{ .Service }}",code=~"5.."}[5m]))
+    - name: "svc_latency_p95"
+      kind: "latency"
+      expr: >
+        histogram_quantile(0.95,
+          sum(rate(http_request_duration_seconds_bucket{cluster="{{ .Cluster }}",namespace="{{ .Namespace }}",service="{{ .Service }}"}[5m])) by (le))
+
+  external:
+    # Пример: PostgreSQL (postgres_exporter) по instance/service
+    - name: "db_connections"
+      kind: "capacity"
+      expr: >
+        sum(pg_stat_activity_count{cluster="{{ .Cluster }}",service="{{ .Service }}",instance="{{ .Instance }}"})
+    - name: "db_lsn_lag"
+      kind: "latency"
+      expr: >
+        max(pg_wal_lsn_diff_bytes{cluster="{{ .Cluster }}",service="{{ .Service }}",instance="{{ .Instance }}"})
+    # Пример: Kafka consumer lag
+    - name: "kafka_consumer_lag"
+      kind: "capacity"
+      expr: >
+        sum(kafka_consumer_group_lag{cluster="{{ .Cluster }}",service="{{ .Service }}",instance="{{ .Instance }}"})
+    # Пример: generic TCP-endpoint up{}
+    - name: "external_up"
+      kind: "health"
+      expr: >
+        up{instance="{{ .Instance }}"}

@@ -1,0 +1,51 @@
+replicaCount: 1
+
+image:
+  repository: your-registry.example.com/ai-worker
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Секрет для приватного registry (kubernetes.io/dockerconfigjson). Оставь пустым для публичного.
+imagePullSecret: ""
+
+fullnameOverride: "ai-worker"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources: {}
+#  requests:
+#    cpu: 100m
+#    memory: 128Mi
+#  limits:
+#    cpu: 500m
+#    memory: 512Mi
+
+env:
+  LISTEN_ADDR: ":8080"
+  LOG_LEVEL: "info"
+
+  # 🔑 СЕКРЕТ: ключ OpenRouter (https://openrouter.ai/keys). Задай при деплое (--set или secret).
+  OPENROUTER_API_KEY: ""
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1/chat/completions"
+  OPENROUTER_MODEL: "google/gemini-2.5-flash"
+  REQUEST_TIMEOUT_SECONDS: "20"
+  OPENROUTER_MAX_TOKENS: "2000"  # reasoning-модели тратят токены и на "thinking" — не занижай
+
+  # 🔑 СЕКРЕТ: токен Telegram-бота от @BotFather. Задай при деплое.
+  TELEGRAM_BOT_TOKEN: ""
+  # ID твоего канала (куда летят алерты) и linked-группы обсуждения. См. README.
+  TELEGRAM_CHANNEL_ID: ""
+  TELEGRAM_THREAD_CHAT_ID: ""
+  TELEGRAM_PARSE_MODE: "Markdown"
+
+podAnnotations: {}
+
+podLabels: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

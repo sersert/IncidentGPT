@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "incidentgpt-enricher.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
+    app.kubernetes.io/component: "enricher"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
+      app.kubernetes.io/component: "enricher"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
+        app.kubernetes.io/component: "enricher"
+    spec:
+      serviceAccountName: {{ include "incidentgpt-enricher.fullname" . }}
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}
+      containers:
+        - name: enricher
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 9099
+              name: http
+          env:
+            - name: PROMETHEUS_URL
+              value: {{ .Values.env.prometheusUrl | quote }}
+            - name: PYTHON_BACKEND_URL
+              value: {{ .Values.env.backendUrl | quote }}
+            - name: GRAFANA_URL
+              value: {{ .Values.env.grafanaUrl | quote }}
+            - name: LOGS_BASE_URL
+              value: {{ .Values.env.logsBaseUrl | quote }}
+            - name: RUNBOOK_BASE_URL
+              value: {{ .Values.env.runbookBaseUrl | quote }}
+            - name: LISTEN_ADDR
+              value: {{ .Values.env.listenAddr | quote }}
+            - name: ENRICHER_VERSION
+              value: {{ .Values.env.enricherVersion | quote }}
+            - name: CLUSTER_NAME
+              value: {{ .Values.env.clusterName | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.env.environment | quote }}
+
+            - name: PROM_RANGE_BEFORE
+              value: {{ .Values.env.promRangeBefore | quote }}
+            - name: PROM_RANGE_AFTER
+              value: {{ .Values.env.promRangeAfter | quote }}
+
+            - name: REDIS_ADDR
+              value: {{ .Values.env.redisAddr | quote }}
+            - name: REDIS_PASSWORD
+              value: {{ .Values.env.redisPassword | quote }}
+            - name: GROUP_BACKEND_URL
+              value: {{ .Values.env.groupBackendUrl | quote }}
+            - name: RAW_BACKEND_URL
+              value: {{ .Values.env.rawBackendUrl | quote }}
+            - name: CORR_WINDOW
+              value: {{ .Values.env.corrWindow | quote }}
+            - name: CORR_SETTLE
+              value: {{ .Values.env.corrSettle | quote }}
+
+            - name: ENRICH_CLUSTER_CONTEXT
+              value: {{ .Values.env.enrichClusterContext | quote }}
+            - name: ENRICH_NODE_CONTEXT
+              value: {{ .Values.env.enrichNodeContext | quote }}
+            - name: ENRICH_WORKLOAD_CONTEXT
+              value: {{ .Values.env.enrichWorkloadContext | quote }}
+            - name: ENRICH_EXTERNAL_CONTEXT
+              value: {{ .Values.env.enrichExternalContext | quote }}
+            - name: ENRICH_K8S_CONTEXT
+              value: {{ .Values.env.enrichK8sContext | quote }}
+
+            # путь до файла с метриками
+            - name: METRICS_CONFIG_PATH
+              value: "/etc/enricher/metrics.yaml"
+
+          volumeMounts:
+            - name: metrics-config
+              mountPath: /etc/enricher
+              readOnly: true
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+
+      volumes:
+        - name: metrics-config
+          configMap:
+            name: {{ include "incidentgpt-enricher.fullname" . }}-metrics
+            items:
+              - key: metrics.yaml
+                path: metrics.yaml
