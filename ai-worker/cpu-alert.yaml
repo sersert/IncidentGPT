@@ -1,0 +1,40 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  annotations:
+    meta.helm.sh/release-name: kps
+    meta.helm.sh/release-namespace: monitoring
+  creationTimestamp: '2025-10-09T20:31:38Z'
+  generation: 1
+  labels:
+    app: kube-prometheus-stack
+    app.kubernetes.io/instance: kps
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    app.kubernetes.io/version: 78.0.0
+    chart: kube-prometheus-stack-78.0.0
+    heritage: Helm
+    release: kps
+  name: resource-usage-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: resource-alerts
+      rules:
+        - alert: HighCPUUsage
+          expr: (sum(rate(container_cpu_usage_seconds_total{image!="", container!="POD"}[5m])) by (namespace, pod) * 100) > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage detected"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is using more than 90% CPU."
+
+        - alert: HighMemoryUsage
+          expr: (sum(container_memory_usage_bytes{image!=""}) by (namespace, pod) / sum(kube_pod_container_resource_limits_memory_bytes{image!=""}) by (namespace, pod)) * 100 > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High Memory usage detected"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is using more than 90% memory."

@@ -1,0 +1,39 @@
+# === Секреты (НИКОГДА не коммитить) ===
+.env
+.env.*
+*.local.yaml
+*.local.yml
+values-local.yaml
+values-secret.yaml
+secrets.yaml
+robot*.json
+*.pem
+*.key
+kubeconfig
+*.kubeconfig
+
+# === Go ===
+# скомпилированные бинари сервисов
+/ai-worker/ai-worker
+/enricher/enricher
+*.exe
+*.test
+*.out
+vendor/
+
+# === Kubernetes / Helm ===
+charts/*.tgz
+**/charts/*.tgz
+*.orig
+
+# === IDE / редакторы ===
+.idea/
+.vscode/
+*.swp
+
+# === Claude Code ===
+.claude/
+
+# === OS ===
+.DS_Store
+Thumbs.db
