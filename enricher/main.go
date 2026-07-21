@@ -495,7 +495,7 @@ func alertHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		http.Error(w, "cannot read body", http.StatusBadRequest)
 		return
@@ -753,189 +753,8 @@ func guessPrimaryExpr(a AMAlert) string {
 // ====== NODE / WORKLOAD / CLUSTER / EXTERNAL CONTEXT ======
 //
 
-func attachNodeContext(ctx context.Context, e *EnrichedAlert, a AMAlert, from, to time.Time) {
-	instance := a.Labels["instance"]
-	node := a.Labels["node"]
-	if instance == "" && node == "" {
-		return
-	}
-
-	if node != "" {
-		e.K8sContext["node"] = node
-	}
-	if instance != "" {
-		e.K8sContext["instance"] = instance
-	}
-
-	tmplCtx := metricTemplateContext{
-		Cluster:   appCfg.ClusterName,
-		Namespace: a.Labels["namespace"],
-		Service:   a.Labels["service"],
-		Node:      node,
-		Instance:  instance,
-	}
-
-	for _, m := range metricsCfg.Node {
-		expr, err := renderExpr(m.Expr, tmplCtx)
-		if err != nil {
-			log.Printf("WARN: render node metric %s expr failed: %v", m.Name, err)
-			continue
-		}
-		stats, err := queryStats(ctx, expr, from, to)
-		if err != nil {
-			log.Printf("WARN: query node metric %s failed: %v", m.Name, err)
-			continue
-		}
-		if stats.Count == 0 {
-			continue
-		}
-
-		prefix := "node_" + m.Name
-		e.PromSample[prefix+"_min"] = fmt.Sprintf("%f", stats.Min)
-		e.PromSample[prefix+"_max"] = fmt.Sprintf("%f", stats.Max)
-		e.PromSample[prefix+"_avg"] = fmt.Sprintf("%f", stats.Avg)
-		e.PromSample[prefix+"_last"] = fmt.Sprintf("%f", stats.Last)
-		e.PromSample[prefix+"_count"] = strconv.Itoa(stats.Count)
-		e.PromSample[prefix+"_trend"] = stats.Trend
-	}
-}
-
-func attachWorkloadContext(ctx context.Context, e *EnrichedAlert, a AMAlert, from, to time.Time) {
-	ns := a.Labels["namespace"]
-	svc := a.Labels["service"]
-	if ns == "" && svc == "" {
-		return
-	}
-
-	if ns != "" {
-		e.K8sContext["namespace"] = ns
-	}
-	if svc != "" {
-		e.K8sContext["service"] = svc
-	}
-
-	tmplCtx := metricTemplateContext{
-		Cluster:   appCfg.ClusterName,
-		Namespace: ns,
-		Service:   svc,
-		Node:      a.Labels["node"],
-		Instance:  a.Labels["instance"],
-	}
-
-	for _, m := range metricsCfg.Workload {
-		expr, err := renderExpr(m.Expr, tmplCtx)
-		if err != nil {
-			log.Printf("WARN: render workload metric %s expr failed: %v", m.Name, err)
-			continue
-		}
-		stats, err := queryStats(ctx, expr, from, to)
-		if err != nil {
-			log.Printf("WARN: query workload metric %s failed: %v", m.Name, err)
-			continue
-		}
-		if stats.Count == 0 {
-			continue
-		}
-
-		prefix := "svc_" + m.Name
-		e.PromSample[prefix+"_min"] = fmt.Sprintf("%f", stats.Min)
-		e.PromSample[prefix+"_max"] = fmt.Sprintf("%f", stats.Max)
-		e.PromSample[prefix+"_avg"] = fmt.Sprintf("%f", stats.Avg)
-		e.PromSample[prefix+"_last"] = fmt.Sprintf("%f", stats.Last)
-		e.PromSample[prefix+"_count"] = strconv.Itoa(stats.Count)
-		e.PromSample[prefix+"_trend"] = stats.Trend
-	}
-}
-
-func attachClusterContext(ctx context.Context, e *EnrichedAlert, _ AMAlert, from, to time.Time) {
-	if appCfg.ClusterName == "" || appCfg.ClusterName == "unknown" {
-		return
-	}
-
-	tmplCtx := metricTemplateContext{
-		Cluster: appCfg.ClusterName,
-	}
-
-	for _, m := range metricsCfg.Cluster {
-		expr, err := renderExpr(m.Expr, tmplCtx)
-		if err != nil {
-			log.Printf("WARN: render cluster metric %s expr failed: %v", m.Name, err)
-			continue
-		}
-		stats, err := queryStats(ctx, expr, from, to)
-		if err != nil {
-			log.Printf("WARN: query cluster metric %s failed: %v", m.Name, err)
-			continue
-		}
-		if stats.Count == 0 {
-			continue
-		}
-
-		prefix := "cluster_" + m.Name
-		e.PromSample[prefix+"_min"] = fmt.Sprintf("%f", stats.Min)
-		e.PromSample[prefix+"_max"] = fmt.Sprintf("%f", stats.Max)
-		e.PromSample[prefix+"_avg"] = fmt.Sprintf("%f", stats.Avg)
-		e.PromSample[prefix+"_last"] = fmt.Sprintf("%f", stats.Last)
-		e.PromSample[prefix+"_count"] = strconv.Itoa(stats.Count)
-		e.PromSample[prefix+"_trend"] = stats.Trend
-	}
-}
-
-func attachExternalContext(ctx context.Context, e *EnrichedAlert, a AMAlert, from, to time.Time) {
-	svc := a.Labels["service"]
-	inst := a.Labels["instance"]
-	scope := a.Labels["scope"]
-	component := a.Labels["component"]
-
-	if svc == "" && inst == "" && scope != "external" && component == "" {
-		return
-	}
-
-	if scope != "" {
-		e.K8sContext["scope"] = scope
-	}
-	if component != "" {
-		e.K8sContext["component"] = component
-	}
-	if svc != "" {
-		e.K8sContext["external_service"] = svc
-	}
-	if inst != "" {
-		e.K8sContext["external_instance"] = inst
-	}
-
-	tmplCtx := metricTemplateContext{
-		Cluster:   appCfg.ClusterName,
-		Namespace: a.Labels["namespace"],
-		Service:   svc,
-		Node:      a.Labels["node"],
-		Instance:  inst,
-	}
-
-	for _, m := range metricsCfg.External {
-		expr, err := renderExpr(m.Expr, tmplCtx)
-		if err != nil {
-			log.Printf("WARN: render external metric %s expr failed: %v", m.Name, err)
-			continue
-		}
-		stats, err := queryStats(ctx, expr, from, to)
-		if err != nil {
-			log.Printf("WARN: query external metric %s failed: %v", m.Name, err)
-			continue
-		}
-		if stats.Count == 0 {
-			continue
-		}
-
-		prefix := "ext_" + m.Name
-		e.PromSample[prefix+"_min"] = fmt.Sprintf("%f", stats.Min)
-		e.PromSample[prefix+"_max"] = fmt.Sprintf("%f", stats.Max)
-		e.PromSample[prefix+"_avg"] = fmt.Sprintf("%f", stats.Avg)
-		e.PromSample[prefix+"_last"] = fmt.Sprintf("%f", stats.Last)
-		e.PromSample[prefix+"_count"] = strconv.Itoa(stats.Count)
-		e.PromSample[prefix+"_trend"] = stats.Trend
-	}
-}
+// Функции attachNodeContext, attachWorkloadContext, attachClusterContext,
+// attachExternalContext вынесены в enrichment.go (единая attachMetrics).
 
 //
 // ====== GRAFANA / LOGS / RUNBOOK ======
@@ -1043,7 +862,6 @@ func ruleOfThumbHints(a AMAlert, e EnrichedAlert) []string {
 // ====== ЛОГИРОВАНИЕ АЛЕРТОВ ======
 
 func logAlertRaw(a AMAlert) {
-	// Вытащим основные поля для заголовка лога
 	alertName := a.Labels["alertname"]
 	severity := a.Labels["severity"]
 
@@ -1052,15 +870,12 @@ func logAlertRaw(a AMAlert) {
 		fp = stableFingerprint(a.Labels)
 	}
 
-	b, err := json.MarshalIndent(a, "", "  ")
-	if err != nil {
-		log.Printf("ERROR: cannot marshal raw alert for logging (fingerprint=%s): %v", fp, err)
-		return
-	}
-
 	log.Printf(
-		"ALERT_RAW: fingerprint=%s alertname=%s severity=%s\n%s",
-		fp, alertName, severity, string(b),
+		"ALERT_RAW: fingerprint=%s alertname=%s severity=%s namespace=%s labels=%d annotations=%d",
+		fp, alertName, severity,
+		a.Labels["namespace"],
+		len(a.Labels),
+		len(a.Annotations),
 	)
 }
 
