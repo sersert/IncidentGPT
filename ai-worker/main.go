@@ -68,10 +68,10 @@ type IncidentResponse struct {
 type Config struct {
 	ListenAddr string
 
-	TGBotToken      string
-	TGChannelID     string // канал, куда летит алерт
-	TGThreadChatID  string // чат обсуждения, куда летит AI-ответ
-	TGParseMode     string
+	TGBotToken     string
+	TGChannelID    string // канал, куда летит алерт
+	TGThreadChatID string // чат обсуждения, куда летит AI-ответ
+	TGParseMode    string
 
 	ORAPIKey    string
 	ORBaseURL   string
@@ -83,7 +83,6 @@ type Config struct {
 var (
 	appCfg     Config
 	httpClient = &http.Client{
-		Timeout: 300 * time.Second,
 		Transport: &http.Transport{
 			TLSNextProto:      make(map[string]func(string, *tls.Conn) http.RoundTripper),
 			DisableKeepAlives: true,
@@ -206,10 +205,10 @@ func incidentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if os.Getenv("DEBUG_ENRICHED") == "1" {
-    pretty, _ := json.MarshalIndent(alert, "", "  ")
-    log.Printf("DEBUG: enriched alert from enricher:\n%s", string(pretty))
+		pretty, _ := json.MarshalIndent(alert, "", "  ")
+		log.Printf("DEBUG: enriched alert from enricher:\n%s", string(pretty))
 	}
-	
+
 	log.Printf("INFO: got incident alert=%s severity=%s status=%s",
 		alert.Labels["alertname"], alert.Labels["severity"], alert.Status)
 
@@ -251,7 +250,7 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 	// 5) Асинхронно делаем OpenRouter + ответ в тред (комментарий к посту в КАНАЛЕ)
 	go func(alert EnrichedAlert, parentMsgID int64) {
 		// Отдельный контекст для OpenRouter, не зависящий от HTTP-запроса Enricher-а
-		aiCtx, cancelAI := context.WithTimeout(context.Background(), 300*time.Second)
+		aiCtx, cancelAI := openRouterBackgroundContext()
 		defer cancelAI()
 
 		prompt := buildPromptFromAlert(alert)
@@ -381,7 +380,7 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 	// Асинхронно: один вызов LLM → AI-разбор. Для группы — реплаем на сводку-связку,
 	// для одиночного — отдельным сообщением.
 	go func(req GroupRequest, parentMsgID int64) {
-		aiCtx, cancelAI := context.WithTimeout(context.Background(), 300*time.Second)
+		aiCtx, cancelAI := openRouterBackgroundContext()
 		defer cancelAI()
 
 		var sysPrompt, prompt, header string
@@ -488,7 +487,6 @@ func sendTelegramMessage(ctx context.Context, chatID, text string, replyTo int64
 	return tgResp.Result.MessageID, nil
 }
 
-
 func sendTelegramReply(ctx context.Context, text string, replyTo int64) error {
 	// Отвечаем в КАНАЛ на пост с given replyTo
 	_, err := sendTelegramMessage(ctx, appCfg.TGChannelID, text, replyTo)
@@ -533,6 +531,10 @@ func callOpenRouter(ctx context.Context, prompt string) (string, error) {
 	return callOpenRouterWithSystem(ctx, systemPrompt, prompt)
 }
 
+func openRouterBackgroundContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), appCfg.ORTimeout)
+}
+
 func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (string, error) {
 	if appCfg.ORAPIKey == "" {
 		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
@@ -568,7 +570,7 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 	}
 
 	if os.Getenv("DEBUG_OR_PAYLOAD") == "1" {
-    log.Printf("DEBUG: OpenRouter request payload:\n%s", string(body))
+		log.Printf("DEBUG: OpenRouter request payload:\n%s", string(body))
 	}
 
 	req.Header.Set("Content-Type", "application/json")
