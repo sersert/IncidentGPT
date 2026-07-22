@@ -30,7 +30,8 @@ env:
   OPENROUTER_API_KEY: ""
   OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1/chat/completions"
   OPENROUTER_MODEL: "google/gemini-2.5-flash"
-  OPENROUTER_TIMEOUT_SECONDS: "20"
+  # 60s — reasoning-модели (gemini-2.5-flash) иногда думают дольше, 20с бывает тесно
+  OPENROUTER_TIMEOUT_SECONDS: "60"
   OPENROUTER_MAX_TOKENS: "2000"  # reasoning-модели тратят токены и на "thinking" — не занижай
 
   # 🔑 СЕКРЕТ: токен Telegram-бота от @BotFather. Задай при деплое.
