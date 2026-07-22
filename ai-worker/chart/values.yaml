@@ -22,19 +22,22 @@ resources: {}
 #    cpu: 500m
 #    memory: 512Mi
 
+# Секреты (переопредели при деплое через --set-file или внешний values).
+# ВАЖНО: не коммить реальные ключи в этот файл!
+secretValues:
+  openrouterApiKey: ""
+  telegramBotToken: ""
+
 env:
   LISTEN_ADDR: ":8080"
   LOG_LEVEL: "info"
 
-  # 🔑 СЕКРЕТ: ключ OpenRouter (https://openrouter.ai/keys). Задай при деплое (--set или secret).
-  OPENROUTER_API_KEY: ""
   OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1/chat/completions"
   OPENROUTER_MODEL: "google/gemini-2.5-flash"
-  REQUEST_TIMEOUT_SECONDS: "20"
+  # 60s — reasoning-модели (gemini-2.5-flash) иногда думают дольше, 20с бывает тесно
+  OPENROUTER_TIMEOUT_SECONDS: "60"
   OPENROUTER_MAX_TOKENS: "2000"  # reasoning-модели тратят токены и на "thinking" — не занижай
 
-  # 🔑 СЕКРЕТ: токен Telegram-бота от @BotFather. Задай при деплое.
-  TELEGRAM_BOT_TOKEN: ""
   # ID твоего канала (куда летят алерты) и linked-группы обсуждения. См. README.
   TELEGRAM_CHANNEL_ID: ""
   TELEGRAM_THREAD_CHAT_ID: ""

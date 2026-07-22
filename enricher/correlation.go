@@ -96,7 +96,14 @@ func bufferAlert(e EnrichedAlert) error {
 
 	// Live-фид: сразу постим сырой алерт (не дожидаясь окна), чтобы инженер видел
 	// поток в реальном времени. AI-разбор группы придёт позже через /incident-group.
-	go sendRawToBackend(e)
+	go func(e EnrichedAlert) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("ERROR: panic in sendRawToBackend for fingerprint=%s: %v", e.Fingerprint, r)
+			}
+		}()
+		sendRawToBackend(e)
+	}(e)
 
 	// Debounce: заводим таймер только для первого алерта группы.
 	groupTimers.mu.Lock()
@@ -126,7 +133,6 @@ func flushGroup(key, groupKey string) {
 		log.Printf("ERROR: corr flush HGetAll %s failed: %v", key, err)
 		return
 	}
-	redisClient.Del(ctx, key)
 
 	if len(vals) == 0 {
 		return
@@ -137,9 +143,16 @@ func flushGroup(key, groupKey string) {
 		alerts = append(alerts, json.RawMessage(v))
 	}
 
+	// Отправляем пакет ДО удаления ключа из Redis.
+	// Если отправка упадёт — группа останется в Redis и будет доставлена
+	// при следующем вызове flushGroup или по истечении TTL.
 	if err := sendGroupToBackend(ctx, groupKey, alerts); err != nil {
 		log.Printf("ERROR: failed to send incident group to backend: %v", err)
+		return
 	}
+
+	// Только после успешной отправки удаляем группу из Redis.
+	redisClient.Del(ctx, key)
 }
 
 // sendRawToBackend постит один сырой алерт на RAW_BACKEND_URL (/incident-raw) —

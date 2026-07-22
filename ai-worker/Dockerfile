@@ -15,9 +15,9 @@ ENV CGO_ENABLED=0 \
 
 WORKDIR /app
 
-# У тебя пока нет внешних зависимостей, поэтому копируем только go.mod
-COPY go.mod ./
-RUN go mod download || true
+# Копируем модули для кеширования
+COPY go.mod go.sum ./
+RUN go mod download
 
 # Затем весь код
 COPY . .
