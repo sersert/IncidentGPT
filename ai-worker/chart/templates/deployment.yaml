@@ -34,6 +34,10 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          envFrom:
+            - secretRef:
+                name: {{ include "ai-worker.fullname" . }}-secrets
+                optional: true
           env:
             {{- range $name, $value := .Values.env }}
             - name: {{ $name }}

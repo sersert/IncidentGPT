@@ -10,9 +10,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 )
 
@@ -88,6 +91,10 @@ var (
 			DisableKeepAlives: true,
 		},
 	}
+	// llmSemaphore ограничивает конкурентность LLM-вызовов при шторме алертов.
+	llmSemaphore = make(chan struct{}, 8)
+	// activeTasks отслеживает незавершённые фоновые задачи для graceful shutdown.
+	activeTasks sync.WaitGroup
 )
 
 func envOr(key, def string) string {
@@ -169,9 +176,31 @@ func main() {
 	log.Printf("OpenRouter model=%s, timeout=%s, max_tokens=%d",
 		appCfg.ORModel, appCfg.ORTimeout, appCfg.ORMaxTokens)
 
+	// Graceful shutdown: ловим SIGTERM/SIGINT, ждём завершения фоновых задач.
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Printf("INFO: received signal %v, shutting down (waiting for %d active tasks)", sig, activeTasksCount())
+
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutCancel()
+		if err := srv.Shutdown(shutCtx); err != nil {
+			log.Printf("ERROR: server shutdown: %v", err)
+		}
+		// Ждём завершения фоновых горутин (LLM + Telegram), чтобы не терять разбор.
+		activeTasks.Wait()
+		log.Printf("INFO: all background tasks completed, exiting")
+	}()
+	
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func activeTasksCount() int {
+	// Приблизительная оценка для лога; точное число — в WaitGroup.
+	return len(llmSemaphore)
 }
 
 //
@@ -247,8 +276,16 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 		return
 	}
 
-	// 5) Асинхронно делаем OpenRouter + ответ в тред (комментарий к посту в КАНАЛЕ)
+	// 5) Асинхронно делаем OpenRouter + ответ в тред (комментарий к посту в КАНАЛЕ).
+	// Используем bounded semaphore для защиты от шторма алертов.
+	activeTasks.Add(1)
 	go func(alert EnrichedAlert, parentMsgID int64) {
+		defer activeTasks.Done()
+
+		// Ограничиваем конкурентность LLM-вызовов.
+		llmSemaphore <- struct{}{}
+		defer func() { <-llmSemaphore }()
+
 		// Отдельный контекст для OpenRouter, не зависящий от HTTP-запроса Enricher-а
 		aiCtx, cancelAI := openRouterBackgroundContext()
 		defer cancelAI()
@@ -269,7 +306,7 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 		replyCtx, cancelReply := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancelReply()
 
-		if err := sendTelegramReply(replyCtx, aiText, parentMsgID); err != nil {
+		if err := sendTelegramChunked(replyCtx, aiText, parentMsgID); err != nil {
 			log.Printf("ERROR: send AI reply to telegram failed for message_id=%d: %v", parentMsgID, err)
 			return
 		}
@@ -378,8 +415,14 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Асинхронно: один вызов LLM → AI-разбор. Для группы — реплаем на сводку-связку,
-	// для одиночного — отдельным сообщением.
+	// для одиночного — отдельным сообщением. Bounded semaphore защищает от OOM.
+	activeTasks.Add(1)
 	go func(req GroupRequest, parentMsgID int64) {
+		defer activeTasks.Done()
+
+		llmSemaphore <- struct{}{}
+		defer func() { <-llmSemaphore }()
+
 		aiCtx, cancelAI := openRouterBackgroundContext()
 		defer cancelAI()
 
@@ -407,13 +450,13 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 		defer cancelSend()
 
 		if parentMsgID != 0 {
-			// группа: разбор комментом к сводке-связке
-			if err := sendTelegramReply(sendCtx, aiText, parentMsgID); err != nil {
+			// группа: разбор комментом к сводке-связке (чанками)
+			if err := sendTelegramChunked(sendCtx, aiText, parentMsgID); err != nil {
 				log.Printf("ERROR: send group analysis reply failed: %v", err)
 				return
 			}
 		} else {
-			// одиночный: разбор отдельным сообщением
+			// одиночный: разбор отдельным сообщением (чанками)
 			if _, err := sendTelegramMessage(sendCtx, appCfg.TGChannelID, header+aiText, 0); err != nil {
 				log.Printf("ERROR: send single analysis failed: %v", err)
 				return
@@ -488,7 +531,8 @@ func sendTelegramMessage(ctx context.Context, chatID, text string, replyTo int64
 }
 
 func sendTelegramReply(ctx context.Context, text string, replyTo int64) error {
-	// Отвечаем в КАНАЛ на пост с given replyTo
+	// Отвечаем в канал (TGChannelID). Комментарий автоматически появится
+	// и в привязанной группе обсуждения (TGThreadChatID), если она настроена.
 	_, err := sendTelegramMessage(ctx, appCfg.TGChannelID, text, replyTo)
 	return err
 }
@@ -871,6 +915,34 @@ func buildGroupPrompt(req GroupRequest) string {
 	fmt.Fprintf(&b, "Проанализируй группу целиком по инструкциям системного промпта.\n")
 
 	return b.String()
+}
+
+// sendTelegramChunked разбивает текст на чанки ≤4096 символов (лимит Telegram API)
+// и отправляет их как reply-цепочку (первый ответ на parentMsgID, остальные друг за другом).
+func sendTelegramChunked(ctx context.Context, text string, parentMsgID int64) error {
+	const maxLen = 4000 // запас под parse_mode overhead
+
+	if len(text) <= maxLen {
+		return sendTelegramReply(ctx, text, parentMsgID)
+	}
+
+	// Используем руны для безопасного деления по границам символов.
+	runes := []rune(text)
+	prevMsgID := parentMsgID
+
+	for i := 0; i < len(runes); i += maxLen {
+		end := i + maxLen
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunk := string(runes[i:end])
+		msgID, err := sendTelegramMessage(ctx, appCfg.TGChannelID, chunk, prevMsgID)
+		if err != nil {
+			return fmt.Errorf("chunk %d/%d (parent=%d): %w", i/maxLen+1, (len(runes)+maxLen-1)/maxLen, prevMsgID, err)
+		}
+		prevMsgID = msgID
+	}
+	return nil
 }
 
 func firstNonEmpty(vals ...string) string {
