@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Go-сборка/тесты идут ВНУТРИ пиннутого образа golang:X-bookworm — того же,
+  # что в Dockerfile каждого сервиса. Хост ubuntu-latest тут лишь Docker-host;
+  # реальная работа — в воспроизводимом контейнере, matches prod build stage.
+  go:
+    name: build & test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: ai-worker
+            image: golang:1.25-bookworm   # == ai-worker/Dockerfile
+          - service: enricher
+            image: golang:1.24-bookworm   # == enricher/Dockerfile
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # container-job бежит от root, а checkout кладёт репо с другим uid →
+      # git ругается "dubious ownership" и ломает VCS-штамп в go build.
+      - name: mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { echo '::error::not gofmt-ed:'; gofmt -l .; exit 1; }
+
+      - name: vet
+        run: go vet ./...
+
+      - name: build
+        run: go build ./...
+
+      - name: test
+        run: go test -race ./...
+
+  # Линт Dockerfile'ов по твоему чек-листу антипаттернов.
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile: [ai-worker/Dockerfile, enricher/Dockerfile]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+
+  helm:
+    name: helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint ai-worker/chart
+      - run: helm lint enricher/chart/incidentgpt-enricher
