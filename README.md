@@ -244,6 +244,7 @@ enricher/           # Go: обогащение + корреляция
 | `PROM_RANGE_BEFORE` / `PROM_RANGE_AFTER` | `15m` / `5m` | окно метрик вокруг `startsAt` алерта |
 | `CORR_WINDOW` | `10m` | TTL группы в Redis |
 | `CORR_SETTLE` | `40s` | сколько ждать следствий каскада перед склейкой |
+| `RAW_DEDUP_TTL` | `2m` | антиспам raw-фида: повторный `fingerprint` не постится в Telegram в пределах TTL; `0s` отключает |
 | `REDIS_ADDR` | — | адрес Redis (⚠️ у Bitnami сервис = `...-master`) |
 | `RUNBOOK_BASE_URL` | `""` | база ссылок на runbook; пусто → не добавляется |
 | `ENRICH_*_CONTEXT` | `true` | какие слои контекста собирать |

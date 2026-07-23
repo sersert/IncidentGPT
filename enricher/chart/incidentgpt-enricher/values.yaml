@@ -50,6 +50,9 @@ env:
   corrWindow: "10m"
   # 40s — покрывает разброс срабатывания правил (rate-окно 5xx vs мгновенный DeploymentDown).
   corrSettle: "40s"
+  # Антиспам raw-фида: повторный firing с тем же fingerprint не постится в Telegram в пределах TTL.
+  # Поставь "0s", чтобы отключить дедупликацию.
+  rawDedupTtl: "2m"
 
   # Фичи (что собирать)
   enrichClusterContext: true

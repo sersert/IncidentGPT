@@ -146,6 +146,7 @@ type Config struct {
 	CorrWindow      time.Duration
 	CorrWindowRaw   string
 	CorrSettle      time.Duration
+	RawDedupTTL     time.Duration
 
 	EnableClusterContext  bool
 	EnableNodeContext     bool
@@ -373,6 +374,7 @@ func loadConfig() Config {
 		CorrWindow:      envDuration("CORR_WINDOW", 10*time.Minute),
 		CorrWindowRaw:   envOr("CORR_WINDOW", "10m"),
 		CorrSettle:      envDuration("CORR_SETTLE", 20*time.Second),
+		RawDedupTTL:     envDuration("RAW_DEDUP_TTL", 2*time.Minute),
 
 		EnableClusterContext:  envBool("ENRICH_CLUSTER_CONTEXT", true),
 		EnableNodeContext:     envBool("ENRICH_NODE_CONTEXT", true),
@@ -435,7 +437,8 @@ func main() {
 	if err := initRedis(); err != nil {
 		log.Printf("WARN: redis init failed: %v (correlation disabled, alerts sent individually)", err)
 	} else {
-		log.Printf("INFO: redis connected at %s, correlation enabled (window=%s settle=%s)", appCfg.RedisAddr, appCfg.CorrWindow, appCfg.CorrSettle)
+		log.Printf("INFO: redis connected at %s, correlation enabled (window=%s settle=%s raw_dedup_ttl=%s)",
+			appCfg.RedisAddr, appCfg.CorrWindow, appCfg.CorrSettle, appCfg.RawDedupTTL)
 	}
 
 	// Kubernetes client (optional — graceful degradation if not in cluster)
