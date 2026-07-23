@@ -192,7 +192,7 @@ func main() {
 		activeTasks.Wait()
 		log.Printf("INFO: all background tasks completed, exiting")
 	}()
-	
+
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
