@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"incident-enricher/internal/rawdedup"
 )
 
 // redisClient — клиент для лёгкой корреляции. nil, если Redis недоступен (фолбэк на поштучную отправку).
@@ -102,6 +104,9 @@ func bufferAlert(e EnrichedAlert) error {
 				log.Printf("ERROR: panic in sendRawToBackend for fingerprint=%s: %v", e.Fingerprint, r)
 			}
 		}()
+		if !claimRawDelivery(e) {
+			return
+		}
 		sendRawToBackend(e)
 	}(e)
 
@@ -115,6 +120,30 @@ func bufferAlert(e EnrichedAlert) error {
 
 	log.Printf("ALERT_BUFFERED: fingerprint=%s group=%s key=%s", e.Fingerprint, gk, key)
 	return nil
+}
+
+// claimRawDelivery возвращает true только для первого raw-уведомления по fingerprint
+// в пределах RAW_DEDUP_TTL. При ошибке Redis выбираем доставку raw-алерта, чтобы
+// антиспам не становился точкой потери видимости.
+func claimRawDelivery(e EnrichedAlert) bool {
+	key, ok := rawdedup.KeyFor(appCfg.RawDedupTTL, e.Fingerprint)
+	if !ok || redisClient == nil {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	ok, err := redisClient.SetNX(ctx, key, "1", appCfg.RawDedupTTL).Result()
+	if err != nil {
+		log.Printf("WARN: raw dedup check failed fingerprint=%s key=%s: %v", e.Fingerprint, key, err)
+		return true
+	}
+	if !ok {
+		log.Printf("ALERT_RAW_DEDUP_SKIP: fingerprint=%s ttl=%s", e.Fingerprint, appCfg.RawDedupTTL)
+		return false
+	}
+	return true
 }
 
 // flushGroup вызывается по срабатыванию debounce-таймера: читает все алерты группы,

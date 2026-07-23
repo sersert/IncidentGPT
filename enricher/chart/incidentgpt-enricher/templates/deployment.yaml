@@ -66,6 +66,8 @@ spec:
               value: {{ .Values.env.corrWindow | quote }}
             - name: CORR_SETTLE
               value: {{ .Values.env.corrSettle | quote }}
+            - name: RAW_DEDUP_TTL
+              value: {{ .Values.env.rawDedupTtl | quote }}
 
             - name: ENRICH_CLUSTER_CONTEXT
               value: {{ .Values.env.enrichClusterContext | quote }}
