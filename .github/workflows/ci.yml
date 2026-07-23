@@ -30,6 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # container-job бежит от root, а checkout кладёт репо с другим uid →
+      # git ругается "dubious ownership" и ломает VCS-штамп в go build.
+      - name: mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { echo '::error::not gofmt-ed:'; gofmt -l .; exit 1; }
 
