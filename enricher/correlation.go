@@ -214,7 +214,9 @@ func sendRawToBackend(e EnrichedAlert) {
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<10))
 		log.Printf("WARN: raw backend HTTP %d: %s", resp.StatusCode, string(body))
+		return
 	}
+	appMetrics.inc("incidentgpt_raw_sent_total")
 }
 
 // sendGroupToBackend отправляет пачку алертов на GROUP_BACKEND_URL.
@@ -256,5 +258,6 @@ func sendGroupToBackend(ctx context.Context, groupKey string, alerts []json.RawM
 		"GROUP_SENT: group_key=%s alerts=%d window=%s backend=%s status=%d",
 		groupKey, len(alerts), appCfg.CorrWindowRaw, appCfg.GroupBackendURL, resp.StatusCode,
 	)
+	appMetrics.inc("incidentgpt_groups_sent_total")
 	return nil
 }

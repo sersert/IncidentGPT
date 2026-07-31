@@ -5,6 +5,10 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ include "incidentgpt-enricher.fullname" . }}
     app.kubernetes.io/component: "enricher"
+  {{- with .Values.service.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
