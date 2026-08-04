@@ -19,7 +19,7 @@ export function Header({ t, language, theme, activePage, onLanguageChange, onThe
   return (
     <header className="site-header">
       <a className="brand" href={buildRoute(language, "")} aria-label="IncidentGPT overview">
-        <span className="brand-mark">IG</span>
+        <img className="brand-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" aria-hidden="true" />
         <span>IncidentGPT</span>
       </a>
       <nav className="desktop-nav" aria-label="Primary">

@@ -105,15 +105,10 @@ select {
   text-decoration: none;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
+.brand-logo {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--ai), var(--k8s));
-  color: white;
-  font-size: 13px;
+  display: block;
 }
 
 .desktop-nav {
