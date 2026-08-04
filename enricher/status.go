@@ -17,11 +17,14 @@ type dependencyCheck struct {
 }
 
 func readyzHandler(w http.ResponseWriter, _ *http.Request) {
+	// readyz — только локальные мгновенные проверки, без сетевых вызовов.
+	// Проба бежит каждые 5s; здоровье downstream'ов (Prometheus/Redis) смотрим в /status.
+	// Иначе моргание Prometheus → enricher NotReady → его выкидывает из endpoints →
+	// Alertmanager не доставит вебхук → потеря алертов ровно во время инцидента.
 	checks := map[string]dependencyCheck{
 		"config":         {OK: appCfg.PromURL != "" && appCfg.BackendURL != ""},
 		"metrics_config": {OK: metricsCfgLoaded()},
-		"prometheus":     checkPrometheusReady(),
-		"redis":          checkRedisReady(),
+		"redis":          {OK: redisClient != nil, Optional: true},
 		"kubernetes":     checkK8sReady(),
 	}
 
@@ -52,6 +55,7 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"environment":      appCfg.Environment,
 		"prometheus": map[string]interface{}{
 			"url_configured": appCfg.PromURL != "",
+			"reachable":      checkPrometheusReady().OK,
 			"range_before":   appCfg.RangeBefore.String(),
 			"range_after":    appCfg.RangeAfter.String(),
 		},
@@ -65,6 +69,7 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"redis": map[string]interface{}{
 			"configured": appCfg.RedisAddr != "",
 			"enabled":    redisClient != nil,
+			"reachable":  checkRedisReady().OK,
 			"window":     appCfg.CorrWindow.String(),
 			"settle":     appCfg.CorrSettle.String(),
 		},
