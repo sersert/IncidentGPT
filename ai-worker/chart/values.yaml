@@ -32,14 +32,21 @@ secretValues:
   openrouterApiKey: ""
   telegramBotToken: ""
 
+secrets:
+  # Optional existing Secret with OPENROUTER_API_KEY and TELEGRAM_BOT_TOKEN.
+  # Empty value keeps the bundled Secret template and secretValues behavior.
+  existingSecret: ""
+  openRouterApiKeyKey: OPENROUTER_API_KEY
+  telegramBotTokenKey: TELEGRAM_BOT_TOKEN
+
 env:
   LISTEN_ADDR: ":8080"
   LOG_LEVEL: "info"
 
   OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1/chat/completions"
   OPENROUTER_MODEL: "google/gemini-2.5-flash"
-  # 60s — reasoning-модели (gemini-2.5-flash) иногда думают дольше, 20с бывает тесно
-  OPENROUTER_TIMEOUT_SECONDS: "60"
+  # reasoning-модели (gemini-2.5-flash) иногда думают дольше
+  OPENROUTER_TIMEOUT_SECONDS: "300"
   OPENROUTER_MAX_TOKENS: "2000"  # reasoning-модели тратят токены и на "thinking" — не занижай
 
   # ID твоего канала (куда летят алерты) и linked-группы обсуждения. См. README.
