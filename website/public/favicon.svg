@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="IncidentGPT">
+  <rect width="64" height="64" rx="14" fill="#080B12"/>
+  <path d="M15 38 28 14h18L34 32h15L25 56l8-18H15Z" fill="#8B5CF6"/>
+  <path d="M21 38h12l-5 12 13-14H29l9-16h-7L21 38Z" fill="#326CE5"/>
+</svg>
