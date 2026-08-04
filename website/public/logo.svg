@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">IncidentGPT logo</title>
+  <desc id="desc">A Kubernetes-style hexagonal incident mark with telemetry lines and an AI spark.</desc>
+  <defs>
+    <linearGradient id="frame" x1="46" y1="32" x2="214" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#326CE5"/>
+      <stop offset=".48" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="96" y1="72" x2="168" y2="184" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3F6FC"/>
+      <stop offset=".45" stop-color="#BFD2FF"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.545 0 0 0 0 0.361 0 0 0 0 0.965 0 0 0 .55 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <path d="M128 14 225 70v112l-97 56-97-56V70l97-56Z" fill="#080B12"/>
+  <path d="M128 24 216 75v106l-88 51-88-51V75l88-51Z" fill="#0F1420" stroke="url(#frame)" stroke-width="10"/>
+  <path d="M70 178V94l58-34 58 34v84l-58 34-58-34Z" fill="#121926" stroke="#263044" stroke-width="4"/>
+
+  <g opacity=".55" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M54 96h38l18 22h36l18-22h38" fill="none" stroke="#326CE5" stroke-width="7"/>
+    <path d="M54 160h42l16-22h32l16 22h42" fill="none" stroke="#22C55E" stroke-width="7"/>
+    <path d="M128 44v32M128 180v32" stroke="#8B5CF6" stroke-width="7"/>
+  </g>
+
+  <g filter="url(#glow)">
+    <path d="M116 71h48l-35 53h38l-72 68 24-51H91l25-70Z" fill="url(#spark)"/>
+    <path d="M116 71h48l-35 53h38l-72 68 24-51H91l25-70Z" fill="none" stroke="#F3F6FC" stroke-opacity=".55" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+
+  <circle cx="70" cy="96" r="7" fill="#326CE5"/>
+  <circle cx="186" cy="96" r="7" fill="#326CE5"/>
+  <circle cx="70" cy="160" r="7" fill="#22C55E"/>
+  <circle cx="186" cy="160" r="7" fill="#22C55E"/>
+  <circle cx="128" cy="44" r="6" fill="#8B5CF6"/>
+  <circle cx="128" cy="212" r="6" fill="#8B5CF6"/>
+</svg>
