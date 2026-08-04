@@ -160,6 +160,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyzHandler)
+	mux.HandleFunc("/status", statusHandler)
+	mux.HandleFunc("/metrics", metricsHandler)
 	mux.HandleFunc("/incident", incidentHandler)
 	mux.HandleFunc("/incident-raw", incidentRawHandler)
 	mux.HandleFunc("/incident-group", incidentGroupHandler)
@@ -238,6 +241,7 @@ func incidentHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("DEBUG: enriched alert from enricher:\n%s", string(pretty))
 	}
 
+	appMetrics.inc("incidentgpt_alerts_received_total")
 	log.Printf("INFO: got incident alert=%s severity=%s status=%s",
 		alert.Labels["alertname"], alert.Labels["severity"], alert.Status)
 
@@ -261,6 +265,7 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 		})
 		return
 	}
+	appMetrics.inc("incidentgpt_raw_sent_total")
 	log.Printf("INFO: alert posted to telegram channel message_id=%d", msgID)
 
 	// 3) Сразу отвечаем Enricher'у — он свою работу сделал, дальше мы сами
@@ -337,12 +342,14 @@ func incidentRawHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	appMetrics.inc("incidentgpt_alerts_received_total")
 	msgID, err := sendTelegramMessage(r.Context(), appCfg.TGChannelID, buildAlertMessage(alert), 0)
 	if err != nil {
 		log.Printf("ERROR: send raw alert to telegram failed: %v", err)
 		writeJSON(w, http.StatusBadGateway, IncidentResponse{Status: "telegram_error", Error: err.Error()})
 		return
 	}
+	appMetrics.inc("incidentgpt_raw_sent_total")
 	log.Printf("INFO: raw alert posted alert=%s status=%s message_id=%d",
 		alert.Labels["alertname"], alert.Status, msgID)
 	writeJSON(w, http.StatusOK, IncidentResponse{Status: "accepted", MessageID: msgID})
@@ -381,6 +388,7 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	appMetrics.add("incidentgpt_alerts_received_total", float64(len(req.Alerts)))
 	log.Printf("INFO: got incident group key=%s window=%s alerts=%d",
 		req.GroupKey, req.Window, len(req.Alerts))
 
@@ -396,6 +404,7 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		parentMsgID = msgID
+		appMetrics.inc("incidentgpt_groups_sent_total")
 		log.Printf("INFO: group summary posted message_id=%d", msgID)
 	}
 
@@ -478,6 +487,7 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 
 func sendTelegramMessage(ctx context.Context, chatID, text string, replyTo int64) (int64, error) {
 	if appCfg.TGBotToken == "" || chatID == "" {
+		appMetrics.inc("incidentgpt_telegram_errors_total")
 		return 0, fmt.Errorf("telegram config is not set")
 	}
 	text = escapeMarkdown(text)
@@ -500,18 +510,21 @@ func sendTelegramMessage(ctx context.Context, chatID, text string, replyTo int64
 		bytes.NewReader(body),
 	)
 	if err != nil {
+		appMetrics.inc("incidentgpt_telegram_errors_total")
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		appMetrics.inc("incidentgpt_telegram_errors_total")
 		return 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		appMetrics.inc("incidentgpt_telegram_errors_total")
 		return 0, fmt.Errorf("telegram HTTP %d: %s", resp.StatusCode, string(b))
 	}
 
@@ -522,9 +535,11 @@ func sendTelegramMessage(ctx context.Context, chatID, text string, replyTo int64
 		} `json:"result"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tgResp); err != nil {
+		appMetrics.inc("incidentgpt_telegram_errors_total")
 		return 0, err
 	}
 	if !tgResp.OK {
+		appMetrics.inc("incidentgpt_telegram_errors_total")
 		return 0, fmt.Errorf("telegram response not ok")
 	}
 	return tgResp.Result.MessageID, nil
@@ -581,6 +596,7 @@ func openRouterBackgroundContext() (context.Context, context.CancelFunc) {
 
 func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (string, error) {
 	if appCfg.ORAPIKey == "" {
+		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
 	}
 
@@ -610,6 +626,7 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 
 	req, err := http.NewRequestWithContext(ctx2, http.MethodPost, appCfg.ORBaseURL, bytes.NewReader(body))
 	if err != nil {
+		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}
 
@@ -621,14 +638,18 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 	req.Header.Set("Authorization", "Bearer "+appCfg.ORAPIKey)
 	req.Header.Set("Connection", "close")
 
+	start := time.Now()
 	resp, err := httpClient.Do(req)
+	appMetrics.observe("incidentgpt_llm_duration_seconds", time.Since(start).Seconds())
 	if err != nil {
+		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", fmt.Errorf("openrouter HTTP %d: %s", resp.StatusCode, string(b))
 	}
 
@@ -640,9 +661,11 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&orResp); err != nil {
+		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}
 	if len(orResp.Choices) == 0 {
+		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", fmt.Errorf("openrouter: empty choices")
 	}
 	return orResp.Choices[0].Message.Content, nil

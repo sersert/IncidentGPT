@@ -181,9 +181,10 @@ type metricTemplateContext struct {
 
 // глобалы
 var (
-	appCfg     Config
-	httpClient = &http.Client{Timeout: 35 * time.Second}
-	metricsCfg MetricsConfig
+	appCfg              Config
+	httpClient          = &http.Client{Timeout: 35 * time.Second}
+	metricsCfg          MetricsConfig
+	metricsConfigLoaded bool
 )
 
 //
@@ -432,6 +433,7 @@ func main() {
 		log.Fatalf("cannot load metrics config %s: %v", metricsPath, err)
 	}
 	metricsCfg = cfg
+	metricsConfigLoaded = true
 
 	// Redis для лёгкой корреляции (optional — фолбэк на поштучную отправку)
 	if err := initRedis(); err != nil {
@@ -463,6 +465,9 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("/readyz", readyzHandler)
+	mux.HandleFunc("/status", statusHandler)
+	mux.HandleFunc("/metrics", metricsHandler)
 	mux.HandleFunc("/alert", alertHandler)
 
 	srv := &http.Server{
@@ -524,17 +529,22 @@ func alertHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	appMetrics.add("incidentgpt_alerts_received_total", float64(len(alerts)))
 	ctx := r.Context()
 	enriched := make([]EnrichedAlert, 0, len(alerts))
 
 	for _, a := range alerts {
+		start := time.Now()
 		e := enrichAlert(ctx, a)
+		appMetrics.observe("incidentgpt_enrichment_duration_seconds", time.Since(start).Seconds())
+		appMetrics.inc("incidentgpt_alerts_enriched_total")
 		// Основной путь — буферизуем в Redis для групповой отправки.
 		// Если Redis недоступен — фолбэк на поштучную отправку, чтобы не терять инциденты.
 		if err := bufferAlert(e); err != nil {
 			// errSkipResolved — не ошибка: resolved-алерты не корреллируем,
 			// шлём поштучно, чтобы в канал ушло [RESOLVED]-уведомление.
 			if !errors.Is(err, errSkipResolved) {
+				appMetrics.inc("incidentgpt_redis_fallback_total")
 				log.Printf("WARN: redis buffering failed, falling back to direct send: %v", err)
 			}
 			if err := sendToBackend(ctx, e); err != nil {
