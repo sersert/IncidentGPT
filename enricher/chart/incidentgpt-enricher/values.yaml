@@ -26,6 +26,14 @@ resources: {}
 #    cpu: 500m
 #    memory: 512Mi
 
+secretValues:
+  sanitizerAuthSharedSecret: ""
+
+secrets:
+  # Optional existing Secret with the shared HMAC key used for Sanitizer requests.
+  existingSecret: ""
+  sanitizerAuthSharedSecretKey: auth-shared-secret
+
 env:
   # URL Prometheus для запросов метрик. Зависит от имени Helm-релиза kube-prometheus-stack:
   # <release>-kube-prometheus-stack-prometheus.<ns>:9090. Здесь release=kps, ns=monitoring.
@@ -51,6 +59,8 @@ env:
   redisPassword: ""
   groupBackendUrl: "http://ai-worker.incidentgpt.svc:8080/incident-group"
   rawBackendUrl: "http://ai-worker.incidentgpt.svc:8080/incident-raw"
+  sanitizerUrl: "http://incidentgpt-sanitizer.incidentgpt.svc:8080"
+  sanitizerRequestTimeout: "3s"
   corrWindow: "10m"
   # 40s — покрывает разброс срабатывания правил (rate-окно 5xx vs мгновенный DeploymentDown).
   corrSettle: "40s"

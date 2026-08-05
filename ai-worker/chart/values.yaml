@@ -31,6 +31,7 @@ resources: {}
 secretValues:
   openrouterApiKey: ""
   telegramBotToken: ""
+  sanitizerAuthSharedSecret: ""
 
 secrets:
   # Optional existing Secret with OPENROUTER_API_KEY and TELEGRAM_BOT_TOKEN.
@@ -38,6 +39,7 @@ secrets:
   existingSecret: ""
   openRouterApiKeyKey: OPENROUTER_API_KEY
   telegramBotTokenKey: TELEGRAM_BOT_TOKEN
+  sanitizerAuthSharedSecretKey: auth-shared-secret
 
 env:
   LISTEN_ADDR: ":8080"
@@ -53,6 +55,10 @@ env:
   TELEGRAM_CHANNEL_ID: ""
   TELEGRAM_THREAD_CHAT_ID: ""
   TELEGRAM_PARSE_MODE: "Markdown"
+  TELEGRAM_API_BASE_URL: "https://api.telegram.org"
+
+  SANITIZER_URL: "http://incidentgpt-sanitizer.incidentgpt.svc:8080"
+  SANITIZER_TIMEOUT_SECONDS: "3"
 
 podAnnotations: {}
 

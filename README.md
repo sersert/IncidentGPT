@@ -41,16 +41,48 @@ Prometheus ──► Alertmanager
                    │  ├─ идёт в K8s API за статусом подов/нод/событий
                    │  └─ буферизует в Redis (окно корреляции)
                    ▼
+              Data Sanitizer (Go) — маскирует секреты и персональные данные
+                   ▼
               AI Worker (Go)  ──► OpenRouter (LLM)
-                   │
+                   │              ▲
+                   └── Sanitizer ─┘
+                   │  ответ LLM снова проходит через Sanitizer
                    ▼
               Telegram: сырые алерты по одному → сводка «N связанных» → AI-разбор
 ```
 
 - **Alertmanager** ничего не знает про Telegram/LLM — просто шлёт webhook на enricher.
 - **Enricher** сам ходит за контекстом (pull), буферит в Redis для склейки.
-- **AI Worker** — единственный, кто знает про Telegram и OpenRouter.
+- **Data Sanitizer** — отдельная security boundary перед AI Worker, LLM и Telegram.
+- **AI Worker** — единственный, кто знает про Telegram и OpenRouter, но не отправляет данные наружу без Sanitizer.
 - Сырой алерт постится **до** обращения к модели → **LLM не точка отказа**.
+
+## Security and Data Sanitization
+
+IncidentGPT includes a standalone Go service, `sanitizer`, that masks secrets and personal data before data reaches AI Worker, the external LLM, Telegram, logs, or webhooks. It supports sensitive-key redaction, Bearer/Basic/JWT masking, connection string credential masking, Kubernetes Secret redaction, optional email/phone/IP masking, custom regexp rules, HMAC request authentication, replay protection, safe audit events, Prometheus metrics, and optional HMAC-based pseudonymization of infrastructure resource names.
+
+Create a shared Kubernetes Secret for Sanitizer and its clients:
+
+```bash
+kubectl create secret generic incidentgpt-sanitizer \
+  -n incidentgpt \
+  --from-literal=auth-shared-secret='<long-random-hmac-secret>' \
+  --from-literal=hash-key='<long-random-pseudonymization-key>'
+```
+
+Deploy the service as an internal `ClusterIP` only:
+
+```bash
+helm upgrade -i incidentgpt-sanitizer ./sanitizer/chart -n incidentgpt \
+  --set secrets.existingSecret=incidentgpt-sanitizer
+```
+
+Then configure `ai-worker` and `enricher` with the same `SANITIZER_URL` and HMAC secret key reference. Production deployments should keep `SANITIZER_FAIL_CLOSED=true`; if Sanitizer rejects a payload or is unavailable, full original data must not be sent to LLM or Telegram.
+
+Detailed security documentation:
+
+- [Русская версия](docs/security/data-sanitizer-ru.md)
+- [English version](docs/security/data-sanitizer-en.md)
 
 ---
 

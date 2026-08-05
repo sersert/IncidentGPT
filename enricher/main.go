@@ -134,6 +134,8 @@ type Config struct {
 	EnricherVersion string
 	ClusterName     string
 	Environment     string
+	SanitizerURL    string
+	SanitizerSecret string
 
 	RangeBefore time.Duration
 	RangeAfter  time.Duration
@@ -183,6 +185,7 @@ type metricTemplateContext struct {
 var (
 	appCfg              Config
 	httpClient          = &http.Client{Timeout: 35 * time.Second}
+	sanitizerClient     *SanitizerClient
 	metricsCfg          MetricsConfig
 	metricsConfigLoaded bool
 )
@@ -364,6 +367,8 @@ func loadConfig() Config {
 		EnricherVersion: envOr("ENRICHER_VERSION", "0.4.0"),
 		ClusterName:     envOr("CLUSTER_NAME", "unknown"),
 		Environment:     envOr("ENVIRONMENT", "unknown"),
+		SanitizerURL:    envOr("SANITIZER_URL", "http://incidentgpt-sanitizer.incidentgpt.svc:8080"),
+		SanitizerSecret: strings.TrimSpace(os.Getenv("SANITIZER_AUTH_SHARED_SECRET")),
 
 		RangeBefore: envDuration("PROM_RANGE_BEFORE", 15*time.Minute),
 		RangeAfter:  envDuration("PROM_RANGE_AFTER", 5*time.Minute),
@@ -426,6 +431,7 @@ func renderExpr(expr string, ctx metricTemplateContext) (string, error) {
 
 func main() {
 	appCfg = loadConfig()
+	sanitizerClient = newSanitizerClient(appCfg.SanitizerURL, appCfg.SanitizerSecret, envDuration("SANITIZER_REQUEST_TIMEOUT", 3*time.Second))
 
 	metricsPath := envOr("METRICS_CONFIG_PATH", "/etc/enricher/metrics.yaml")
 	cfg, err := loadMetricsConfig(metricsPath)
@@ -925,7 +931,12 @@ func sendToBackend(ctx context.Context, e EnrichedAlert) error {
 		return nil
 	}
 
-	data, err := json.Marshal(e)
+	safePayload, err := sanitizerClient.SanitizePayload(ctx, "enricher", "ai-worker", e)
+	if err != nil {
+		return fmt.Errorf("sanitize enriched alert: %w", err)
+	}
+
+	data, err := json.Marshal(safePayload)
 	if err != nil {
 		return fmt.Errorf("marshal enriched alert: %w", err)
 	}
