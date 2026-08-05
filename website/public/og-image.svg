@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#080B12"/>
+  <path d="M0 430C170 360 300 360 450 420s280 80 420 0 240-70 330-25v235H0Z" fill="#0F1420"/>
+  <circle cx="980" cy="115" r="190" fill="#8B5CF6" opacity=".18"/>
+  <circle cx="230" cy="510" r="210" fill="#326CE5" opacity=".16"/>
+  <text x="92" y="185" fill="#F3F6FC" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="800">IncidentGPT</text>
+  <text x="96" y="265" fill="#9AA7BA" font-family="Inter, Arial, sans-serif" font-size="34">Prometheus alerts → Kubernetes context → AI analysis</text>
+  <g transform="translate(96 352)" font-family="Inter, Arial, sans-serif" font-size="28" fill="#F3F6FC">
+    <rect width="220" height="76" rx="16" fill="#121926" stroke="#263044"/>
+    <text x="28" y="48">Alertmanager</text>
+    <path d="M230 38h70" stroke="#8B5CF6" stroke-width="4"/>
+    <rect x="310" width="180" height="76" rx="16" fill="#121926" stroke="#263044"/>
+    <text x="348" y="48">Enricher</text>
+    <path d="M500 38h70" stroke="#326CE5" stroke-width="4"/>
+    <rect x="580" width="190" height="76" rx="16" fill="#121926" stroke="#263044"/>
+    <text x="620" y="48">AI Worker</text>
+    <path d="M780 38h70" stroke="#22C55E" stroke-width="4"/>
+    <rect x="860" width="170" height="76" rx="16" fill="#121926" stroke="#263044"/>
+    <text x="900" y="48">Telegram</text>
+  </g>
+</svg>

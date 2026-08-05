@@ -21,6 +21,11 @@ kubeconfig
 *.out
 vendor/
 
+# === Website ===
+/website/node_modules/
+/website/dist/
+/website/.vite/
+
 # === Kubernetes / Helm ===
 charts/*.tgz
 **/charts/*.tgz

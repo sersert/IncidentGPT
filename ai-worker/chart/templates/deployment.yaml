@@ -34,14 +34,22 @@ spec:
           ports:
             - containerPort: 8080
               name: http
-          envFrom:
-            - secretRef:
-                name: {{ include "ai-worker.fullname" . }}-secrets
-                optional: true
           env:
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.openRouterApiKeyKey | quote }}
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.telegramBotTokenKey | quote }}
             {{- range $name, $value := .Values.env }}
+            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN")) }}
             - name: {{ $name }}
               value: {{ $value | quote }}
+            {{- end }}
             {{- end }}
           readinessProbe:
             httpGet:
