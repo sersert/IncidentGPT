@@ -1,0 +1,6 @@
+apiVersion: v2
+name: incidentgpt-sanitizer
+description: Data Sanitizer security gateway for IncidentGPT
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,0 +1,12 @@
+[
+  {
+    "name": "internal_customer_id",
+    "pattern": "customer-[0-9]{8}",
+    "replacement": "[REDACTED_CUSTOMER_ID]"
+  },
+  {
+    "name": "employee_login",
+    "pattern": "emp-[a-z0-9._-]+",
+    "replacement": "[REDACTED_EMPLOYEE]"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "request_id": "01JXYZ123",
+  "status": "sanitized",
+  "payload": {
+    "alert_name": "DatabaseConnectionFailed",
+    "description": "postgres://demo-user:[REDACTED_PASSWORD]@db.internal:5432/app",
+    "annotations": {
+      "authorization": "[REDACTED_TOKEN]"
+    }
+  },
+  "summary": {
+    "redaction_count": 2,
+    "applied_rules": {
+      "connection_string": 1,
+      "sensitive_key": 1
+    }
+  }
+}

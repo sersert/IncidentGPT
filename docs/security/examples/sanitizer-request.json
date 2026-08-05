@@ -1,0 +1,13 @@
+{
+  "request_id": "01JXYZ123",
+  "source": "enricher",
+  "destination": "llm",
+  "content_type": "application/json",
+  "payload": {
+    "alert_name": "DatabaseConnectionFailed",
+    "description": "postgres://demo-user:example-password@db.internal:5432/app",
+    "annotations": {
+      "authorization": "Bearer example-token-for-tests-only"
+    }
+  }
+}
