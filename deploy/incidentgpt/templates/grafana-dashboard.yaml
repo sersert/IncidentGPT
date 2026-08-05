@@ -1,0 +1,14 @@
+{{- if .Values.grafanaDashboard.enabled }}
+# Дашборд «IncidentGPT — Overview» как ConfigMap. Sidecar Grafana
+# (kube-prometheus-stack) подхватывает ConfigMap'ы с меткой grafana_dashboard.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-dashboard
+  namespace: {{ .Values.grafanaDashboard.namespace }}
+  labels:
+    {{ .Values.grafanaDashboard.label }}: {{ .Values.grafanaDashboard.labelValue | quote }}
+data:
+  incidentgpt-overview.json: |-
+{{ .Files.Get "dashboards/incidentgpt-overview.json" | indent 4 }}
+{{- end }}

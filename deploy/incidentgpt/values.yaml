@@ -31,3 +31,12 @@ incidentgpt-sanitizer:
   secretValues:
     hashKey: ""
     authSharedSecret: ""
+
+# Дашборд «IncidentGPT — Overview» в Grafana. При enabled создаётся ConfigMap
+# в namespace grafanaDashboard.namespace с меткой label=labelValue — sidecar
+# kube-prometheus-stack его автоматически подхватывает.
+grafanaDashboard:
+  enabled: false
+  namespace: monitoring
+  label: grafana_dashboard
+  labelValue: "1"
