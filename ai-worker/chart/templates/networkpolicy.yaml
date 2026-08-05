@@ -22,3 +22,11 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
+    # Prometheus scrape /metrics из monitoring namespace (kube-prometheus-stack)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8080
+          protocol: TCP

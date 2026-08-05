@@ -1,0 +1,136 @@
+{
+  "title": "IncidentGPT — Overview",
+  "uid": "incidentgpt-overview",
+  "tags": ["incidentgpt", "aiops"],
+  "timezone": "",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "label": "Prometheus",
+        "hide": 0,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row", "title": "Pipeline", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false
+    },
+    {
+      "type": "timeseries", "title": "Alerts rate (received / enriched)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_alerts_received_total[5m]))", "legendFormat": "received" },
+        { "refId": "B", "expr": "sum(rate(incidentgpt_alerts_enriched_total[5m]))", "legendFormat": "enriched" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Enrichment duration (avg)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_enrichment_duration_seconds_sum[5m])) / sum(rate(incidentgpt_enrichment_duration_seconds_count[5m]))", "legendFormat": "avg enrich" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "LLM duration (avg)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_llm_duration_seconds_sum[5m])) / sum(rate(incidentgpt_llm_duration_seconds_count[5m]))", "legendFormat": "avg LLM" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Telegram posts (raw / groups)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_raw_sent_total[5m]))", "legendFormat": "raw" },
+        { "refId": "B", "expr": "sum(rate(incidentgpt_groups_sent_total[5m]))", "legendFormat": "groups" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Errors rate (LLM / Telegram / Redis fallback)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_openrouter_errors_total[5m]))", "legendFormat": "openrouter" },
+        { "refId": "B", "expr": "sum(rate(incidentgpt_telegram_errors_total[5m]))", "legendFormat": "telegram" },
+        { "refId": "C", "expr": "sum(rate(incidentgpt_redis_fallback_total[5m]))", "legendFormat": "redis fallback" }
+      ]
+    },
+    {
+      "type": "stat", "title": "Alerts received (1h)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(incidentgpt_alerts_received_total[1h]))", "legendFormat": "alerts/1h" }
+      ]
+    },
+    {
+      "type": "row", "title": "Sanitizer", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }, "collapsed": false
+    },
+    {
+      "type": "timeseries", "title": "Sanitizer requests (by status)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (status) (rate(incidentgpt_sanitizer_requests_total[5m]))", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Redactions rate (by source→dest)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (source,destination) (rate(incidentgpt_sanitizer_redactions_total[5m]))", "legendFormat": "{{source}}→{{destination}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Sanitizer problems (auth / denied / failures)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_sanitizer_auth_failures_total[5m]))", "legendFormat": "auth failures" },
+        { "refId": "B", "expr": "sum(rate(incidentgpt_sanitizer_denied_total[5m]))", "legendFormat": "denied" },
+        { "refId": "C", "expr": "sum(rate(incidentgpt_sanitizer_failures_total[5m]))", "legendFormat": "failures" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Sanitizer latency (avg)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_sanitizer_request_duration_seconds_sum[5m])) / sum(rate(incidentgpt_sanitizer_request_duration_seconds_count[5m]))", "legendFormat": "avg" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Sanitizer bytes (in / out)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(incidentgpt_sanitizer_input_bytes_total[5m]))", "legendFormat": "in" },
+        { "refId": "B", "expr": "sum(rate(incidentgpt_sanitizer_output_bytes_total[5m]))", "legendFormat": "out" }
+      ]
+    }
+  ]
+}

@@ -2,18 +2,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "incidentgpt-sanitizer.fullname" . }}
+  name: {{ include "ai-worker.fullname" . }}
   labels:
-    {{- include "incidentgpt-sanitizer.labels" . | nindent 4 }}
+    {{- include "ai-worker.labels" . | nindent 4 }}
     {{- with .Values.serviceMonitor.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "incidentgpt-sanitizer.name" . }}
+      app.kubernetes.io/name: {{ include "ai-worker.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
-      app.kubernetes.io/component: sanitizer
   endpoints:
     - port: http
       path: /metrics

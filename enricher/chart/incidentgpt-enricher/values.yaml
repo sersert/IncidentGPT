@@ -75,6 +75,14 @@ env:
   enrichExternalContext: true
   enrichK8sContext: true
 
+# Prometheus ServiceMonitor (нужен Prometheus Operator / kube-prometheus-stack).
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  # kube-prometheus-stack по умолчанию берёт ServiceMonitor'ы с меткой своего релиза.
+  # Добавь её, напр. { release: kps }, иначе Prometheus не подхватит.
+  additionalLabels: {}
+
 metrics:
   # ⚙️ КАКИЕ МЕТРИКИ ТЯНУТЬ при обогащении. Становится ConfigMap /etc/enricher/metrics.yaml.
   # Плейсхолдеры {{ .Cluster }}/{{ .Namespace }}/{{ .Service }}/{{ .Node }}/{{ .Instance }}
