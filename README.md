@@ -7,6 +7,8 @@
 ![LLM](https://img.shields.io/badge/LLM-OpenRouter-6E56CF)
 ![correlation](https://img.shields.io/badge/correlation-namespace%20%2B%20window-lightgrey)
 
+> 💡 **Совет:** секретные ключи `auth-shared-secret` и `hash-key` генерируются командой `openssl rand -hex 32`.
+
 Два маленьких Go-сервиса поверх твоего Prometheus/Alertmanager, которые:
 
 1. **Обогащают** каждый алерт контекстом — метрики из Prometheus (с трендами) + статус

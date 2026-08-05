@@ -1,0 +1,5 @@
+# build context = ./sanitizer — в образ не нужны:
+chart/
+*.md
+Dockerfile
+.dockerignore

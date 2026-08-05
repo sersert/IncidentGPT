@@ -338,6 +338,49 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 	}(alert, msgID)
 }
 
+// rawMsgStore связывает fingerprint сырого алерта с его message_id в Telegram —
+// чтобы AI-разбор ОДИНОЧНОГО алерта уходил комментарием под этим алертом, а не
+// отдельным сообщением. Реплика одна, поэтому in-memory достаточно; TTL чистит старьё.
+type rawMsgEntry struct {
+	msgID  int64
+	expiry time.Time
+}
+
+var (
+	rawMsgMu    sync.Mutex
+	rawMsgStore = map[string]rawMsgEntry{}
+)
+
+const rawMsgTTL = 15 * time.Minute
+
+func rememberRawMsg(fingerprint string, msgID int64) {
+	if fingerprint == "" || msgID == 0 {
+		return
+	}
+	now := time.Now()
+	rawMsgMu.Lock()
+	defer rawMsgMu.Unlock()
+	rawMsgStore[fingerprint] = rawMsgEntry{msgID: msgID, expiry: now.Add(rawMsgTTL)}
+	for fp, e := range rawMsgStore { // ленивая уборка протухших
+		if now.After(e.expiry) {
+			delete(rawMsgStore, fp)
+		}
+	}
+}
+
+func rawMsgForFingerprint(fingerprint string) (int64, bool) {
+	if fingerprint == "" {
+		return 0, false
+	}
+	rawMsgMu.Lock()
+	defer rawMsgMu.Unlock()
+	e, ok := rawMsgStore[fingerprint]
+	if !ok || time.Now().After(e.expiry) {
+		return 0, false
+	}
+	return e.msgID, true
+}
+
 // incidentRawHandler — постит СЫРОЙ алерт в канал сразу, БЕЗ вызова LLM.
 // Live-фид: инженер видит каждый алерт мгновенно, а AI-разбор приходит позже
 // отдельным сообщением через /incident-group (после окна корреляции).
@@ -368,6 +411,7 @@ func incidentRawHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	appMetrics.inc("incidentgpt_raw_sent_total")
+	rememberRawMsg(alert.Fingerprint, msgID)
 	log.Printf("INFO: raw alert posted alert=%s status=%s message_id=%d",
 		alert.Labels["alertname"], alert.Status, msgID)
 	writeJSON(w, http.StatusOK, IncidentResponse{Status: "accepted", MessageID: msgID})
@@ -424,6 +468,12 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 		parentMsgID = msgID
 		appMetrics.inc("incidentgpt_groups_sent_total")
 		log.Printf("INFO: group summary posted message_id=%d", msgID)
+	} else {
+		// одиночный алерт: реплаим разбор на уже показанный СЫРОЙ алерт (по fingerprint),
+		// чтобы он стал комментарием под ним, а не отдельным сообщением.
+		if mid, ok := rawMsgForFingerprint(req.Alerts[0].Fingerprint); ok {
+			parentMsgID = mid
+		}
 	}
 
 	writeJSON(w, http.StatusOK, IncidentResponse{Status: "accepted", MessageID: parentMsgID})
@@ -482,20 +532,23 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 		sendCtx, cancelSend := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancelSend()
 
+		// header непустой только для одиночного алерта; для группы контекст даёт сводка-связка.
+		msgText := header + aiText
+
 		if parentMsgID != 0 {
-			// группа: разбор комментом к сводке-связке (чанками)
-			if err := sendTelegramChunked(sendCtx, aiText, parentMsgID); err != nil {
-				log.Printf("ERROR: send group analysis reply failed: %v", err)
+			// реплай: одиночный — на сырой алерт, группа — на сводку-связку (чанками)
+			if err := sendTelegramChunked(sendCtx, msgText, parentMsgID); err != nil {
+				log.Printf("ERROR: send analysis reply failed: %v", err)
 				return
 			}
 		} else {
-			// одиночный: разбор отдельным сообщением (чанками)
-			if _, err := sendTelegramMessage(sendCtx, appCfg.TGChannelID, header+aiText, 0); err != nil {
+			// нет родителя (одиночный без сохранённого raw) — отдельным сообщением
+			if _, err := sendTelegramMessage(sendCtx, appCfg.TGChannelID, msgText, 0); err != nil {
 				log.Printf("ERROR: send single analysis failed: %v", err)
 				return
 			}
 		}
-		log.Printf("INFO: group analysis posted key=%s alerts=%d", safeReq.GroupKey, len(safeReq.Alerts))
+		log.Printf("INFO: group analysis posted key=%s alerts=%d reply_to=%d", safeReq.GroupKey, len(safeReq.Alerts), parentMsgID)
 	}(req, parentMsgID)
 }
 

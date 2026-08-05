@@ -1,0 +1,5 @@
+# build context = ./ai-worker — в образ не нужны:
+chart/
+*.md
+Dockerfile
+.dockerignore

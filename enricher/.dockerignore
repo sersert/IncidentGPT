@@ -1,0 +1,5 @@
+# build context = ./enricher — в образ не нужны:
+chart/
+*.md
+Dockerfile
+.dockerignore
