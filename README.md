@@ -19,6 +19,14 @@
 
 ---
 
+## Documentation
+
+Полная документация и интерактивное руководство доступны на GitHub Pages:
+
+https://sersert.github.io/IncidentGPT/
+
+---
+
 ## Как это работает
 
 ```
