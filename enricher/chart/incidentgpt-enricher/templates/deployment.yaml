@@ -62,6 +62,15 @@ spec:
               value: {{ .Values.env.groupBackendUrl | quote }}
             - name: RAW_BACKEND_URL
               value: {{ .Values.env.rawBackendUrl | quote }}
+            - name: SANITIZER_URL
+              value: {{ .Values.env.sanitizerUrl | quote }}
+            - name: SANITIZER_REQUEST_TIMEOUT
+              value: {{ .Values.env.sanitizerRequestTimeout | quote }}
+            - name: SANITIZER_AUTH_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "incidentgpt-enricher.fullname" .)) .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.sanitizerAuthSharedSecretKey | quote }}
             - name: CORR_WINDOW
               value: {{ .Values.env.corrWindow | quote }}
             - name: CORR_SETTLE

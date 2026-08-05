@@ -1,0 +1,74 @@
+replicaCount: 2
+
+image:
+  repository: incidentgpt/sanitizer
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecret: ""
+fullnameOverride: "incidentgpt-sanitizer"
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8080"
+
+env:
+  SANITIZER_LISTEN_ADDRESS: ":8080"
+  SANITIZER_FAIL_CLOSED: "true"
+  SANITIZER_MAX_DEPTH: "20"
+  SANITIZER_MAX_INPUT_BYTES: "1048576"
+  SANITIZER_REDACT_EMAILS: "false"
+  SANITIZER_REDACT_PHONES: "false"
+  SANITIZER_REDACT_CERTIFICATES: "false"
+  SANITIZER_REDACT_USERNAMES: "false"
+  SANITIZER_REDACT_RESOURCE_NAMES: "false"
+  SANITIZER_IP_MODE: "none"
+  SANITIZER_MAX_CUSTOM_PATTERNS: "50"
+  SANITIZER_MAX_PATTERN_LENGTH: "500"
+  SANITIZER_CUSTOM_PATTERNS: "[]"
+  SANITIZER_REQUEST_TIMEOUT: "3s"
+  SANITIZER_SHUTDOWN_TIMEOUT: "10s"
+
+secretValues:
+  hashKey: ""
+  authSharedSecret: ""
+
+secrets:
+  existingSecret: ""
+  hashKeySecretKey: hash-key
+  authSharedSecretKey: auth-shared-secret
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+serviceMonitor:
+  enabled: false
+  interval: 30s

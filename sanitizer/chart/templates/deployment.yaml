@@ -1,20 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "ai-worker.fullname" . }}
+  name: {{ include "incidentgpt-sanitizer.fullname" . }}
   labels:
-    {{- include "ai-worker.labels" . | nindent 4 }}
+    {{- include "incidentgpt-sanitizer.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "ai-worker.name" . }}
+      app.kubernetes.io/name: {{ include "incidentgpt-sanitizer.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: sanitizer
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "ai-worker.name" . }}
+        app.kubernetes.io/name: {{ include "incidentgpt-sanitizer.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: sanitizer
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -23,39 +25,34 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      serviceAccountName: {{ include "incidentgpt-sanitizer.fullname" . }}
       {{- if .Values.imagePullSecret }}
       imagePullSecrets:
         - name: {{ .Values.imagePullSecret }}
       {{- end }}
       containers:
-        - name: ai-worker
+        - name: sanitizer
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 8080
               name: http
           env:
-            - name: OPENROUTER_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
-                  key: {{ .Values.secrets.openRouterApiKeyKey | quote }}
-            - name: TELEGRAM_BOT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
-                  key: {{ .Values.secrets.telegramBotTokenKey | quote }}
-            - name: SANITIZER_AUTH_SHARED_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
-                  key: {{ .Values.secrets.sanitizerAuthSharedSecretKey | quote }}
             {{- range $name, $value := .Values.env }}
-            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN") (eq $name "SANITIZER_AUTH_SHARED_SECRET")) }}
             - name: {{ $name }}
               value: {{ $value | quote }}
             {{- end }}
-            {{- end }}
+            - name: SANITIZER_HASH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "incidentgpt-sanitizer.secretName" . }}
+                  key: {{ .Values.secrets.hashKeySecretKey | quote }}
+                  optional: true
+            - name: SANITIZER_AUTH_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "incidentgpt-sanitizer.secretName" . }}
+                  key: {{ .Values.secrets.authSharedSecretKey | quote }}
           readinessProbe:
             httpGet:
               path: /readyz
@@ -68,8 +65,17 @@ spec:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

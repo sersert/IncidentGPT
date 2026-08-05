@@ -190,13 +190,19 @@ func sendRawToBackend(e EnrichedAlert) {
 	if appCfg.RawBackendURL == "" {
 		return
 	}
-	data, err := json.Marshal(e)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	safePayload, err := sanitizerClient.SanitizePayload(ctx, "enricher", "ai-worker", e)
+	if err != nil {
+		log.Printf("WARN: raw sanitize failed: %v", err)
+		return
+	}
+	data, err := json.Marshal(safePayload)
 	if err != nil {
 		log.Printf("WARN: raw marshal failed: %v", err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appCfg.RawBackendURL, bytes.NewReader(data))
 	if err != nil {
@@ -232,7 +238,12 @@ func sendGroupToBackend(ctx context.Context, groupKey string, alerts []json.RawM
 		Alerts:   alerts,
 	}
 
-	data, err := json.Marshal(batch)
+	safePayload, err := sanitizerClient.SanitizePayload(ctx, "enricher", "ai-worker", batch)
+	if err != nil {
+		return fmt.Errorf("sanitize incident group: %w", err)
+	}
+
+	data, err := json.Marshal(safePayload)
 	if err != nil {
 		return fmt.Errorf("marshal incident group: %w", err)
 	}
