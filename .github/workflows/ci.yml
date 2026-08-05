@@ -24,6 +24,8 @@ jobs:
             image: golang:1.25-bookworm   # == ai-worker/Dockerfile
           - service: enricher
             image: golang:1.24-bookworm   # == enricher/Dockerfile
+          - service: sanitizer
+            image: golang:1.24-bookworm   # == sanitizer/Dockerfile
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -54,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dockerfile: [ai-worker/Dockerfile, enricher/Dockerfile]
+        dockerfile: [ai-worker/Dockerfile, enricher/Dockerfile, sanitizer/Dockerfile]
     steps:
       - uses: actions/checkout@v4
       - uses: hadolint/hadolint-action@v3.1.0
@@ -69,3 +71,4 @@ jobs:
       - uses: azure/setup-helm@v4
       - run: helm lint ai-worker/chart
       - run: helm lint enricher/chart/incidentgpt-enricher
+      - run: helm lint sanitizer/chart

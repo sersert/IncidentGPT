@@ -45,8 +45,13 @@ spec:
                 secretKeyRef:
                   name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.telegramBotTokenKey | quote }}
+            - name: SANITIZER_AUTH_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.sanitizerAuthSharedSecretKey | quote }}
             {{- range $name, $value := .Values.env }}
-            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN")) }}
+            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN") (eq $name "SANITIZER_AUTH_SHARED_SECRET")) }}
             - name: {{ $name }}
               value: {{ $value | quote }}
             {{- end }}
