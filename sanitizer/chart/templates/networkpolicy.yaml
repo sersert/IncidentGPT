@@ -30,8 +30,6 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
-<<<<<<< HEAD
-=======
     # Prometheus scrape /metrics из monitoring namespace (kube-prometheus-stack)
     - from:
         - namespaceSelector:
@@ -40,5 +38,4 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
->>>>>>> refs/remotes/origin/main
 {{- end }}

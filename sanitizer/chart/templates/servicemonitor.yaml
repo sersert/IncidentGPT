@@ -5,12 +5,9 @@ metadata:
   name: {{ include "incidentgpt-sanitizer.fullname" . }}
   labels:
     {{- include "incidentgpt-sanitizer.labels" . | nindent 4 }}
-<<<<<<< HEAD
-=======
     {{- with .Values.serviceMonitor.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
->>>>>>> refs/remotes/origin/main
 spec:
   selector:
     matchLabels:

@@ -548,11 +548,7 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-<<<<<<< HEAD
-		log.Printf("INFO: group analysis posted key=%s alerts=%d", safeReq.GroupKey, len(safeReq.Alerts))
-=======
 		log.Printf("INFO: group analysis posted key=%s alerts=%d reply_to=%d", safeReq.GroupKey, len(safeReq.Alerts), parentMsgID)
->>>>>>> refs/remotes/origin/main
 	}(req, parentMsgID)
 }
 

@@ -1,18 +1,3 @@
-<<<<<<< HEAD
-FROM golang:1.24-bookworm AS build
-WORKDIR /src
-COPY go.mod ./
-COPY cmd ./cmd
-COPY internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w" \
-    -o /out/sanitizer ./cmd/sanitizer
-
-FROM gcr.io/distroless/static-debian12:nonroot
-USER nonroot:nonroot
-COPY --from=build /out/sanitizer /sanitizer
-EXPOSE 8080
-=======
 # syntax=docker/dockerfile:1.7
 
 ARG GO_VERSION=1.24
@@ -73,5 +58,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD ["/healthcheck", "http://127.0.0.1:8080/healthz"]
 
->>>>>>> refs/remotes/origin/main
 ENTRYPOINT ["/sanitizer"]
