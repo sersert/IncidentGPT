@@ -5,6 +5,7 @@
 *.local.yml
 values-local.yaml
 values-secret.yaml
+*.secret.yaml
 secrets.yaml
 robot*.json
 *.pem
