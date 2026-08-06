@@ -72,3 +72,9 @@ autoscaling:
 serviceMonitor:
   enabled: false
   interval: 30s
+<<<<<<< HEAD
+=======
+  # kube-prometheus-stack по умолчанию берёт ServiceMonitor'ы с меткой своего релиза.
+  # Добавь её, напр. { release: kps }, иначе Prometheus не подхватит.
+  additionalLabels: {}
+>>>>>>> refs/remotes/origin/main

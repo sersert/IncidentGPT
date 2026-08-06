@@ -1,0 +1,18 @@
+apiVersion: v2
+name: incidentgpt
+description: IncidentGPT — enricher + ai-worker + sanitizer
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Перед install/upgrade: `helm dependency build deploy/incidentgpt`.
+dependencies:
+  - name: incidentgpt-enricher
+    version: "0.1.0"
+    repository: "file://../../enricher/chart/incidentgpt-enricher"
+  - name: ai-worker
+    version: "0.1.0"
+    repository: "file://../../ai-worker/chart"
+  - name: incidentgpt-sanitizer
+    version: "0.1.0"
+    repository: "file://../../sanitizer/chart"

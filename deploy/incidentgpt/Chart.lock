@@ -1,0 +1,12 @@
+dependencies:
+- name: incidentgpt-enricher
+  repository: file://../../enricher/chart/incidentgpt-enricher
+  version: 0.1.0
+- name: ai-worker
+  repository: file://../../ai-worker/chart
+  version: 0.1.0
+- name: incidentgpt-sanitizer
+  repository: file://../../sanitizer/chart
+  version: 0.1.0
+digest: sha256:9685bf4fa2a6cc44a328eddfd87e2a93950099f1054fa8303f3824b1f538d126
+generated: "2026-08-05T23:51:49.965335+03:00"

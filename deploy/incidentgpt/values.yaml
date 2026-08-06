@@ -1,0 +1,42 @@
+# Единый values для всех трёх компонентов IncidentGPT.
+# Ключ верхнего уровня = имя соответствующего subchart'а.
+#
+# Реестр образов: harbor.sersert.io/incident/*
+# Тег по умолчанию — тег этого релиза; переопредели под свою сборку.
+#
+# ⚠️ СЕКРЕТЫ: не коммить реальные значения. Для деплоя используй отдельный
+# values-secret.yaml (в .gitignore) или existingSecret. HMAC-ключ
+# sanitizerAuthSharedSecret / authSharedSecret должен СОВПАДАТЬ у всех трёх.
+
+incidentgpt-enricher:
+  image:
+    repository: harbor.sersert.io/incident/incident-enricher
+    tag: "v0.1.0-rc1"
+  secretValues:
+    sanitizerAuthSharedSecret: ""
+
+ai-worker:
+  image:
+    repository: harbor.sersert.io/incident/ai-worker
+    tag: "v0.1.0-rc1"
+  secretValues:
+    openrouterApiKey: ""
+    telegramBotToken: ""
+    sanitizerAuthSharedSecret: ""
+
+incidentgpt-sanitizer:
+  image:
+    repository: harbor.sersert.io/incident/sanitizer
+    tag: "v0.1.0-rc1"
+  secretValues:
+    hashKey: ""
+    authSharedSecret: ""
+
+# Дашборд «IncidentGPT — Overview» в Grafana. При enabled создаётся ConfigMap
+# в namespace grafanaDashboard.namespace с меткой label=labelValue — sidecar
+# kube-prometheus-stack его автоматически подхватывает.
+grafanaDashboard:
+  enabled: false
+  namespace: monitoring
+  label: grafana_dashboard
+  labelValue: "1"

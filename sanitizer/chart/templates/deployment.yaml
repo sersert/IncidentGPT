@@ -69,6 +69,12 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+<<<<<<< HEAD
+=======
+            # distroless nonroot UID/GID — числовой, чтобы runAsNonRoot можно было проверить
+            runAsUser: 65532
+            runAsGroup: 65532
+>>>>>>> refs/remotes/origin/main
             capabilities:
               drop: ["ALL"]
           resources:
