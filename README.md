@@ -27,6 +27,11 @@
 
 https://sersert.github.io/IncidentGPT/
 
+## Telegram setup
+
+- [Настройка Telegram на русском](docs/telegram-setup.ru.md)
+- [Telegram setup guide in English](docs/telegram-setup.en.md)
+
 ---
 
 ## Как это работает
@@ -100,11 +105,16 @@ Detailed security documentation:
 
 ## Шаг 1. Telegram: бот + канал + группа
 
-Порядок важен — комментарии от бота работают только в канале со **связанной группой**.
+Подробная пошаговая инструкция для людей без опыта Telegram Bot API:
+
+- [Настройка Telegram на русском](docs/telegram-setup.ru.md)
+- [Telegram setup guide in English](docs/telegram-setup.en.md)
+
+Коротко: порядок важен — комментарии от бота работают через канал со **связанной группой**.
 
 1. **Создай бота.** Напиши [@BotFather](https://t.me/BotFather): `/newbot` → имя, username.
    Получишь **токен** вида `123456:AA...` → это `TELEGRAM_BOT_TOKEN`.
-   Полезно: `/setprivacy` → **Disable** (чтобы бот видел сообщения в группе).
+   Для штатной работы IncidentGPT отключать Privacy Mode не обязательно: текущий `ai-worker` не читает обычные сообщения группы.
 2. **Создай канал** (например `IncidentGPT`) и **группу** (`IncidentGPT Group`).
 3. В настройках канала → **Discussion** → привяжи группу.
    *(если не привязывается — сделай группу временно публичной, привяжи, потом верни приватной).*
@@ -152,12 +162,14 @@ image:
   tag: latest
 imagePullSecret: ""              # имя secret'а, если registry приватный
 
+secretValues:
+  openrouterApiKey: "<ключ OpenRouter>"        # 🔑
+  telegramBotToken: "<токен бота>"             # 🔑
+
 env:
-  OPENROUTER_API_KEY: "<ключ OpenRouter>"      # 🔑
   OPENROUTER_MODEL: "google/gemini-2.5-flash"
   OPENROUTER_MAX_TOKENS: "2000"
 
-  TELEGRAM_BOT_TOKEN: "<токен бота>"           # 🔑
   TELEGRAM_CHANNEL_ID: "-100..."               # id канала
   TELEGRAM_THREAD_CHAT_ID: "-100..."           # id группы обсуждения
 ```
