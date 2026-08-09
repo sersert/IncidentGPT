@@ -3,9 +3,8 @@ import { useMemo, useState } from "react";
 import type { Translation } from "../i18n/types";
 import {
   defaultGeneratorValues,
-  generateAiWorkerValues,
   generateAlertmanagerSnippet,
-  generateEnricherValues,
+  generateUmbrellaValues,
   type GeneratorValues,
 } from "../lib/generator";
 import { CodeBlock } from "./CodeBlock";
@@ -14,17 +13,14 @@ type ConfigGeneratorProps = {
   t: Translation;
 };
 
-type OutputKind = "ai" | "enricher" | "alertmanager";
+type OutputKind = "umbrella" | "alertmanager";
 
 export function ConfigGenerator({ t }: ConfigGeneratorProps) {
   const [values, setValues] = useState<GeneratorValues>(defaultGeneratorValues);
-  const [kind, setKind] = useState<OutputKind>("ai");
+  const [kind, setKind] = useState<OutputKind>("umbrella");
   const output = useMemo(() => {
-    if (kind === "ai") {
-      return generateAiWorkerValues(values);
-    }
-    if (kind === "enricher") {
-      return generateEnricherValues(values);
+    if (kind === "umbrella") {
+      return generateUmbrellaValues(values);
     }
     return generateAlertmanagerSnippet();
   }, [kind, values]);
@@ -34,7 +30,7 @@ export function ConfigGenerator({ t }: ConfigGeneratorProps) {
   }
 
   function download() {
-    const filename = kind === "ai" ? "values-ai-worker.yaml" : kind === "enricher" ? "values-enricher.yaml" : "alertmanager-incidentgpt.yaml";
+    const filename = kind === "umbrella" ? "values-incidentgpt.yaml" : "alertmanager-incidentgpt.yaml";
     const blob = new Blob([output], { type: "text/yaml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -63,11 +59,8 @@ export function ConfigGenerator({ t }: ConfigGeneratorProps) {
         </form>
         <div>
           <div className="tabs">
-            <button type="button" className={kind === "ai" ? "selected" : ""} onClick={() => setKind("ai")}>
-              {t.generator.aiWorker}
-            </button>
-            <button type="button" className={kind === "enricher" ? "selected" : ""} onClick={() => setKind("enricher")}>
-              {t.generator.enricher}
+            <button type="button" className={kind === "umbrella" ? "selected" : ""} onClick={() => setKind("umbrella")}>
+              {t.generator.umbrella}
             </button>
             <button type="button" className={kind === "alertmanager" ? "selected" : ""} onClick={() => setKind("alertmanager")}>
               {t.generator.alertmanager}

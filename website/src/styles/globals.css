@@ -368,17 +368,28 @@ dd {
 .compare-grid,
 .generator-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Полю нужна фиксированная комфортная ширина: в двух узких колонках адреса
+     и модели не помещались. Остальное забирает вывод. */
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
   gap: 22px;
+  /* Без этого колонка формы растягивается по высоте вывода, а её строки
+     разъезжаются: подпись оказывается далеко от своего поля. */
+  align-items: start;
 }
 
 .feature-grid,
 .quick-grid,
-.metric-grid,
 .troubleshooting-grid,
 .limitation-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* Карточкам метрик нужна ширина под PromQL: три в ряд режут запрос в лапшу. */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px;
 }
 
@@ -593,6 +604,63 @@ section {
   margin: 14px 0 0;
 }
 
+/* Имя метрики — длинный идентификатор в одно слово: без переноса вылезает
+   за карточку. */
+.metric-card h3 {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.metric-card > p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* PromQL в узкой карточке лучше перенести, чем прятать в горизонтальный скролл. */
+.metric-card .code-block code {
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.metric-card .code-block pre {
+  padding: 12px 14px;
+}
+
+.metric-card dl {
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.metric-card dl > div {
+  display: grid;
+  /* «Кардинальность» — самая длинная подпись, по ней и колонка. */
+  grid-template-columns: minmax(0, 124px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 45%);
+}
+
+.metric-card dl > div:last-child {
+  border-bottom: none;
+}
+
+/* Без uppercase: «Кардинальность» капсом не влезает в колонку подписи. */
+.metric-card dt {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.metric-card dd {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 dt {
   color: var(--text);
   font-weight: 700;
@@ -630,6 +698,57 @@ th {
 td code {
   font-family: var(--mono);
   color: var(--text);
+  /* Длинные URL внутри значений иначе распирают таблицу в горизонтальный скролл. */
+  overflow-wrap: anywhere;
+}
+
+/* Таблицы переменных окружения: четыре колонки, из них три — длинные
+   технические значения. Фиксированная раскладка не даёт им растянуть строку. */
+.env-table table {
+  min-width: 0;
+  table-layout: fixed;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.env-table th,
+.env-table td {
+  padding: 10px 12px;
+}
+
+.env-table th {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.env-table td:first-child code {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.env-table td:nth-child(2) code,
+.env-table td:nth-child(3) code {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.env-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.env-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--card-2), transparent 55%);
+}
+
+.env-table .muted {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding-left: 9px;
+  border-left: 2px solid var(--border);
 }
 
 .check-list {
@@ -655,15 +774,22 @@ td code {
 
 .generator-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
 .generator-form label {
   display: grid;
+  align-content: start;
   gap: 6px;
   color: var(--muted);
   font-size: 13px;
+}
+
+/* Сгенерированные values длинные: без предела высоты кнопки и форма уезжают
+   на экран вверх. */
+.generator .code-block pre {
+  max-height: 520px;
 }
 
 .generator-form input,
@@ -808,6 +934,12 @@ td code {
   .generator-form,
   .check-list {
     grid-template-columns: 1fr;
+  }
+
+  /* На узком экране четыре колонки не помещаются даже с переносами — отдаём
+     таблицу горизонтальному скроллу .table-wrap. */
+  .env-table table {
+    min-width: 560px;
   }
 
   h1 {

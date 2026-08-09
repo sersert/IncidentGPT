@@ -13,7 +13,9 @@ import { ExamplesPage } from "./pages/ExamplesPage";
 import { HomePage } from "./pages/HomePage";
 import { InstallationPage } from "./pages/InstallationPage";
 import { LimitationsPage } from "./pages/LimitationsPage";
+import { LogsPage } from "./pages/LogsPage";
 import { TroubleshootingPage } from "./pages/TroubleshootingPage";
+import { WebUiPage } from "./pages/WebUiPage";
 
 type DocPageId = Exclude<PageId, "overview">;
 
@@ -53,42 +55,62 @@ function pageToc(page: PageId, t: Translation): TocItem[] {
   const map: Record<PageId, TocItem[]> = {
     overview: [],
     architecture: [
-      { id: "system-map", label: "System map" },
-      { id: "alert-flow", label: "Alert flow" },
-      { id: "sequence", label: "Sequence" },
-      { id: "correlation", label: "Correlation" },
-      { id: "failures", label: "Failures" },
+      { id: "system-map", label: t.architecture.headings.systemMap },
+      { id: "alert-flow", label: t.architecture.headings.alertFlow },
+      { id: "sequence", label: t.architecture.headings.sequence },
+      { id: "correlation", label: t.architecture.headings.correlation },
+      { id: "sanitization", label: t.architecture.headings.sanitization },
+      { id: "failures", label: t.architecture.headings.failures },
     ],
     installation: [
-      { id: "prerequisites", label: "Prerequisites" },
-      { id: "telegram", label: "Telegram" },
-      { id: "openrouter", label: "OpenRouter" },
-      { id: "redis", label: "Redis" },
-      { id: "images", label: "Images" },
-      { id: "secrets", label: "Secrets" },
-      { id: "helm", label: "Helm" },
-      { id: "alertmanager", label: "Alertmanager" },
+      { id: "prerequisites", label: t.installation.headings.prerequisites },
+      { id: "telegram", label: t.installation.headings.telegram },
+      { id: "openrouter", label: t.installation.headings.openrouter },
+      { id: "secrets", label: t.installation.headings.secrets },
+      { id: "helm", label: t.installation.headings.helm },
+      { id: "images", label: t.installation.headings.images },
+      { id: "alertmanager", label: t.installation.headings.alertmanager },
+      { id: "verify", label: t.installation.headings.verify },
     ],
     configuration: [
-      { id: "enricher-env", label: "Enricher env" },
-      { id: "ai-worker-env", label: "AI Worker env" },
-      { id: "promql", label: "PromQL" },
-      { id: "runbooks", label: "Runbooks" },
+      { id: "upgrade-0-2-0", label: t.configuration.headings.upgrade },
+      { id: "enricher-env", label: t.configuration.headings.enricherEnv },
+      { id: "ai-worker-env", label: t.configuration.headings.aiWorkerEnv },
+      { id: "backend-env", label: t.configuration.headings.backendEnv },
+      { id: "promql", label: t.configuration.headings.promql },
+      { id: "runbooks", label: t.configuration.headings.runbooks },
       { id: "generator", label: t.generator.title },
     ],
+    webUi: [
+      { id: "components", label: t.webUi.headings.components },
+      { id: "wiring", label: t.webUi.headings.wiring },
+      { id: "alerts-vs-incidents", label: t.webUi.headings.alertsVsIncidents },
+      { id: "storage", label: t.webUi.headings.storage },
+      { id: "access", label: t.webUi.headings.access },
+      { id: "screens", label: t.webUi.headings.screens },
+      { id: "data-sources", label: t.webUi.headings.dataSources },
+    ],
+    logs: [
+      { id: "why", label: t.logs.headings.why },
+      { id: "requirements", label: t.logs.headings.requirements },
+      { id: "wiring", label: t.logs.headings.wiring },
+      { id: "collector", label: t.logs.headings.collector },
+      { id: "prompt", label: t.logs.headings.prompt },
+    ],
     examples: [
-      { id: "direct-enricher", label: "Direct test" },
-      { id: "cascade", label: "Cascade" },
-      { id: "prometheusrule", label: "PrometheusRule" },
-      { id: "production", label: "Production" },
-      { id: "telegram-mock", label: "Telegram mock" },
+      { id: "direct-enricher", label: t.examples.headings.direct },
+      { id: "cascade", label: t.examples.headings.cascade },
+      { id: "prometheusrule", label: t.examples.headings.prometheusRule },
+      { id: "production", label: t.examples.headings.production },
+      { id: "telegram-mock", label: t.examples.headings.telegramMock },
     ],
     troubleshooting: [],
     limitations: [
-      { id: "correlation-limits", label: "Correlation" },
-      { id: "llm", label: "LLM" },
-      { id: "security", label: "Security" },
-      { id: "scaling", label: "Scaling" },
+      { id: "correlation-limits", label: t.limitations.headings.correlation },
+      { id: "llm", label: t.limitations.headings.llm },
+      { id: "storage", label: t.limitations.headings.storage },
+      { id: "security", label: t.limitations.headings.security },
+      { id: "scaling", label: t.limitations.headings.scaling },
     ],
   };
   return map[page];
@@ -104,6 +126,10 @@ function renderPage(page: PageId, t: Translation, language: Language) {
       return <InstallationPage t={t} />;
     case "configuration":
       return <ConfigurationPage t={t} />;
+    case "webUi":
+      return <WebUiPage t={t} />;
+    case "logs":
+      return <LogsPage t={t} />;
     case "examples":
       return <ExamplesPage t={t} />;
     case "troubleshooting":
