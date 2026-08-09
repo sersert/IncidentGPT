@@ -1,20 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { buildBasePath } from "../lib/basePath";
-import { defaultGeneratorValues, generateAiWorkerValues, generateAlertmanagerSnippet, generateEnricherValues } from "../lib/generator";
+import { defaultGeneratorValues, generateAlertmanagerSnippet, generateUmbrellaValues } from "../lib/generator";
 import { searchDocs } from "../lib/search";
 
 describe("configuration generator", () => {
   it("references existingSecret without requesting real secrets", () => {
-    const yaml = generateAiWorkerValues(defaultGeneratorValues);
+    const yaml = generateUmbrellaValues(defaultGeneratorValues);
     expect(yaml).toContain("existingSecret: incidentgpt-ai-worker");
     expect(yaml).toContain("OPENROUTER_TIMEOUT_SECONDS");
     expect(yaml).not.toContain("replace-me");
   });
 
-  it("uses Go template compatible enricher values", () => {
-    const yaml = generateEnricherValues(defaultGeneratorValues);
+  it("wires the group path and the analysis callback through backend", () => {
+    const yaml = generateUmbrellaValues(defaultGeneratorValues);
     expect(yaml).toContain('corrSettle: "40s"');
-    expect(yaml).toContain("redis-master.incidentgpt.svc.cluster.local:6379");
+    expect(yaml).toContain("http://incidentgpt-backend:8080/api/v1/ingest");
+    expect(yaml).toContain("http://incidentgpt-backend:8080/api/v1/incidents/by-group/analysis");
+  });
+
+  it("keeps every image on the same release tag", () => {
+    const yaml = generateUmbrellaValues(defaultGeneratorValues);
+    const components = ["enricher", "ai-worker", "sanitizer", "backend", "ui"];
+    for (const component of components) {
+      expect(yaml).toContain(`repository: ghcr.io/sersert/incidentgpt-${component}`);
+    }
+    expect(yaml.match(/tag: "0\.2\.0"/g)).toHaveLength(components.length);
   });
 
   it("builds the Alertmanager receiver snippet", () => {

@@ -12,10 +12,17 @@ const architectureChart = `flowchart TD
     Alertmanager -->|Webhook /alert| Enricher[IncidentGPT Enricher]
     Enricher -->|Range queries| Prometheus
     Enricher -->|Pods, Nodes, Events| K8sAPI[Kubernetes API]
+    Enricher -->|Error excerpt| LogStore[(Log store)]
     Enricher -->|Buffer and correlation| Redis[(Redis)]
-    Enricher -->|POST /incident| AIWorker[IncidentGPT AI Worker]
+    Enricher -->|Masking| Sanitizer[Data Sanitizer]
+    Enricher -->|POST group /api/v1/ingest| Backend[IncidentGPT Backend]
+    Backend --> Redis
+    Backend -->|POST /incident-group| AIWorker[IncidentGPT AI Worker]
+    Backend --> UI[IncidentGPT Web UI]
+    AIWorker -->|Masking| Sanitizer
     AIWorker -->|OpenAI-compatible API| LLM[OpenRouter / LLM]
     AIWorker -->|Raw alerts and analysis| Telegram[Telegram Channel]
+    AIWorker -->|ANALYSIS_CALLBACK_URL| Backend
     Telegram --> Discussion[Linked Discussion Group]`;
 
 const sequenceChart = `sequenceDiagram
@@ -23,7 +30,9 @@ const sequenceChart = `sequenceDiagram
     participant EN as Enricher
     participant PR as Prometheus
     participant K8S as Kubernetes API
+    participant LG as Log store
     participant RD as Redis
+    participant BE as Backend
     participant AI as AI Worker
     participant LLM as OpenRouter
     participant TG as Telegram
@@ -32,14 +41,20 @@ const sequenceChart = `sequenceDiagram
     PR-->>EN: metric samples
     EN->>K8S: pods, nodes, events
     K8S-->>EN: cluster context
+    EN->>LG: _search around startsAt
+    LG-->>EN: collapsed error excerpt
+    EN->>AI: POST /incident-raw
+    AI->>TG: publish raw alert
     EN->>RD: save incident candidate
     EN->>RD: wait CORR_SETTLE
     RD-->>EN: grouped alerts
-    EN->>AI: POST /incident-group
-    AI->>TG: publish raw alerts
+    EN->>BE: POST /api/v1/ingest
+    BE->>RD: store incident
+    BE->>AI: POST /incident-group
     AI->>LLM: request incident analysis
     LLM-->>AI: probable cause and checks
-    AI->>TG: publish AI analysis`;
+    AI->>TG: publish AI analysis
+    AI->>BE: ANALYSIS_CALLBACK_URL`;
 
 const pseudoCode = `key := "grp:" + alert.Namespace
 
@@ -51,76 +66,62 @@ if firstAlertInGroup {
 }`;
 
 export function ArchitecturePage({ t }: PageProps) {
+  const page = t.architecture;
   return (
     <article className="doc-page">
       <section id="system-map">
-        <h2>System map</h2>
-        <ArchitectureDiagram chart={architectureChart} fallbackTitle="Architecture diagram" copyLabel={t.common.copy} copiedLabel={t.common.copied} />
+        <h2>{page.headings.systemMap}</h2>
+        <ArchitectureDiagram chart={architectureChart} fallbackTitle={page.diagramTitles.system} copyLabel={t.common.copy} copiedLabel={t.common.copied} />
       </section>
       <section id="alert-flow">
-        <h2>Alert flow</h2>
+        <h2>{page.headings.alertFlow}</h2>
         <ol className="steps">
-          {[
-            "Prometheus evaluates an alerting rule.",
-            "Alertmanager sends a webhook to /alert.",
-            "Enricher validates the payload.",
-            "Enricher queries metrics around startsAt.",
-            "Enricher reads Kubernetes pods, nodes and events.",
-            "The alert is added to a Redis group.",
-            "After CORR_SETTLE the group is closed.",
-            "The incident is sent to ai-worker.",
-            "Raw alert is published to Telegram.",
-            "AI Worker calls the LLM.",
-            "The analysis draft is published as a separate message.",
-          ].map((item) => (
+          {page.alertFlowSteps.map((item) => (
             <li key={item}>{item}</li>
           ))}
         </ol>
-        <AlertFlow />
+        <AlertFlow t={t} />
       </section>
       <section id="sequence">
-        <h2>Request sequence</h2>
-        <ArchitectureDiagram chart={sequenceChart} fallbackTitle="Sequence diagram" copyLabel={t.common.copy} copiedLabel={t.common.copied} />
+        <h2>{page.headings.sequence}</h2>
+        <ArchitectureDiagram chart={sequenceChart} fallbackTitle={page.diagramTitles.sequence} copyLabel={t.common.copy} copiedLabel={t.common.copied} />
       </section>
       <section id="correlation">
-        <h2>Correlation</h2>
+        <h2>{page.headings.correlation}</h2>
         <div className="fact-grid">
-          <div><strong>Correlation key</strong><span>grp:{"{namespace}"}</span></div>
-          <div><strong>Membership</strong><span>same namespace + received during settle interval</span></div>
-          <div><strong>Redis field</strong><span>alert fingerprint</span></div>
-          <div><strong>Lifetime</strong><span>CORR_WINDOW</span></div>
-          <div><strong>Debounce</strong><span>CORR_SETTLE</span></div>
+          {page.correlationFacts.map((fact) => (
+            <div key={fact.term}>
+              <strong>{fact.term}</strong>
+              <span>{fact.value}</span>
+            </div>
+          ))}
         </div>
         <CodeBlock code={pseudoCode} language="go" copyLabel={t.common.copy} copiedLabel={t.common.copied} />
-        <Callout title="Deterministic, not causal" tone="warning">
-          <p>
-            This is not a dependency graph. Two unrelated incidents in the same namespace may be grouped, and cross-namespace cascades may be missed. The model chooses the probable root after the group is formed.
-          </p>
+        <Callout title={page.correlationCallout.title} tone="warning">
+          <p>{page.correlationCallout.body}</p>
         </Callout>
       </section>
+      <section id="sanitization">
+        <h2>{page.headings.sanitization}</h2>
+        {page.sanitizationParagraphs.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </section>
       <section id="failures">
-        <h2>Failure scenarios</h2>
+        <h2>{page.headings.failures}</h2>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Component unavailable</th>
-                <th>Current behavior from code or chart</th>
+                <th>{page.failureHeaders.component}</th>
+                <th>{page.failureHeaders.behavior}</th>
               </tr>
             </thead>
             <tbody>
-              {[
-                ["OpenRouter or LLM", "Raw alert is already posted; ai-worker logs the error and skips analysis."],
-                ["Redis", "Enricher logs a warning and falls back to single-alert delivery."],
-                ["Prometheus API", "Metric query warnings are logged; enrichment continues with remaining context."],
-                ["Kubernetes API", "Client init or reads can fail; Enricher continues without K8s context."],
-                ["Telegram", "ai-worker returns telegram_error for sync sends and logs async send failures."],
-                ["Enricher", "Alertmanager cannot deliver to IncidentGPT."],
-                ["AI Worker", "Enricher cannot post the prepared incident; the failure is logged."],
-              ].map(([component, behavior]) => (
-                <tr key={component}>
-                  <td>{component}</td>
-                  <td>{behavior}</td>
+              {page.failures.map((row) => (
+                <tr key={row.component}>
+                  <td>{row.component}</td>
+                  <td>{row.behavior}</td>
                 </tr>
               ))}
             </tbody>

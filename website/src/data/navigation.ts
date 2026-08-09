@@ -5,6 +5,8 @@ export type PageId =
   | "architecture"
   | "installation"
   | "configuration"
+  | "webUi"
+  | "logs"
   | "examples"
   | "troubleshooting"
   | "limitations";
@@ -19,6 +21,8 @@ export const routes: Route[] = [
   { id: "architecture", path: "architecture" },
   { id: "installation", path: "installation" },
   { id: "configuration", path: "configuration" },
+  { id: "webUi", path: "web-ui" },
+  { id: "logs", path: "logs" },
   { id: "examples", path: "examples" },
   { id: "troubleshooting", path: "troubleshooting" },
   { id: "limitations", path: "limitations" },
