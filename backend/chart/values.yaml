@@ -1,0 +1,45 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/sersert/incidentgpt-backend
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Имя фиксировано: nginx в ui проксирует /api/ именно на incidentgpt-backend,
+# а без override оно выводится из имени релиза и в зонтичном чарте разъезжается.
+fullnameOverride: "incidentgpt-backend"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+env:
+  LISTEN_ADDR: ":8080"
+  # Бэкенд стоит в разрыве группового пути: enricher шлёт группу сюда, мы строим
+  # инцидент для UI и передаём тело дальше в ai-worker — тот же эндпоинт, что
+  # enricher звал напрямую, поэтому разбор в Telegram работает как прежде.
+  # Путь обязателен: без него форвард уходит в корень и получает 404.
+  AI_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/incident-group"
+  FORWARD_TO_AI_WORKER: "true"
+  # Пусто — вкладка «Логи» просто не заполняется, см. docs/logs-enrichment.md
+  LOGS_STORE_URL: ""
+  LOGS_STORE_INDEX: "logs-*"
+  # Инциденты и алерты живут в Redis: без него любой рестарт пода стирал историю.
+  REDIS_ADDR: "incidentgpt-redis:6379"
+
+# Разрешение bаckend → ai-worker. Политика самого ai-worker живёт в его чарте
+# и пускает только enricher; здесь добавляем себя, не трогая чужой чарт.
+networkPolicy:
+  enabled: true
+  uiAppLabel: incidentgpt-ui
+  aiWorker:
+    instance: incidentgpt
+    name: ai-worker
+    port: 8080
+
+# Пароль к хранилищу логов подкладывается секретом, а не значением в values.
+logsStore:
+  existingSecret: ""
+  passwordKey: password

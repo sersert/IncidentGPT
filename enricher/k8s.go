@@ -383,6 +383,25 @@ func collectNamespaceHealth(ctx context.Context, a AMAlert) (map[string]string, 
 		"ns_pods_crashloop": strconv.Itoa(crashLoop),
 		"ns_pods_pending":   strconv.Itoa(pending),
 	}
+
+	// Деплойменты без единой реплики. Метрики такое не ловят: при scale to 0
+	// и желаемых, и недоступных реплик ноль, всё выглядит здоровым. А для разбора
+	// это прямая причина — сервис, к которому не могут подключиться, просто выключен.
+	if deps, err := k8sClient.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{}); err == nil {
+		var scaledToZero []string
+		for _, d := range deps.Items {
+			if d.Spec.Replicas != nil && *d.Spec.Replicas == 0 {
+				scaledToZero = append(scaledToZero, d.Name)
+			}
+		}
+		if len(scaledToZero) > 0 {
+			sort.Strings(scaledToZero)
+			data["ns_deployments_scaled_to_zero"] = strings.Join(scaledToZero, ", ")
+		}
+	} else {
+		log.Printf("WARN: k8s list deployments ns=%s failed: %v", ns, err)
+	}
+
 	return data, nil
 }
 

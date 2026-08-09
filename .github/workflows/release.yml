@@ -1,0 +1,63 @@
+name: Release
+
+# Образы публикуются по тегу вида v0.2.0 — версия берётся из самого тега,
+# руками её нигде дублировать не нужно.
+on:
+  push:
+    tags: ["v*"]
+  # Ручной запуск — прогнать сборку без создания тега (публикует только :edge).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write        # публикация в ghcr.io идёт под встроенным GITHUB_TOKEN
+
+jobs:
+  images:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false     # упавший ui не должен отменять уже идущую сборку go-сервисов
+      matrix:
+        service: [ai-worker, enricher, sanitizer, backend, ui]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Владельца приводит к нижнему регистру сам action: ghcr.io регистр
+          # не прощает, а имя репозитория здесь — IncidentGPT.
+          images: ghcr.io/${{ github.repository_owner }}/incidentgpt-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=edge,enable=${{ github.ref_type != 'tag' }}
+          # latest двигаем только на релизных тегах, не на ручных прогонах
+          flavor: latest=${{ github.ref_type == 'tag' }}
+
+      - name: build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # Метки живут в Dockerfile, сюда приходят только их значения —
+          # иначе локальная сборка и CI дают разный набор.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

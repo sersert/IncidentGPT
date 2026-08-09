@@ -16,6 +16,7 @@
 2. **Связывают** каскад алертов в один инцидент (по namespace + временному окну).
 3. Просят LLM написать **черновик разбора** — вероятная первопричина и что проверить.
 4. Кладут всё в **Telegram**: сырые алерты по одному + разбор.
+5. Показывают инциденты в **веб-интерфейсе** — если он включён.
 
 > Это не «ИИ вместо инженера». На выходе — черновик; решение принимает человек.
 
@@ -96,7 +97,7 @@ Detailed security documentation:
 ## Требования
 
 - Кластер Kubernetes с **kube-prometheus-stack** (Prometheus + Alertmanager + kube-state-metrics)
-- **Redis** в кластере (для корреляции; без него enricher шлёт алерты по одному)
+- **Redis** — входит в чарт; свой подключается через `incidentgpt-redis.enabled: false`
 - Аккаунт **OpenRouter** (https://openrouter.ai) — или любой OpenAI-совместимый эндпоинт
 - **Telegram-бот** + канал + группа обсуждения
 - Container registry для образов (или собери и запушь свои)
@@ -134,13 +135,21 @@ Detailed security documentation:
 
 ## Шаг 3. Redis
 
-Любой Redis в кластере. Например Bitnami, одиночный инстанс без персистентности:
-```bash
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm upgrade --install redis bitnami/redis -n incidentgpt --create-namespace \
-  --set architecture=standalone --set auth.enabled=false --set master.persistence.enabled=false
+Ставить отдельно не нужно: Redis входит в чарт сабчартом `incidentgpt-redis` —
+один узел с диском на 2 Gi, сервис `incidentgpt-redis:6379`.
+
+Если в кластере уже есть свой, выключи встроенный и укажи адрес в двух местах —
+enricher и backend ходят в Redis независимо:
+```yaml
+incidentgpt-redis:
+  enabled: false
+incidentgpt-backend:
+  env:
+    REDIS_ADDR: "redis-master.infra.svc.cluster.local:6379"
+incidentgpt-enricher:
+  env:
+    redisAddr: "redis-master.infra.svc.cluster.local:6379"
 ```
-Сервис будет `redis-master.incidentgpt.svc.cluster.local:6379` → это `redisAddr`.
 
 ## Шаг 4. Собрать образы
 
@@ -186,7 +195,7 @@ image:
 env:
   prometheusUrl: "http://<release>-kube-prometheus-stack-prometheus.monitoring:9090"
   clusterName: "my-cluster"
-  redisAddr: "redis-master.incidentgpt.svc.cluster.local:6379"
+  redisAddr: "incidentgpt-redis:6379"
   # groupBackendUrl / rawBackendUrl уже указывают на ai-worker внутри кластера
   corrWindow: "10m"     # сколько держим группу в Redis
   corrSettle: "40s"     # сколько ждём следствий каскада перед склейкой
@@ -283,13 +292,33 @@ kubectl logs -f -n incidentgpt deploy/ai-worker              # got incident / ra
 ```
 ai-worker/          # Go: промпт, вызов LLM, постинг в Telegram
   main.go
+  analysis_callback.go  #   отдача разбора в backend (если включён)
   chart/            # Helm-чарт ai-worker
 enricher/           # Go: обогащение + корреляция
   main.go           #   приём алерта, обогащение метриками/K8s
   correlation.go    #   Redis-буфер, окно, склейка группы
   k8s.go            #   походы в Kubernetes API
+  logs.go           #   выжимка логов из OpenSearch/Elasticsearch
   chart/            # Helm-чарт enricher (+ секция metrics в values)
+backend/            # Go: инциденты, алерты, API для веба
+ui/                 # React + TypeScript: веб-интерфейс
+deploy/incidentgpt/ # Umbrella-чарт: все компоненты одним helm install
 ```
+
+## Веб-интерфейс
+
+Инциденты можно смотреть в браузере, а не только в Telegram: состав группы,
+разбор целиком, отброшенный шум, логи, контекст и журнал действий.
+
+Включается в umbrella-чарте (`incidentgpt-backend.enabled`, `incidentgpt-ui.enabled`),
+по умолчанию включён. Подробности — [docs/web-ui.md](docs/web-ui.md).
+
+## Обогащение логами
+
+Enricher умеет прикладывать к алерту выжимку логов: без неё модель советует
+«проверь логи пода», с ней — называет конкретную ошибку. Сбор логов в чарт
+не входит, рабочий пример на OpenSearch и fluent-bit — в
+[docs/logs-enrichment.md](docs/logs-enrichment.md).
 
 ## Ключевые настройки (enricher env)
 

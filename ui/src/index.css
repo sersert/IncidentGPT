@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/* Дизайн-токены IncidentGPT. Тёмная тема без переключателя.
+   Severity — статус-шкала: цвет всегда идёт вместе с текстовой меткой (P1/P2/…),
+   никогда сам по себе. Палитра проверена на дейтеранопию и контраст к фону. */
+@theme {
+  /* поверхности: фон страницы → карточки → hover/вложенные блоки */
+  --color-surface-primary: #0C0D11;
+  --color-surface-secondary: #141620;
+  --color-surface-tertiary: #1B1E2A;
+  --color-border-default: #242838;
+  --color-border-soft: #1D2130;
+
+  /* текст: три уровня */
+  --color-text-primary: #EDEEF3;
+  --color-text-secondary: #9AA0B4;
+  --color-text-muted: #666C82;
+
+  /* акцент — только интерактив (ссылки, активный пункт, primary-кнопка).
+     Намеренно отделён от severity, чтобы «важно» и «кликабельно» не путались. */
+  --color-accent: #7C7CFF;
+  --color-accent-hover: #8F8FFF;
+
+  /* severity — те же метки, что в PrometheusRule: critical / warning / info */
+  --color-severity-critical: #FF5F52;
+  --color-severity-warning: #F5A623;
+  --color-severity-info: #4C9AFF;
+  --color-severity-unknown: #59636F;
+
+  /* статус инцидента */
+  --color-status-active: #FF5F52;
+  --color-status-resolved: #3FB950;
+  --color-status-muted: #59636F;
+  --color-status-acknowledged: #F5A623;
+
+  --radius-card: 10px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Цифры в колонках и таймерах не должны «прыгать» при обновлении. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-dot { animation: none; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }

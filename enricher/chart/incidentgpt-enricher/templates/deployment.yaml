@@ -42,6 +42,29 @@ spec:
               value: {{ .Values.env.runbookBaseUrl | quote }}
             - name: LISTEN_ADDR
               value: {{ .Values.env.listenAddr | quote }}
+            {{- if .Values.env.logsStoreUrl }}
+            # Логи как слой обогащения. Без адреса шаг молча пропускается,
+            # поэтому компонент остаётся рабочим и без хранилища логов.
+            - name: LOGS_STORE_URL
+              value: {{ .Values.env.logsStoreUrl | quote }}
+            - name: LOGS_STORE_USER
+              value: {{ .Values.env.logsStoreUser | default "" | quote }}
+            - name: LOGS_STORE_INDEX
+              value: {{ .Values.env.logsStoreIndex | default "logs-*" | quote }}
+            {{- if .Values.logsStore.existingSecret }}
+            - name: LOGS_STORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.logsStore.existingSecret }}
+                  key: {{ .Values.logsStore.passwordKey | default "password" }}
+            {{- end }}
+            - name: LOGS_RANGE_BEFORE
+              value: {{ .Values.env.logsRangeBefore | default "10m" | quote }}
+            - name: LOGS_RANGE_AFTER
+              value: {{ .Values.env.logsRangeAfter | default "2m" | quote }}
+            - name: LOGS_MAX_LINES
+              value: {{ .Values.env.logsMaxLines | default "40" | quote }}
+            {{- end }}
             - name: ENRICHER_VERSION
               value: {{ .Values.env.enricherVersion | quote }}
             - name: CLUSTER_NAME

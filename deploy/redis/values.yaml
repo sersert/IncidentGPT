@@ -1,0 +1,46 @@
+# Redis на один узел: буфер корреляции у enricher и хранилище инцидентов
+# у backend. Ни репликации, ни sentinel — для продакшена с требованиями к
+# доступности ставь свой Redis и выключи этот через redis.enabled: false.
+
+# Имя фиксировано, а не выведено из имени релиза: адреса в зонтичных values
+# записаны строкой, и они должны совпадать при любом имени установки.
+fullnameOverride: incidentgpt-redis
+
+image:
+  repository: redis
+  tag: "7.4-alpine"
+  pullPolicy: IfNotPresent
+
+# Пароль. Пусто — без авторизации: наружу Redis не публикуется и закрыт
+# NetworkPolicy. Если политики в кластере не применяются, задай пароль.
+auth:
+  password: ""
+  existingSecret: ""
+  passwordKey: password
+
+# Без диска история инцидентов теряется при каждом рестарте пода — ровно то,
+# ради чего Redis здесь и появился.
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: ""
+
+service:
+  port: 6379
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+# Кто ходит в Redis. Метки совпадают с теми, что вешают на себя backend и
+# enricher; политики аддитивны и лишнего не закрывают.
+networkPolicy:
+  enabled: true
+  backendAppLabel: incidentgpt-backend
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

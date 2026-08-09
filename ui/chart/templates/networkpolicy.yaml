@@ -1,0 +1,27 @@
+{{- if .Values.networkPolicy.enabled }}
+# В namespace действует политика с podSelector: {} — она накрывает все поды и
+# пускает трафик только из monitoring. Поэтому UI нужно открыть явно.
+#
+# Ingress-контроллер работает с hostNetwork: true, поэтому его трафик приходит
+# с адреса ноды, а не из сети подов — namespaceSelector/podSelector тут не
+# срабатывают, разрешать приходится по ipBlock с адресами нод.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "incidentgpt-ui.fullname" . }}-from-ingress
+  labels:
+    {{- include "incidentgpt-ui.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "incidentgpt-ui.fullname" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Источник не ограничиваем: ingress-контроллер работает с hostNetwork, и его
+    # адрес не совпадает ни с сетью подов, ни надёжно с InternalIP ноды. UI и так
+    # публичен через ingress, а API за ним закрыт отдельной политикой бэкенда.
+    - ports:
+        - port: 80
+          protocol: TCP
+{{- end }}

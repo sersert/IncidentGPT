@@ -1,18 +1,35 @@
 apiVersion: v2
 name: incidentgpt
-description: IncidentGPT — enricher + ai-worker + sanitizer
+description: IncidentGPT — enricher, ai-worker, sanitizer, backend и веб-интерфейс
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"
 
 # Перед install/upgrade: `helm dependency build deploy/incidentgpt`.
 dependencies:
   - name: incidentgpt-enricher
-    version: "0.1.0"
+    version: "0.2.0"
     repository: "file://../../enricher/chart/incidentgpt-enricher"
   - name: ai-worker
-    version: "0.1.0"
+    version: "0.2.0"
     repository: "file://../../ai-worker/chart"
   - name: incidentgpt-sanitizer
-    version: "0.1.0"
+    version: "0.2.0"
     repository: "file://../../sanitizer/chart"
+  # Backend хранит инциденты и отдаёт их вебу; ui — сам интерфейс.
+  # Оба отключаемы: без них остаётся прежняя связка с доставкой в Telegram.
+  - name: incidentgpt-backend
+    version: "0.2.0"
+    repository: "file://../../backend/chart"
+    condition: incidentgpt-backend.enabled
+  - name: incidentgpt-ui
+    version: "0.2.0"
+    repository: "file://../../ui/chart"
+    condition: incidentgpt-ui.enabled
+  # Redis нужен и enricher'у (окно корреляции), и backend'у (хранилище).
+  # Свой минимальный сабчарт, а не bitnami: тот тянет внешний репозиторий,
+  # а его образы уехали в урезанный каталог. Есть свой Redis — enabled: false.
+  - name: incidentgpt-redis
+    version: "0.2.0"
+    repository: "file://../redis"
+    condition: incidentgpt-redis.enabled

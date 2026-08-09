@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: your-registry.example.com/ai-worker
-  tag: "latest"
+  repository: ghcr.io/sersert/incidentgpt-ai-worker
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 
 # Секрет для приватного registry (kubernetes.io/dockerconfigjson). Оставь пустым для публичного.

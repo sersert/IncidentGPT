@@ -1,24 +1,33 @@
-# Единый values для всех трёх компонентов IncidentGPT.
+# Единый values для всех компонентов IncidentGPT.
 # Ключ верхнего уровня = имя соответствующего subchart'а.
 #
-# Реестр образов: harbor.sersert.io/incident/*
+# Реестр образов: ghcr.io/sersert/incidentgpt-*
 # Тег по умолчанию — тег этого релиза; переопредели под свою сборку.
 #
-# ⚠️ СЕКРЕТЫ: не коммить реальные значения. Для деплоя используй отдельный
 # values-secret.yaml (в .gitignore) или existingSecret. HMAC-ключ
 # sanitizerAuthSharedSecret / authSharedSecret должен СОВПАДАТЬ у всех трёх.
 
 incidentgpt-enricher:
   image:
-    repository: harbor.sersert.io/incident/incident-enricher
-    tag: "v0.1.0-rc1"
+    repository: ghcr.io/sersert/incidentgpt-enricher
+    tag: "0.2.0"
+  env:
+    # Группы уходят в backend — он строит инцидент для веба и передаёт тело
+    # дальше в ai-worker. Если backend выключен, верни сюда прямой адрес
+    # ai-worker'а: http://ai-worker.incidentgpt.svc:8080/incident-group
+    groupBackendUrl: "http://incidentgpt-backend:8080/api/v1/ingest"
+    redisAddr: "incidentgpt-redis:6379"
   secretValues:
     sanitizerAuthSharedSecret: ""
 
 ai-worker:
   image:
-    repository: harbor.sersert.io/incident/ai-worker
-    tag: "v0.1.0-rc1"
+    repository: ghcr.io/sersert/incidentgpt-ai-worker
+    tag: "0.2.0"
+  env:
+    # Обратный канал: без него разбор уходит только в Telegram, а веб
+    # продолжает показывать «ждёт AI-анализ». Пусто — поведение прежнее.
+    ANALYSIS_CALLBACK_URL: "http://incidentgpt-backend:8080/api/v1/incidents/by-group/analysis"
   secretValues:
     openrouterApiKey: ""
     telegramBotToken: ""
@@ -26,8 +35,8 @@ ai-worker:
 
 incidentgpt-sanitizer:
   image:
-    repository: harbor.sersert.io/incident/sanitizer
-    tag: "v0.1.0-rc1"
+    repository: ghcr.io/sersert/incidentgpt-sanitizer
+    tag: "0.2.0"
   secretValues:
     hashKey: ""
     authSharedSecret: ""
@@ -40,3 +49,63 @@ grafanaDashboard:
   namespace: monitoring
   label: grafana_dashboard
   labelValue: "1"
+
+# ── Backend и веб-интерфейс ─────────────────────────────────────────────────
+#
+# Backend принимает группы алертов от enricher, хранит инциденты и передаёт их
+# дальше в ai-worker. Ui — веб-интерфейс к нему.
+#
+# Если они не нужны, поставь enabled: false у обоих и верни enricher'у прямой
+# путь: incidentgpt-enricher.env.groupBackendUrl на /incident-group ai-worker'а.
+
+incidentgpt-backend:
+  enabled: true
+  image:
+    repository: ghcr.io/sersert/incidentgpt-backend
+    tag: "0.2.0"
+  env:
+    LISTEN_ADDR: ":8080"
+    # Путь обязателен: без него форвард уходит в корень и получает 404.
+    AI_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/incident-group"
+    FORWARD_TO_AI_WORKER: "true"
+    # Инциденты переживают рестарт пода только с Redis.
+    REDIS_ADDR: "incidentgpt-redis:6379"
+    # Логи и метрики для обогащения и вкладки «Логи».
+    LOGS_STORE_URL: ""
+    LOGS_STORE_INDEX: "logs-*"
+
+incidentgpt-ui:
+  enabled: true
+  image:
+    repository: ghcr.io/sersert/incidentgpt-ui
+    tag: "0.2.0"
+  ingress:
+    enabled: true
+    className: nginx
+    host: incidentgpt.example.com
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    tls:
+      secretName: incidentgpt-ui-tls
+  # Базовая авторизация на входе: прикрывает и интерфейс, и /api/.
+  # Пароль хэшируется bcrypt'ом в шаблоне; для продакшена подложи свой Secret
+  # с ключом htpasswd через existingSecret.
+  auth:
+    enabled: true
+    username: admin
+    password: admin
+    existingSecret: ""
+
+# ── Redis ───────────────────────────────────────────────────────────────────
+#
+# Один узел, без HA: буфер корреляции у enricher и хранилище инцидентов у
+# backend. Свой Redis — поставь enabled: false и пропиши его адрес в
+# incidentgpt-backend.env.REDIS_ADDR и incidentgpt-enricher.env.redisAddr.
+
+incidentgpt-redis:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 2Gi
+  auth:
+    password: ""

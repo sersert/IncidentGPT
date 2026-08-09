@@ -102,6 +102,10 @@ type EnrichedAlert struct {
 	// Простые текстовые подсказки по инциденту.
 	IncidentHints []string `json:"incident_hints,omitempty"`
 
+	// Выжимка логов вокруг алерта: повторы схлопнуты, INFO отброшен.
+	// Едет в модель вместе с метриками — иначе она советует «посмотри логи».
+	RecentLogs []string `json:"recent_logs,omitempty"`
+
 	// Тех. инфа.
 	Enriched      bool   `json:"enriched,omitempty"`
 	EnrichedAt    string `json:"enriched_at,omitempty"`
@@ -179,6 +183,10 @@ type metricTemplateContext struct {
 	Service   string
 	Node      string
 	Instance  string
+	// Pod нужен, чтобы тянуть метрики именно проблемного пода, а не всего
+	// namespace: при разборе OOM/CrashLoop важен конкретный контейнер.
+	Pod       string
+	Container string
 }
 
 // глобалы
@@ -648,6 +656,10 @@ func enrichAlert(ctx context.Context, a AMAlert) EnrichedAlert {
 	if appCfg.EnableK8sContext {
 		runK8sEnrichment(ctx, &e, a)
 	}
+
+	// Логи вокруг алерта — последний слой обогащения. Включается только если
+	// задан LOGS_STORE_URL, иначе шаг молча пропускается.
+	attachLogsContext(ctx, &e, a, a.StartsAt)
 
 	// Grafana / логи / runbook
 	if appCfg.GrafanaURL != "" {
