@@ -1,0 +1,43 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/sersert/incidentgpt-ui
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+
+fullnameOverride: "incidentgpt-ui"
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: incidentgpt.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    secretName: incidentgpt-ui-tls
+
+imagePullSecrets: []
+
+# В namespace есть политика с podSelector: {}, пускающая только monitoring.
+# Без явного разрешения ingress-контроллер не достучится до UI.
+networkPolicy:
+  enabled: true
+  # Ingress-контроллер работает с hostNetwork, поэтому источником трафика
+  # выступают адреса нод. Добавь сюда новые ноды, если кластер вырастет.
+  ingressNodeCIDRs:
+    - 51.15.21.88/32
+    - 51.15.21.89/32
+    - 51.15.21.126/32
+
+# Базовая авторизация на входе в UI (nginx). Прикрывает и интерфейс, и /api/.
+# Пароль хэшируется bcrypt'ом в шаблоне; для прода лучше подложить свой Secret
+# с ключом htpasswd через existingSecret и не держать пароль в values.
+auth:
+  enabled: true
+  username: admin
+  password: admin
+  existingSecret: ""

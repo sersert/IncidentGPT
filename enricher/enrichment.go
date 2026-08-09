@@ -72,6 +72,8 @@ func attachNodeContext(ctx context.Context, e *EnrichedAlert, a AMAlert, from, t
 		Service:   a.Labels["service"],
 		Node:      node,
 		Instance:  instance,
+		Pod:       a.Labels["pod"],
+		Container: a.Labels["container"],
 	}
 	attachMetrics(ctx, e, metricsCfg.Node, tmplCtx, "node_", from, to)
 }
@@ -95,6 +97,8 @@ func attachWorkloadContext(ctx context.Context, e *EnrichedAlert, a AMAlert, fro
 		Service:   svc,
 		Node:      a.Labels["node"],
 		Instance:  a.Labels["instance"],
+		Pod:       a.Labels["pod"],
+		Container: a.Labels["container"],
 	}
 	attachMetrics(ctx, e, metricsCfg.Workload, tmplCtx, "svc_", from, to)
 }
@@ -126,6 +130,8 @@ func attachExternalContext(ctx context.Context, e *EnrichedAlert, a AMAlert, fro
 		Service:   svc,
 		Node:      a.Labels["node"],
 		Instance:  inst,
+		Pod:       a.Labels["pod"],
+		Container: a.Labels["container"],
 	}
 	attachMetrics(ctx, e, metricsCfg.External, tmplCtx, "ext_", from, to)
 }

@@ -1,0 +1,69 @@
+{{- if .Values.networkPolicy.enabled }}
+# Чарт ai-worker пускает к себе только поды с меткой component=enricher.
+# Бэкенд стоит в разрыве группового пути и обязан достучаться до ai-worker,
+# иначе разбор группы не уходит в Telegram. NetworkPolicy аддитивны, поэтому
+# это правило дополняет политику ai-worker, не меняя её чарт.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "incidentgpt-backend.fullname" . }}-to-ai-worker
+  labels:
+    {{- include "incidentgpt-backend.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Values.networkPolicy.aiWorker.instance }}
+      app.kubernetes.io/name: {{ .Values.networkPolicy.aiWorker.name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: {{ include "incidentgpt-backend.fullname" . }}
+      ports:
+        - port: {{ .Values.networkPolicy.aiWorker.port }}
+          protocol: TCP
+---
+# UI проксирует /api/ сюда, поэтому открываем себя для его подов.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "incidentgpt-backend.fullname" . }}-from-ui
+  labels:
+    {{- include "incidentgpt-backend.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "incidentgpt-backend.fullname" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: {{ .Values.networkPolicy.uiAppLabel }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: enricher
+        # Ai-worker возвращает сюда готовый разбор — без этого обратный канал
+        # упирается в политику и веб продолжает ждать анализ.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ai-worker
+      ports:
+        - port: 8080
+          protocol: TCP
+{{- end }}

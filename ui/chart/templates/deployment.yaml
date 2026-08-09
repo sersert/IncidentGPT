@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "incidentgpt-ui.fullname" . }}
+  labels:
+    {{- include "incidentgpt-ui.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "incidentgpt-ui.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "incidentgpt-ui.fullname" . }}
+        {{- include "incidentgpt-ui.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ui
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          # Пробы бьют в /healthz — он вынесен из-под basic auth, иначе kubelet
+          # получал бы 401 и под не становился ready.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          {{- if .Values.auth.enabled }}
+          volumeMounts:
+            - name: auth
+              mountPath: /etc/nginx/secrets
+              readOnly: true
+          {{- end }}
+      {{- if .Values.auth.enabled }}
+      volumes:
+        - name: auth
+          secret:
+            secretName: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "incidentgpt-ui.fullname" .)) }}
+      {{- end }}

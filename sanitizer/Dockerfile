@@ -47,7 +47,9 @@ LABEL org.opencontainers.image.source="https://github.com/sersert/IncidentGPT" \
       org.opencontainers.image.description="Data Sanitizer security gateway for IncidentGPT" \
       org.opencontainers.image.licenses="MIT"
 
-USER nonroot:nonroot
+# 65532:65532 — это и есть nonroot в distroless. Числом, а не именем: так uid
+# проверяется статически и не зависит от разбора /etc/passwd в образе.
+USER 65532:65532
 
 COPY --from=build /out/sanitizer /sanitizer
 COPY --from=build /out/healthcheck /healthcheck

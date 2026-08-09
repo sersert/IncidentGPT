@@ -1,6 +1,6 @@
 image:
-  repository: your-registry.example.com/incident-enricher
-  tag: "latest"
+  repository: ghcr.io/sersert/incidentgpt-enricher
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 
 # Секрет для приватного registry. Оставь пустым для публичного.
@@ -42,6 +42,8 @@ env:
   # Куда enricher шлёт ОДИНОЧНЫЙ алерт (фолбэк, если Redis недоступен).
   backendUrl: "http://ai-worker.incidentgpt.svc:8080/incident"
   grafanaUrl: ""
+  # База для ССЫЛКИ на веб-интерфейс логов — её кладут в аннотацию для инженера.
+  # Не путать с logsStoreUrl ниже: тот адрес enricher дёргает сам.
   logsBaseUrl: ""
   # База для ссылок на runbook: <runbookBaseUrl>/<alertname>. Пусто — ссылки не добавляются.
   runbookBaseUrl: ""
@@ -54,8 +56,19 @@ env:
   promRangeBefore: "15m"
   promRangeAfter: "5m"
 
+  # Логи как слой обогащения: выжимка ошибок едет к модели вместе с метриками.
+  # Пусто — шаг молча пропускается, компонент остаётся рабочим.
+  # Подходит любое хранилище с поисковым API OpenSearch/Elasticsearch.
+  logsStoreUrl: ""
+  logsStoreUser: ""
+  logsStoreIndex: "logs-*"
+  # Сколько логов тянуть и класть в промпт — см. docs/logs-enrichment.md
+  logsRangeBefore: "10m"
+  logsRangeAfter: "2m"
+  logsMaxLines: "40"
+
   # Лёгкая корреляция алертов через Redis (без графа)
-  redisAddr: "redis-master.incidentgpt.svc.cluster.local:6379"
+  redisAddr: "incidentgpt-redis:6379"
   redisPassword: ""
   groupBackendUrl: "http://ai-worker.incidentgpt.svc:8080/incident-group"
   rawBackendUrl: "http://ai-worker.incidentgpt.svc:8080/incident-raw"
@@ -152,3 +165,8 @@ metrics:
       kind: "health"
       expr: >
         up{instance="{{ .Instance }}"}
+
+# Пароль к хранилищу логов подкладывается секретом, а не значением в values.
+logsStore:
+  existingSecret: ""
+  passwordKey: password

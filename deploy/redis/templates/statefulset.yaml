@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "incidentgpt-redis.fullname" . }}
+  labels:
+    {{- include "incidentgpt-redis.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "incidentgpt-redis.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "incidentgpt-redis.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "incidentgpt-redis.fullname" . }}
+        {{- include "incidentgpt-redis.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        # Без fsGroup том приезжает root:root и redis не может писать AOF.
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --appendonly
+            - "yes"
+            - --dir
+            - /data
+            # maxmemory-policy намеренно не задаём: политика по умолчанию
+            # noeviction. С любой из allkeys-* Redis начал бы вытеснять
+            # инциденты под нагрузкой — а это хранилище, а не кэш.
+            {{- if or .Values.auth.password .Values.auth.existingSecret }}
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            {{- end }}
+          {{- if or .Values.auth.password .Values.auth.existingSecret }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "incidentgpt-redis.secretName" . }}
+                  key: {{ .Values.auth.passwordKey }}
+          {{- end }}
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          # Пробы по TCP, а не redis-cli ping: с включённым паролем ping
+          # потребовал бы тащить его в команду пробы.
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if not .Values.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+{{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+{{- end }}

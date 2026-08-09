@@ -1,12 +1,21 @@
 dependencies:
 - name: incidentgpt-enricher
   repository: file://../../enricher/chart/incidentgpt-enricher
-  version: 0.1.0
+  version: 0.2.0
 - name: ai-worker
   repository: file://../../ai-worker/chart
-  version: 0.1.0
+  version: 0.2.0
 - name: incidentgpt-sanitizer
   repository: file://../../sanitizer/chart
-  version: 0.1.0
-digest: sha256:9685bf4fa2a6cc44a328eddfd87e2a93950099f1054fa8303f3824b1f538d126
-generated: "2026-08-05T23:51:49.965335+03:00"
+  version: 0.2.0
+- name: incidentgpt-backend
+  repository: file://../../backend/chart
+  version: 0.2.0
+- name: incidentgpt-ui
+  repository: file://../../ui/chart
+  version: 0.2.0
+- name: incidentgpt-redis
+  repository: file://../redis
+  version: 0.2.0
+digest: sha256:ee27e69d8c11032663e92215ee79b3ca472a97922491a78bc09a9b25a8b72864
+generated: "2026-08-09T20:19:59.383523+03:00"

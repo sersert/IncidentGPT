@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "incidentgpt-redis.fullname" . }}
+  labels:
+    {{- include "incidentgpt-redis.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: redis
+      protocol: TCP
+      name: redis
+  selector:
+    app: {{ include "incidentgpt-redis.fullname" . }}

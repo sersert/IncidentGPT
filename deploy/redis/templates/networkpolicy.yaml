@@ -1,0 +1,33 @@
+{{- if .Values.networkPolicy.enabled }}
+# В Redis ходят двое: enricher копит в нём окно корреляции, backend хранит
+# инциденты. Больше никто — порт открыт только этим подам.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "incidentgpt-redis.fullname" . }}
+  labels:
+    {{- include "incidentgpt-redis.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "incidentgpt-redis.fullname" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: {{ .Values.networkPolicy.backendAppLabel }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: enricher
+      ports:
+        - port: 6379
+          protocol: TCP
+{{- end }}
