@@ -60,7 +60,9 @@ COPY --from=build /out/enricher /app/enricher
 COPY --from=build /out/healthcheck /app/healthcheck
 
 # Небольшой sanity: не root
-USER nonroot:nonroot
+# 65532:65532 — это и есть nonroot в distroless. Числом, а не именем: так uid
+# проверяется статически и не зависит от разбора /etc/passwd в образе.
+USER 65532:65532
 
 EXPOSE 9099
 

@@ -31,7 +31,9 @@ var levelPatterns = []struct {
 	re    *regexp.Regexp
 }{
 	{"FATAL", regexp.MustCompile(`(?i)\b(fatal|panic|emergency)\b`)},
-	{"ERROR", regexp.MustCompile(`(?i)\b(error|err|exception|failed|failure)\b`)},
+	// Набор слов должен совпадать с enricher/logs.go: иначе строку, которую
+	// модель получила как ошибку, инженер не найдёт под фильтром ERROR.
+	{"ERROR", regexp.MustCompile(`(?i)\b(error|err|exception|failed|failure|refused|timeout)\b`)},
 	{"WARN", regexp.MustCompile(`(?i)\b(warn|warning)\b`)},
 }
 

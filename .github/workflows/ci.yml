@@ -26,6 +26,8 @@ jobs:
             image: golang:1.24-bookworm   # == enricher/Dockerfile
           - service: sanitizer
             image: golang:1.24-bookworm   # == sanitizer/Dockerfile
+          - service: backend
+            image: golang:1.24-bookworm   # == backend/Dockerfile
     defaults:
       run:
         working-directory: ${{ matrix.service }}
@@ -49,19 +51,65 @@ jobs:
       - name: test
         run: go test -race ./...
 
-  # Линт Dockerfile'ов по твоему чек-листу антипаттернов.
+  # У UI своего тест-раннера нет, поэтому проверяем то, что реально ловит
+  # поломки: типы и сборку бандла.
+  ui:
+    name: build & lint (ui)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --no-audit --no-fund
+      - name: typecheck
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: lint
+        run: npm run lint
+      - name: build
+        run: npm run build
+
+  # Линт Dockerfile'ов по чек-листу антипаттернов.
   hadolint:
     name: hadolint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        dockerfile: [ai-worker/Dockerfile, enricher/Dockerfile, sanitizer/Dockerfile]
+        dockerfile:
+          - ai-worker/Dockerfile
+          - enricher/Dockerfile
+          - sanitizer/Dockerfile
+          - backend/Dockerfile
+          - ui/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
+
+  # Сама сборка образа, без пуша: release.yml бежит только по тегу, и без этой
+  # проверки сломанный Dockerfile всплыл бы уже во время релиза.
+  docker:
+    name: docker build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ai-worker, enricher, sanitizer, backend, ui]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   helm:
     name: helm lint
@@ -72,3 +120,13 @@ jobs:
       - run: helm lint ai-worker/chart
       - run: helm lint enricher/chart/incidentgpt-enricher
       - run: helm lint sanitizer/chart
+      - run: helm lint backend/chart
+      - run: helm lint ui/chart
+      - run: helm lint deploy/redis
+      # Зонтичный чарт линтуется только с собранными зависимостями.
+      - run: helm dependency build deploy/incidentgpt
+      - run: helm lint deploy/incidentgpt
+      # Шаблоны должны не просто рендериться, а давать валидные манифесты.
+      - run: helm template incidentgpt deploy/incidentgpt > /tmp/render.yaml
+      - uses: azure/setup-kubectl@v4
+      - run: kubectl apply --dry-run=client -f /tmp/render.yaml
