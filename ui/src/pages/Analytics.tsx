@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip,
-  ResponsiveContainer, Legend, CartesianGrid,
+  ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { Card } from '@/components/ui/Card.tsx'
 import { Skeleton } from '@/components/ui/Skeleton.tsx'

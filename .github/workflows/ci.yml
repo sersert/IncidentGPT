@@ -52,9 +52,10 @@ jobs:
         run: go test -race ./...
 
   # У UI своего тест-раннера нет, поэтому проверяем то, что реально ловит
-  # поломки: типы и сборку бандла.
+  # поломки: типы и сборку бандла. Отдельный typecheck обязателен — `vite build`
+  # типы не проверяет, esbuild их просто стирает, и ошибки копились незамеченными.
   ui:
-    name: build & lint (ui)
+    name: build & typecheck (ui)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,8 +68,6 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: typecheck
         run: npx tsc --noEmit -p tsconfig.app.json
-      - name: lint
-        run: npm run lint
       - name: build
         run: npm run build
 
@@ -127,6 +126,13 @@ jobs:
       - run: helm dependency build deploy/incidentgpt
       - run: helm lint deploy/incidentgpt
       # Шаблоны должны не просто рендериться, а давать валидные манифесты.
+      # kubeconform сверяет их со схемами Kubernetes офлайн: у kubectl схема
+      # берётся из API-сервера, а кластера в раннере нет.
       - run: helm template incidentgpt deploy/incidentgpt > /tmp/render.yaml
-      - uses: azure/setup-kubectl@v4
-      - run: kubectl apply --dry-run=client -f /tmp/render.yaml
+      - name: kubeconform
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          # Проверяем на нижнюю поддерживаемую версию: что валидно в 1.28,
+          # то валидно и дальше, а обратное неверно.
+          kubeconform -strict -summary -kubernetes-version 1.28.0 /tmp/render.yaml

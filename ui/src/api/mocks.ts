@@ -540,6 +540,7 @@ const mockMetrics: MetricSeries[] = [
 
 export const mockIncidentDetail: IncidentDetail = {
   ...mockIncidents[0],
+  assignee: null,
   alerts: mockAlerts.filter((a) => a.incident_id === 'INC-2026-0142'),
   chain: mockChain,
   root_cause_event_id: 'evt-1',
@@ -627,11 +628,14 @@ export const mockPredictions: Prediction[] = [
 
 export const mockPredictionSummary: PredictionSummary = {
   healthy_count: 42,
+  watched_count: 44,
   warning_count: 2,
   critical_count: 0,
-  avg_cpu: 34,
-  avg_memory: 52,
-  avg_disk: 61,
+  nodes: [
+    { node: 'node-01', cpu: 34, memory: 52, disk: 61 },
+    { node: 'node-02', cpu: 71, memory: 68, disk: 83 },
+    { node: 'node-03', cpu: 22, memory: 41, disk: 39 },
+  ],
   network_status: 'stable',
 }
 
@@ -758,14 +762,14 @@ export const mockServiceDetail: ServiceDetail = {
 }
 
 export const mockIntegrations: Integration[] = [
-  { type: 'prometheus', name: 'Prometheus', category: 'data_source', status: 'connected', config: { url: 'http://prometheus:9090' }, last_heartbeat: '2026-02-19T14:30:00Z', enabled: true },
-  { type: 'zabbix', name: 'Zabbix', category: 'data_source', status: 'connected', config: { url: 'http://zabbix:8080' }, last_heartbeat: '2026-02-19T14:28:00Z', enabled: true },
-  { type: 'loki', name: 'Loki', category: 'data_source', status: 'connected', config: { url: 'http://loki:3100' }, last_heartbeat: '2026-02-19T14:29:00Z', enabled: true },
-  { type: 'kubernetes', name: 'Kubernetes', category: 'data_source', status: 'connected', config: { cluster: 'prod-01' }, last_heartbeat: '2026-02-19T14:30:00Z', enabled: true },
-  { type: 'logs', name: 'Логи', category: 'data_source', status: 'not_configured', config: {}, last_heartbeat: null, enabled: false },
-  { type: 'telegram', name: 'Telegram', category: 'output_channel', status: 'connected', config: { chat_id: '-100123456' }, last_heartbeat: null, enabled: true },
-  { type: 'slack', name: 'Slack', category: 'output_channel', status: 'connected', config: { channel: '#incidents' }, last_heartbeat: null, enabled: true },
-  { type: 'jira', name: 'Jira', category: 'output_channel', status: 'not_configured', config: {}, last_heartbeat: null, enabled: false },
+  { type: 'prometheus', name: 'Prometheus', fields: [], category: 'data_source', status: 'connected', config: { url: 'http://prometheus:9090' }, last_heartbeat: '2026-02-19T14:30:00Z', enabled: true },
+  { type: 'zabbix', name: 'Zabbix', fields: [], category: 'data_source', status: 'connected', config: { url: 'http://zabbix:8080' }, last_heartbeat: '2026-02-19T14:28:00Z', enabled: true },
+  { type: 'loki', name: 'Loki', fields: [], category: 'data_source', status: 'connected', config: { url: 'http://loki:3100' }, last_heartbeat: '2026-02-19T14:29:00Z', enabled: true },
+  { type: 'kubernetes', name: 'Kubernetes', fields: [], category: 'data_source', status: 'connected', config: { cluster: 'prod-01' }, last_heartbeat: '2026-02-19T14:30:00Z', enabled: true },
+  { type: 'logs', name: 'Логи', fields: [], category: 'data_source', status: 'not_configured', config: {}, last_heartbeat: null, enabled: false },
+  { type: 'telegram', name: 'Telegram', fields: [], category: 'output_channel', status: 'connected', config: { chat_id: '-100123456' }, last_heartbeat: null, enabled: true },
+  { type: 'slack', name: 'Slack', fields: [], category: 'output_channel', status: 'connected', config: { channel: '#incidents' }, last_heartbeat: null, enabled: true },
+  { type: 'jira', name: 'Jira', fields: [], category: 'output_channel', status: 'not_configured', config: {}, last_heartbeat: null, enabled: false },
 ]
 
 export const mockLLMConfig: LLMConfig = {

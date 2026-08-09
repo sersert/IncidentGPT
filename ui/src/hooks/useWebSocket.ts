@@ -11,7 +11,7 @@ export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const retriesRef = useRef(0)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onMessageRef = useRef(onMessage)
   onMessageRef.current = onMessage
 
