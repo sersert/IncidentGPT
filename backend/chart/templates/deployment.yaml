@@ -64,6 +64,12 @@ spec:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.sanitizerSecretKey }}
             {{- end }}
+          {{- if .Values.runbooks.existingConfigMap }}
+          volumeMounts:
+            - name: runbooks
+              mountPath: /etc/incidentgpt/runbooks
+              readOnly: true
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /healthz
@@ -83,3 +89,10 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+
+      {{- if .Values.runbooks.existingConfigMap }}
+      volumes:
+        - name: runbooks
+          configMap:
+            name: {{ .Values.runbooks.existingConfigMap }}
+      {{- end }}

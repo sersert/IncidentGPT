@@ -17,6 +17,7 @@ service:
 
 env:
   LISTEN_ADDR: ":8080"
+  RUNBOOK_DIRECTORY: ""
   DURABLE_ANALYSIS_ENABLED: "false"
   STRUCTURED_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/v1/analyze"
   CHANGES_ENABLED: "false"
@@ -58,3 +59,6 @@ changes:
   readerPasswordKey: timeline-read-password
   sanitizerSecretKey: auth-shared-secret
   analysisServiceTokenKey: analysis-service-token
+
+runbooks:
+  existingConfigMap: ""
