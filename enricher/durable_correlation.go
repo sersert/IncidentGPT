@@ -23,7 +23,13 @@ redis.call('HSET',KEYS[1],ARGV[1],ARGV[2]);redis.call('ZADD',KEYS[2],'NX',ARGV[3
 func bufferDurable(e EnrichedAlert) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	gk := groupKeyFor(e)
+	var gk string
+	if dependencyCorrelation() {
+		gk, e.CorrelationReason = dependencyDecision(e)
+	} else {
+		gk = groupKeyFor(e)
+		e.CorrelationReason = "legacy cluster/namespace correlation window"
+	}
 	key := "igpt:corr:pending:" + gk
 	if e.Status == "resolved" {
 		if err := redisClient.HDel(ctx, key, e.Fingerprint).Err(); err != nil {

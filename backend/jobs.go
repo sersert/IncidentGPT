@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -69,6 +70,13 @@ var enqueueAnalysisScript = redis.NewScript(`
 if redis.call('EXISTS',KEYS[#KEYS]) == 1 then return -2 end
 if redis.call('EXISTS',KEYS[1]) == 1 then return 0 end
 local inc=redis.call('GET',KEYS[3]); if not inc then return -1 end
+local candidate=cjson.decode(ARGV[1])
+if candidate.job.kind=='diagnostics' then
+local activeKey='igpt:diagnostics:active:'..candidate.job.incident_id
+local active=redis.call('GET',activeKey)
+if active then local oldraw=redis.call('GET','igpt:job:'..active);if oldraw then local old=cjson.decode(oldraw);if old.job.status=='queued' or old.job.status=='running' then return -3 end end end
+redis.call('SET',activeKey,candidate.job.job_id)
+end
 local data=cjson.decode(inc); data.analysis_request_id=ARGV[3]
 redis.call('SET',KEYS[3],cjson.encode(data))
 redis.call('SET',KEYS[1],ARGV[1]); redis.call('ZADD',KEYS[2],ARGV[2],ARGV[4]);redis.call('ZADD','igpt:jobs:pending:created',ARGV[2],ARGV[4])
@@ -98,6 +106,9 @@ func incidentComposition(inc *Incident) string {
 func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid string) (string, error) {
 	now := time.Now().UTC()
 	job := DurableJob{Version: 1, ID: jid, IncidentID: inc.ID, AnalysisID: input.AnalysisID, Kind: "analysis", Status: "queued", CreatedAt: now}
+	if input.JobKind != "" {
+		job.Kind = input.JobKind
+	}
 	envelope := jobEnvelope{Job: job, Input: input}
 	raw, _ := json.Marshal(envelope)
 	keys := []string{"igpt:job:" + jid, jobsDue, keyIncident + inc.ID, "igpt:analysis:requested:" + inc.ID, "igpt:jobs:incident:" + inc.ID}
@@ -112,6 +123,9 @@ func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid s
 	}
 	keys = append(keys, input.IngestKey)
 	n, err := enqueueAnalysisScript.Run(ctx, store.disk.rdb, keys, args...).Int()
+	if n == -3 && err == nil {
+		return "", fmt.Errorf("investigation already active")
+	}
 	if n == -2 && err == nil {
 		return store.disk.rdb.Get(ctx, input.IngestKey).Result()
 	}
@@ -128,7 +142,7 @@ local key='igpt:job:'..ids[1];local raw=redis.call('GET',key)
 if not raw then redis.call('ZREM',KEYS[1],ids[1]);return nil end
 local e=cjson.decode(raw)
 if e.job.status == 'canceled' or e.job.status == 'complete' or e.job.status == 'failed' then redis.call('ZREM',KEYS[1],ids[1]);return nil end
-if e.job.attempts >= 4 then e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
+if e.job.attempts >= 4 then if e.job.kind=='diagnostics' and redis.call('GET','igpt:diagnostics:active:'..e.job.incident_id)==e.job.job_id then redis.call('DEL','igpt:diagnostics:active:'..e.job.incident_id) end;e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
 e.owner=ARGV[2];e.lease_until=tonumber(ARGV[3]);e.job.status='running';e.job.attempts=e.job.attempts+1; if e.job.attempts>1 then redis.call('INCR','igpt:jobs:retries') end
 raw=cjson.encode(e);redis.call('SET',key,raw);redis.call('ZADD',KEYS[1],ARGV[3],ids[1]);return raw`)
 
@@ -151,7 +165,7 @@ local raw=redis.call('GET',KEYS[1]);if not raw then return 0 end
 local e=cjson.decode(raw);if e.owner ~= ARGV[1] or e.job.status ~= 'running' or e.lease_until < tonumber(ARGV[2]) then return 0 end
 e.job.status=ARGV[3];e.job.error_code=ARGV[4]; if ARGV[3]=='failed' then redis.call('INCR','igpt:jobs:failures') end
 if ARGV[3] == 'queued' then redis.call('ZADD',KEYS[2],ARGV[5],e.job.job_id)
-else e.job.finished_at=ARGV[6];redis.call('ZREM',KEYS[2],e.job.job_id);redis.call('ZREM','igpt:jobs:pending:created',e.job.job_id) end
+else if e.job.kind=='diagnostics' and redis.call('GET','igpt:diagnostics:active:'..e.job.incident_id)==e.job.job_id then redis.call('DEL','igpt:diagnostics:active:'..e.job.incident_id) end;e.job.finished_at=ARGV[6];redis.call('ZREM',KEYS[2],e.job.job_id);redis.call('ZREM','igpt:jobs:pending:created',e.job.job_id) end
 redis.call('SET',KEYS[1],cjson.encode(e))
 if ARGV[3] == 'complete' then
 redis.call('INCR','igpt:jobs:completed');if tonumber(ARGV[8])>=0 then redis.call('INCRBYFLOAT','igpt:jobs:latency:sum',ARGV[8]);redis.call('INCR','igpt:jobs:latency:samples') end; redis.call('SET',KEYS[3],ARGV[7],'NX');redis.call('ZADD',KEYS[4],ARGV[2],e.job.analysis_id)
@@ -228,10 +242,17 @@ func startAnalysisJobs() {
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
-				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 				e, err := claimJob(ctx)
 				if err == nil && e != nil {
-					a, runErr := executeAnalysis(ctx, e)
+					var a *AnalysisVersion
+					var runErr error
+					if e.Job.Kind == "diagnostics" {
+						runErr = collectDiagnosticEvidence(ctx, e)
+					}
+					if runErr == nil {
+						a, runErr = executeAnalysis(ctx, e)
+					}
 					code := ""
 					if runErr != nil {
 						code = runErr.Error()
@@ -296,6 +317,7 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobs := []DurableJob{}
+	operations := []DiagnosticOperation{}
 	for _, jid := range jids {
 		raw, err := store.disk.rdb.Get(ctx, "igpt:job:"+jid).Bytes()
 		if err != nil {
@@ -308,8 +330,11 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jobs = append(jobs, e.Job)
+		if e.Input.Operation != nil {
+			operations = append(operations, *e.Input.Operation)
+		}
 	}
-	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "enabled": durableEnabled()})
+	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "composition_hash": incidentComposition(inc), "history_sources": inc.HistorySources, "enabled": durableEnabled()})
 }
 func handleEvidence(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
@@ -388,7 +413,7 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 	if cluster == "" || cluster == "unknown" {
 		cluster = alerts[0].Labels["cluster"]
 	}
-	lockKey := "igpt:ingest:lock:" + digest(cluster, gk, alerts[0].Labels["namespace"])
+	lockKey := "igpt:composition:lock"
 	owner := newStableID("ingest-owner")
 	claimed, err := store.disk.rdb.SetNX(ctx, lockKey, owner, 30*time.Second).Result()
 	if err != nil || !claimed {
@@ -407,17 +432,81 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "batch lookup unavailable", 503)
 		return
 	}
-	inc := ingestGroup(alerts, gk)
-	if inc == nil || inc.Status == "resolved" {
+	// Keep a human-moved fingerprint apart from its former automatic batch.
+	partitions := map[string][]EnrichedAlert{}
+	for _, alert := range alerts {
+		fp := alert.Fingerprint
+		if cluster != "" && cluster != "unknown" {
+			fp = "cluster-" + digest(cluster, fp)
+		}
+		target, lookupErr := store.disk.rdb.Get(ctx, "igpt:regroup:binding:"+fp).Result()
+		if lookupErr != nil && lookupErr != redis.Nil {
+			http.Error(w, "manual binding unavailable", 503)
+			return
+		}
+		partitions[target] = append(partitions[target], alert)
+	}
+	targets := make([]string, 0, len(partitions))
+	for target := range partitions {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	jobIDs := []string{}
+	incidentIDs := []string{}
+	for _, target := range targets {
+		part := partitions[target]
+		fps := []string{}
+		for _, alert := range part {
+			fp := alert.Fingerprint
+			if cluster != "" && cluster != "unknown" {
+				fp = "cluster-" + digest(cluster, fp)
+			}
+			fps = append(fps, fp)
+		}
+		if existing := store.FindIncidentForGroup(fps); existing != nil {
+			count := len(existing.Alerts)
+			known := map[string]bool{}
+			for _, a := range existing.Alerts {
+				known[a.Fingerprint] = true
+			}
+			for i, a := range part {
+				if a.Status != "resolved" && !known[fps[i]] {
+					count++
+					known[fps[i]] = true
+				}
+			}
+			if count > 50 {
+				http.Error(w, "incident composition limit reached; manually separate or close the group", 503)
+				return
+			}
+		}
+		inc := ingestGroup(part, gk)
+		if inc == nil || inc.Status == "resolved" {
+			continue
+		}
+		childBatch := batchID
+		if len(targets) > 1 {
+			childBatch = batchID + "/composition/" + target
+		}
+		jid, err := enqueueAnalysis(ctx, inc, part, childBatch)
+		if err != nil {
+			http.Error(w, "durable persistence or scheduling unavailable; retry same batch", 503)
+			return
+		}
+		jobIDs = append(jobIDs, jid)
+		incidentIDs = append(incidentIDs, inc.ID)
+	}
+	if len(jobIDs) == 0 {
 		writeJSON(w, 200, map[string]any{"status": "resolved", "scheduled": false})
 		return
 	}
-	jid, err := enqueueAnalysis(ctx, inc, alerts, batchID)
-	if err != nil {
-		http.Error(w, "durable persistence or scheduling unavailable; retry same batch", 503)
-		return
+	if len(targets) > 1 {
+		if err := store.disk.rdb.Set(ctx, "igpt:ingest:batch:"+digest(cluster, batchID), jobIDs[0], 0).Err(); err != nil {
+			http.Error(w, "batch acknowledgement unavailable; retry", 503)
+			return
+		}
 	}
-	writeJSON(w, 202, map[string]any{"incident_id": inc.ID, "job_id": jid, "scheduled": true})
+	writeJSON(w, 202, map[string]any{"incident_id": incidentIDs[0], "incident_ids": incidentIDs, "job_id": jobIDs[0], "job_ids": jobIDs, "scheduled": true})
 }
 func trustedBearer(r *http.Request, token string) bool {
 	return token != "" && constantToken(r.Header.Get("Authorization"), "Bearer "+token)

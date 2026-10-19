@@ -14,6 +14,7 @@ export type AlertStatus = 'firing' | 'resolved'
  * у одного инцидента может быть 8 алертов, часть из которых разбор отбросил.
  */
 export interface Alert {
+ correlation_reason?: string
   id: string
   fingerprint: string
   alertname: string
