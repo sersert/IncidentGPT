@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { GuidedDiagnostics } from '@/components/GuidedDiagnostics'
+import { IncidentMemory } from '@/components/IncidentMemory'
 import { AnalysisHistory } from '@/components/AnalysisHistory'
 import { RecentChanges } from '@/components/RecentChanges'
 import { useParams, useNavigate, Link } from 'react-router-dom'
@@ -624,6 +626,8 @@ export function IncidentDetail() {
         </Card>}
       </div>
 
+      <GuidedDiagnostics key={`diagnostics-${incident.id}`} incidentId={incident.id} />
+      <IncidentMemory key={`memory-${incident.id}`} incidentId={incident.id} />
       <AnalysisHistory key={`analysis-${incident.id}`} incidentId={incident.id} />
       <RecentChanges key={incident.id} incidentId={incident.id} />
 

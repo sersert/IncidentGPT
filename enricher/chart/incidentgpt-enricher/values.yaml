@@ -182,3 +182,7 @@ changes:
   ingestTokenKey: change-ingest-token
   durableCorrelation: false
   analysisServiceTokenKey: analysis-service-token
+
+diagnostics:
+  enabled: false
+  namespaces: ""

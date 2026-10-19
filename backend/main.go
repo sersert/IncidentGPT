@@ -1769,12 +1769,8 @@ func integrationTypeFromPath(p string) string {
 }
 
 // GET /api/v1/knowledge/search, patterns
-func handleKnowledgeSearch(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"results": []any{}, "total": 0})
-}
-func handleKnowledgePatterns(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, []any{})
-}
+func handleKnowledgeSearch(w http.ResponseWriter, r *http.Request)   { knowledgeSearch(w, r) }
+func handleKnowledgePatterns(w http.ResponseWriter, r *http.Request) { knowledgePatterns(w, r) }
 
 // GET /api/v1/services/graph, /api/v1/services/{id}
 func handleServiceGraph(w http.ResponseWriter, _ *http.Request) {
@@ -1809,6 +1805,11 @@ func main() {
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/evidence/{evidence}", handleEvidence)
 	mux.HandleFunc("GET /api/v1/jobs/metrics", handleJobMetrics)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/resolution", handleResolution)
+	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolution", handleResolution)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/investigations", handleInvestigations)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/investigations", handleInvestigations)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/investigations/{job}/cancel", handleDiagnosticCancel)
 
 	mux.HandleFunc("POST /api/v1/changes", handleChangeIngest)
 	mux.HandleFunc("POST /api/v1/changes/coverage", handleChangeCoverage)

@@ -17,6 +17,9 @@ service:
 
 env:
   LISTEN_ADDR: ":8080"
+  GUIDED_DIAGNOSTICS_ENABLED: "false"
+  DIAGNOSTIC_COLLECTOR_URL: "http://incidentgpt-enricher.incidentgpt.svc:9099/v1/diagnostics"
+  RUNBOOK_DIRECTORY: ""
   DURABLE_ANALYSIS_ENABLED: "false"
   STRUCTURED_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/v1/analyze"
   CHANGES_ENABLED: "false"
@@ -58,3 +61,6 @@ changes:
   readerPasswordKey: timeline-read-password
   sanitizerSecretKey: auth-shared-secret
   analysisServiceTokenKey: analysis-service-token
+
+runbooks:
+  existingConfigMap: ""
