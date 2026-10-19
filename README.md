@@ -9,11 +9,11 @@
 
 > 💡 **Совет:** секретные ключи `auth-shared-secret` и `hash-key` генерируются командой `openssl rand -hex 32`.
 
-Два маленьких Go-сервиса поверх твоего Prometheus/Alertmanager, которые:
+Четыре Go-компонента (`enricher`, `ai-worker`, `backend`, `sanitizer`) и React UI поверх Prometheus/Alertmanager:
 
 1. **Обогащают** каждый алерт контекстом — метрики из Prometheus (с трендами) + статус
    подов/нод/событий из Kubernetes API.
-2. **Связывают** каскад алертов в один инцидент (по namespace + временному окну).
+2. **Связывают** алерты в инцидент: legacy namespace + окно или опциональная ограниченная корреляция по workload/явной зависимости с объяснением.
 3. Просят LLM написать **черновик разбора** — вероятная первопричина и что проверить.
 4. Кладут всё в **Telegram**: сырые алерты по одному + разбор.
 5. Показывают инциденты в **веб-интерфейсе** — если он включён.
@@ -21,6 +21,15 @@
 > Это не «ИИ вместо инженера». На выходе — черновик; решение принимает человек.
 
 ---
+
+## С чего начать
+
+- [Запуск проверочного стенда: образы, настройки, первый алерт и диагностика ошибок](docs/getting-started.md).
+- [Работа в веб-интерфейсе и доступ](docs/web-ui.md); внутри приложения — «Руководство дежурного» (`/help`).
+- [Разработка и проверка интерфейса](ui/README.md).
+
+Первый запуск лучше проверять в отдельном окружении. Новые функции требуют образов
+из соответствующего коммита; опубликованный тег `0.2.0` не заменяет сборку кандидата.
 
 ## Documentation
 
@@ -268,7 +277,7 @@ kubectl logs -f -n incidentgpt deploy/ai-worker              # got incident / ra
 
 ---
 
-## Корреляция: как связываются алерты
+## Корреляция: базовый режим
 
 Связывание — **грубое и детерминированное**: алерты одного `namespace`, пришедшие в
 окно `CORR_SETTLE`, считаются одним инцидентом.
@@ -279,11 +288,11 @@ kubectl logs -f -n incidentgpt deploy/ai-worker              # got incident / ra
 4. Таймер сработал → вся группа уходит пачкой в ai-worker → **один вызов LLM**.
 5. **Корень** внутри группы определяет уже модель (не связывание).
 
-**Чего тут НЕТ:** графа зависимостей. «Связаны» = один namespace + окно. Может ложно
+В базовом режиме граф зависимостей не используется: «связаны» = один namespace + окно. Может ложно
 склеить несвязанное; не ловит кросс-namespace каскады. Зато дёшево и работает для
 каскадов внутри namespace (упала БД → сервисы того же ns посыпались).
 
-Весь модуль корреляции — `enricher/correlation.go` (~200 строк, 6 функций).
+Базовый путь реализован в `enricher/correlation.go`. Опциональная durable-корреляция и явные зависимости описаны в [руководстве по зависимостям](docs/roadmap/dependency-correlation.md); они включаются отдельно.
 
 ---
 
@@ -339,3 +348,31 @@ MIT (см. `LICENSE`).
 ## Recent deployment changes (optional)
 
 Incidents can display bounded, cluster-aware deployment metadata from a Kubernetes collector and an authenticated normalized Argo CD/CI webhook. The feature is disabled by default. It shows temporal correlation, coverage gaps and unknown historical data; it does not prove causation. See [configuration, API, retention and rollback](docs/roadmap/change-timeline.md), the [Argo CD fixture](docs/fixtures/argocd-change.json), and the [notification example](docs/fixtures/argocd-notifications.yaml).
+
+## Evidence, durable jobs and investigation workflows
+
+The legacy Markdown/Telegram path remains the default. Optional features add real
+cluster-aware change timelines, immutable evidence-backed analysis, durable leased
+Redis delivery, human-confirmed resolutions, bounded local runbooks, typed read-only
+diagnostics, explicit dependency correlation, audited alert moves/splits, editable
+postmortem/handoff drafts and separate lifecycle metrics. No autonomous remediation
+or third-party report distribution is implemented. A configuration form alone does
+not collect data; collectors and configured integrations must actually return observations.
+
+Read the operational guides in order:
+
+1. [Changes, coverage and normalized Argo CD webhook](docs/roadmap/change-timeline.md).
+2. [Evidence, queue leases/retries and durability limits](docs/roadmap/evidence-and-delivery.md).
+3. [Confirmed memory and bounded Markdown runbooks](docs/roadmap/confirmed-memory.md).
+4. [Read-only diagnostics and cancellation](docs/roadmap/guided-diagnostics.md).
+5. [Typed dependencies and manual composition](docs/roadmap/dependency-correlation.md).
+6. [Reports, lifecycle definitions and offline regression](docs/roadmap/postmortem-and-handoff.md).
+
+New external collectors and costly workflows are disabled by default. Set matching
+backend Basic admin credentials and explicit service tokens via Secrets, configure
+fail-closed sanitizer clients, persist/back up Redis, then enable compatible producers.
+Missing source/collection/recovery data remains unknown; model confidence and
+temporal correlation do not establish cause. Lifecycle analytics do not estimate
+MTTR reduction or saved hours. See [architecture](docs/architecture.md),
+[security](docs/security.md), [web workflows](docs/web-ui.md) and the
+[описания подготовленных изменений](pr-descriptions/PR-06-postmortem-and-handoff.md).

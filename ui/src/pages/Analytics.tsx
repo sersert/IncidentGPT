@@ -1,3 +1,4 @@
+import { useTheme } from '@/components/ThemeProvider'
 import { useState } from 'react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip,
@@ -79,30 +80,21 @@ function TrendChart({
 }
 
 export function Analytics() {
+  useTheme()
   const [period, setPeriod] = useState('30d')
-  const { data: summary, isLoading } = useAnalyticsSummary(period)
+  const { data: summary, isLoading, isError } = useAnalyticsSummary(period)
   const { data: mttr } = useMTTRTrend(period)
   const { data: quality } = useAnalyticsQuality(period)
   const { data: topSources = [] } = useTopSources(period)
 
-  // Только операционные показатели. «MTTR до/после» и «сэкономлено 47 часов» —
-  // это слайд для руководства, а не то, по чему инженер принимает решения.
-  const kpis = summary
-    ? [
-        { label: 'Алертов пришло', value: `${summary.noise_before}`, hint: 'за период' },
-        { label: 'Стало инцидентов', value: `${summary.noise_after}`, hint: `склеено ${summary.noise_reduction_pct}%` },
-        {
-          label: 'Среднее время до разбора',
-          value: quality ? `${quality.avg_response_time_sec} с` : '—',
-          hint: 'от алерта до ответа модели',
-        },
-        {
-          label: 'Среднее время до закрытия',
-          value: summary.mttr_after_min > 0 ? `${summary.mttr_after_min} мин` : '—',
-          hint: 'от алерта до resolved',
-        },
-      ]
-    : []
+  const metricValue = (value: number | null | undefined, divisor = 60) => value == null ? 'неизвестно' : `${Math.round(value / divisor)} ${divisor === 60 ? 'мин' : 'с'}`
+  const kpis = summary ? [
+    {label: 'Инцидентов в выборке', value: `${summary.noise_after}`, hint: summary.bounded ? 'выборка ограничена 1000' : 'за выбранный период'},
+    {label: 'Обработка AI', value: metricValue(summary.analysis?.mean_seconds, 1), hint: `версий: ${summary.analysis?.samples ?? 0}; отсутствует: ${summary.analysis?.missing ?? 0}`},
+    {label: 'Проверенное восстановление', value: metricValue(summary.verified_recovery?.mean_seconds), hint: `подтверждений: ${summary.verified_recovery?.samples ?? 0}; отсутствует: ${summary.verified_recovery?.missing ?? 0}`},
+    {label: 'Административное закрытие', value: metricValue(summary.administrative_closure?.mean_seconds), hint: `событий: ${summary.administrative_closure?.samples ?? 0}; от получения алерта`},
+    {label: 'Принятие в работу', value: metricValue(summary.acknowledgement?.mean_seconds), hint: `событий: ${summary.acknowledgement?.samples ?? 0}; от получения алерта`},
+  ] : []
 
   return (
     <div>
@@ -118,7 +110,7 @@ export function Analytics() {
               onClick={() => setPeriod(p.id)}
               className={`rounded-full border px-[11px] py-[5px] text-xs transition-colors ${
                 period === p.id
-                  ? 'border-accent/30 bg-accent/12 text-[#B9B9FF]'
+                  ? 'border-accent/30 bg-accent/12 text-accent'
                   : 'border-border-default bg-surface-secondary text-text-secondary hover:text-text-primary'
               }`}
             >
@@ -128,7 +120,7 @@ export function Analytics() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? <p role="alert">Аналитика недоступна или доступ запрещён.</p> : isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[104px] rounded-[10px]" />)}
         </div>
@@ -152,7 +144,7 @@ export function Analytics() {
         <div className="mt-3.5 grid items-start gap-3.5 lg:grid-cols-2">
           <TrendChart
             title="Время до разбора"
-            hint="от появления инцидента до ответа модели"
+            hint="от начала до завершения обработки AI"
             data={mttr.data}
             dataKey="analysis_sec"
             unit=" с"
@@ -160,7 +152,7 @@ export function Analytics() {
           />
           <TrendChart
             title="Время до закрытия"
-            hint="от появления инцидента до статуса resolved"
+            hint="от получения алерта до административного закрытия"
             data={mttr.data}
             dataKey="close_min"
             unit=" мин"
@@ -193,9 +185,9 @@ export function Analytics() {
 
         {quality && (
           <Card title="Качество анализа">
-            {quality.total_analyses < 10 ? (
+            {(quality.feedback_samples ?? 0) < 10 ? (
               <p className="py-6 text-center text-[13px] text-text-muted">
-                Пока мало оценок — нужно хотя бы 10, сейчас {quality.total_analyses}
+                Пока мало оценок — нужно хотя бы 10, сейчас {quality.feedback_samples ?? 0}
               </p>
             ) : (
               <>
@@ -206,15 +198,15 @@ export function Analytics() {
                     { v: quality.edited_pct, l: 'правили', c: 'text-severity-warning' },
                   ].map((x) => (
                     <div key={x.l}>
-                      <p className={`tnum text-xl font-semibold ${x.c}`}>{x.v}%</p>
+                      <p className={`tnum text-xl font-semibold ${x.c}`}>{x.v == null ? 'неизвестно' : `${x.v}%`}</p>
                       <p className="mt-0.5 text-[11px] text-text-muted">{x.l}</p>
                     </div>
                   ))}
                 </div>
                 <dl className="mt-4 space-y-2 border-t border-border-soft pt-3 text-xs">
                   {[
-                    ['Средняя уверенность', `${quality.avg_confidence}%`],
-                    ['Время до анализа', `${quality.avg_response_time_sec} с`],
+                    ['Средняя уверенность', quality.avg_confidence == null ? 'неизвестно' : `${quality.avg_confidence}%`],
+                    ['Время до анализа', quality.avg_response_time_sec == null ? 'неизвестно' : `${quality.avg_response_time_sec} с`],
                     ['Всего разборов', `${quality.total_analyses}`],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between">

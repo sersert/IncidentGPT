@@ -52,15 +52,18 @@ type AnalysisVersion struct {
 	Notification      string         `json:"notification_status,omitempty"`
 }
 type AnalysisInput struct {
-	IngestKey   string     `json:"ingest_key,omitempty"`
-	Version     int        `json:"schema_version"`
-	IncidentID  string     `json:"incident_id"`
-	AnalysisID  string     `json:"analysis_id"`
-	ClusterID   string     `json:"cluster_id"`
-	Evidence    []Evidence `json:"evidence"`
-	PreviousID  string     `json:"previous_analysis_id,omitempty"`
-	Composition string     `json:"composition_hash"`
-	Context     []string   `json:"confirmed_context,omitempty"`
+	Report      *ReportSource        `json:"report_source,omitempty"`
+	JobKind     string               `json:"job_kind,omitempty"`
+	Operation   *DiagnosticOperation `json:"operation,omitempty"`
+	IngestKey   string               `json:"ingest_key,omitempty"`
+	Version     int                  `json:"schema_version"`
+	IncidentID  string               `json:"incident_id"`
+	AnalysisID  string               `json:"analysis_id"`
+	ClusterID   string               `json:"cluster_id"`
+	Evidence    []Evidence           `json:"evidence"`
+	PreviousID  string               `json:"previous_analysis_id,omitempty"`
+	Composition string               `json:"composition_hash"`
+	Context     []string             `json:"confirmed_context,omitempty"`
 }
 type DurableJob struct {
 	Version    int        `json:"schema_version"`
@@ -76,6 +79,9 @@ type DurableJob struct {
 }
 
 func validateAnalysis(a AnalysisVersion, input AnalysisInput) error {
+	if a.StartedAt.IsZero() || a.CompletedAt.IsZero() || a.CompletedAt.Before(a.StartedAt) {
+		return fmt.Errorf("invalid analysis timestamps")
+	}
 	if a.Version != 1 || a.IncidentID != input.IncidentID || a.ID != input.AnalysisID || a.Status != "complete" || len(a.Summary) == 0 || len(a.Summary) > 4000 || len(a.Hypotheses) > 8 || len(a.Missing) > 20 || len(a.NextChecks) > 20 {
 		return fmt.Errorf("invalid analysis contract")
 	}
@@ -122,3 +128,54 @@ func validateAnalysis(a AnalysisVersion, input AnalysisInput) error {
 }
 
 func constantToken(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
+
+type DiagnosticScope struct {
+	ClusterID string    `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+	Pod       string    `json:"pod"`
+	Node      string    `json:"node"`
+	Workload  string    `json:"workload"`
+	From      time.Time `json:"from"`
+	To        time.Time `json:"to"`
+}
+type DiagnosticOperation struct {
+	ID          string          `json:"operation_id"`
+	IncidentID  string          `json:"incident_id"`
+	Actor       string          `json:"actor"`
+	Action      string          `json:"action"`
+	Question    string          `json:"question"`
+	Scope       DiagnosticScope `json:"scope"`
+	Checks      []string        `json:"checks"`
+	Status      string          `json:"status"`
+	CreatedAt   time.Time       `json:"created_at"`
+	CollectedAt *time.Time      `json:"collected_at,omitempty"`
+	EvidenceIDs []string        `json:"evidence_ids"`
+}
+type DiagnosticRequest struct {
+	Version     int             `json:"schema_version"`
+	IncidentID  string          `json:"incident_id"`
+	OperationID string          `json:"operation_id"`
+	Scope       DiagnosticScope `json:"scope"`
+	Checks      []string        `json:"checks"`
+}
+type DiagnosticResult struct {
+	Evidence    []Evidence `json:"evidence"`
+	Status      string     `json:"status"`
+	CollectedAt time.Time  `json:"collected_at"`
+}
+
+type ReportSource struct {
+	Version            int       `json:"schema_version"`
+	ReportID           string    `json:"report_id"`
+	Kind               string    `json:"kind"`
+	IncidentID         string    `json:"incident_id"`
+	Composition        string    `json:"composition_hash"`
+	CapturedAt         time.Time `json:"captured_at"`
+	Actor              string    `json:"actor"`
+	Markdown           string    `json:"source_markdown"`
+	AnalysisID         string    `json:"analysis_id,omitempty"`
+	EvidenceIDs        []string  `json:"evidence_ids,omitempty"`
+	ChangeIDs          []string  `json:"change_event_ids,omitempty"`
+	ResolutionRevision int       `json:"resolution_revision"`
+	LifecycleRevision  int       `json:"lifecycle_revision"`
+}

@@ -783,6 +783,7 @@ export const mockLLMConfig: LLMConfig = {
 }
 
 export const mockPostMortem: PostMortem = {
+ report_id: "mock-report", revision: 1, review_status: "draft",
   markdown: `# Post Mortem: INC-2026-0139
 
 ## Incident Summary

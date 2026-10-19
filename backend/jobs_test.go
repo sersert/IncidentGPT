@@ -14,7 +14,7 @@ import (
 
 func TestAnalysisRejectsForeignCitations(t *testing.T) {
 	input := AnalysisInput{IncidentID: "INC-1", AnalysisID: "A-1", Evidence: []Evidence{{ID: "E-1", IncidentID: "INC-1"}}}
-	a := AnalysisVersion{Version: 1, ID: "A-1", IncidentID: "INC-1", EvidenceIDs: []string{"E-1"}, Status: "complete", Summary: "Pod termination is a hypothesis", Hypotheses: []Hypothesis{{Text: "OOM", Supporting: []string{"E-foreign"}}}}
+	a := AnalysisVersion{StartedAt: time.Now().UTC().Add(-time.Second), CompletedAt: time.Now().UTC(), Version: 1, ID: "A-1", IncidentID: "INC-1", EvidenceIDs: []string{"E-1"}, Status: "complete", Summary: "Pod termination is a hypothesis", Hypotheses: []Hypothesis{{Text: "OOM", Supporting: []string{"E-foreign"}}}}
 	if validateAnalysis(a, input) == nil {
 		t.Fatal("foreign citation accepted")
 	}

@@ -77,15 +77,16 @@ type MetricStats struct {
 
 // EnrichedAlert — структура, для backend.
 type EnrichedAlert struct {
-	Source       string            `json:"source"`
-	Status       string            `json:"status"`
-	Labels       map[string]string `json:"labels"`
-	Annotations  map[string]string `json:"annotations"`
-	StartsAt     time.Time         `json:"starts_at"`
-	EndsAt       time.Time         `json:"ends_at"`
-	Severity     string            `json:"severity,omitempty"`
-	Fingerprint  string            `json:"fingerprint,omitempty"`
-	GeneratorURL string            `json:"generator_url,omitempty"`
+	CorrelationReason string            `json:"correlation_reason,omitempty"`
+	Source            string            `json:"source"`
+	Status            string            `json:"status"`
+	Labels            map[string]string `json:"labels"`
+	Annotations       map[string]string `json:"annotations"`
+	StartsAt          time.Time         `json:"starts_at"`
+	EndsAt            time.Time         `json:"ends_at"`
+	Severity          string            `json:"severity,omitempty"`
+	Fingerprint       string            `json:"fingerprint,omitempty"`
+	GeneratorURL      string            `json:"generator_url,omitempty"`
 
 	// Обогащение Prometheus (ключи: primary_*, node_*, svc_*, cluster_*, ext_*).
 	PromSample map[string]string `json:"prom_sample,omitempty"`
@@ -458,7 +459,7 @@ func main() {
 	}
 
 	// Kubernetes client (optional — graceful degradation if not in cluster)
-	if appCfg.EnableK8sContext || os.Getenv("CHANGE_COLLECTOR_ENABLED") == "true" {
+	if appCfg.EnableK8sContext || os.Getenv("CHANGE_COLLECTOR_ENABLED") == "true" || os.Getenv("GUIDED_DIAGNOSTICS_ENABLED") == "true" {
 		if err := initK8sClient(); err != nil {
 			log.Printf("WARN: k8s client init failed: %v (k8s enrichment disabled)", err)
 		} else {
@@ -483,6 +484,7 @@ func main() {
 	})
 	mux.HandleFunc("/readyz", readyzHandler)
 	mux.HandleFunc("/status", statusHandler)
+	mux.HandleFunc("POST /v1/diagnostics", diagnosticsHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
 	mux.HandleFunc("/alert", alertHandler)
 
@@ -662,6 +664,7 @@ func enrichAlert(ctx context.Context, a AMAlert) EnrichedAlert {
 	// Kubernetes API enrichment (pod status, events, node conditions, namespace health)
 	if appCfg.EnableK8sContext {
 		runK8sEnrichment(ctx, &e, a)
+		observeTopology(ctx, e)
 	}
 
 	// Логи вокруг алерта — последний слой обогащения. Включается только если

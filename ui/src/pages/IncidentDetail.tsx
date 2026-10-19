@@ -1,7 +1,12 @@
+import { IncidentReports } from '@/components/IncidentReports'
+import { IncidentLifecycle } from '@/components/IncidentLifecycle'
+import { DependencyContext } from '@/components/DependencyContext'
 import { useEffect, useState } from 'react'
+import { GuidedDiagnostics } from '@/components/GuidedDiagnostics'
+import { IncidentMemory } from '@/components/IncidentMemory'
 import { AnalysisHistory } from '@/components/AnalysisHistory'
 import { RecentChanges } from '@/components/RecentChanges'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, Bot, Copy, Check, ThumbsUp, ThumbsDown, ChevronDown, ChevronRight,
   Rocket, Zap, Activity, FileText, Boxes, AlertCircle, Layers,
@@ -363,18 +368,27 @@ export function IncidentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [tab, setTab] = useState('alerts')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const views = [
+    { id: 'overview', label: 'Обзор и анализ' },
+    { id: 'investigate', label: 'Расследование' },
+    { id: 'knowledge', label: 'Решения и runbooks' },
+    { id: 'reports', label: 'Отчёты и передача' },
+  ]
+  const view = views.some(item => item.id === searchParams.get('view')) ? searchParams.get('view')! : 'overview'
+  const changeView = (next: string) => setSearchParams(previous => { const params = new URLSearchParams(previous); if (next === 'overview') params.delete('view'); else params.set('view', next); return params })
   const { data: incident, isLoading, isError } = useIncident(id)
   const [elapsed, setElapsed] = useState(0)
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignee, setAssignee] = useState('')
   const update = useUpdateIncident(id ?? '')
   // Логи тянем только когда вкладка открыта.
-  const logsQuery = useIncidentLogs(id, tab === 'logs')
+  const logsQuery = useIncidentLogs(id, view === 'overview' && tab === 'logs')
   const logs = logsQuery.data?.data ?? []
 
   // Для активного инцидента таймер идёт вживую — видно, сколько уже горит.
   useEffect(() => {
-    if (!incident || incident.status !== 'active') return
+    if (!incident || !['active', 'acknowledged'].includes(incident.status)) return
     const tick = () => setElapsed(Math.floor((Date.now() - new Date(incident.created_at).getTime()) / 1000))
     tick()
     const t = setInterval(tick, 1000)
@@ -385,7 +399,7 @@ export function IncidentDetail() {
     return (
       <div>
         <Skeleton className="h-5 w-40" />
-        <Skeleton className="mt-3 h-7 w-96" />
+        <Skeleton className="mt-3 h-7 w-full max-w-96" />
         <div className="mt-5 grid gap-3.5 lg:grid-cols-2">
           <Skeleton className="h-80 rounded-[10px]" />
           <Skeleton className="h-80 rounded-[10px]" />
@@ -407,7 +421,7 @@ export function IncidentDetail() {
   }
 
   const { analysis, context } = incident
-  const duration = incident.duration_sec ?? elapsed
+  const duration = incident.duration_sec ?? (['active', 'acknowledged'].includes(incident.status) ? elapsed : null)
 
   return (
     <div>
@@ -423,10 +437,10 @@ export function IncidentDetail() {
         <SeverityBadge severity={incident.severity} />
         <StatusBadge status={incident.status} />
         <span className="tnum rounded-md bg-surface-tertiary px-2 py-0.5 text-[11px] text-text-secondary">
-          {formatDuration(duration)}
+          {duration !== null ? formatDuration(duration) : 'длительность неизвестна'}
         </span>
         {incident.alert_count > 1 && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-accent/12 px-2 py-0.5 text-[11px] font-medium text-[#B9B9FF]">
+          <span className="inline-flex items-center gap-1 rounded-md bg-accent/12 px-2 py-0.5 text-[11px] font-medium text-accent">
             <Layers size={11} />
             {countOf(incident.alert_count, ['связанный алерт', 'связанных алерта', 'связанных алертов'])}
           </span>
@@ -482,10 +496,15 @@ export function IncidentDetail() {
             </Button>
           )}
         </div>
-        <h1 className="basis-full text-[21px] font-semibold tracking-[-0.025em]">{incident.title}</h1>
+        <h1 className="basis-full break-words text-[23px] leading-snug font-semibold tracking-[-0.025em] sm:text-[27px]">{incident.title}</h1>
       </div>
 
-      <div className="grid items-start gap-3.5 lg:grid-cols-2">
+      {update.isError && <p role="alert" className="mb-4 rounded-lg border border-severity-critical/30 bg-severity-critical/5 p-4 text-sm">Изменения не сохранены. {update.error.message}</p>}
+      <div className="mb-6">
+        <Tabs idPrefix="incident-workspace" panelIdPrefix="incident-panel" label="Рабочие разделы инцидента" tabs={views} active={view} onChange={changeView} />
+      </div>
+      <section id="incident-panel-overview" role="tabpanel" aria-labelledby="incident-workspace-overview" hidden={view !== 'overview'} tabIndex={0}>
+      <div className="grid items-start gap-5 xl:grid-cols-2">
         <Card
           title="Состав инцидента"
           action={
@@ -525,12 +544,12 @@ export function IncidentDetail() {
         >
           {!analysis ? (
             <div className="py-2">
-              <p className="mb-3 text-[13px] text-text-secondary">Модель разбирает инцидент, обычно это 10–30 секунд.</p>
+              <p className="mb-3 text-[13px] text-text-secondary">Анализ пока недоступен. Проверьте состояние обработки и доступность источников.</p>
               <SkeletonText lines={4} />
             </div>
           ) : (
             <>
-              <p className="mb-2 text-xs font-semibold text-text-secondary">Первопричина</p>
+              <p className="mb-2 text-xs font-semibold text-text-secondary">Гипотеза о причине</p>
               <div className="prose-sm text-[13.5px] leading-relaxed [&_a]:text-accent [&_code]:font-mono">
                 <ReactMarkdown>{analysis.root_cause}</ReactMarkdown>
               </div>
@@ -604,7 +623,7 @@ export function IncidentDetail() {
                     <Link
                       key={sim.id}
                       to={`/incidents/${sim.id}`}
-                      className="mb-2 block rounded-[9px] bg-surface-tertiary p-3 transition-colors hover:bg-[#222634]"
+                      className="mb-2 block rounded-[9px] bg-surface-tertiary p-3 transition-colors hover:bg-border-soft"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-[12.5px] font-semibold">{sim.id}</span>
@@ -625,7 +644,22 @@ export function IncidentDetail() {
       </div>
 
       <AnalysisHistory key={`analysis-${incident.id}`} incidentId={incident.id} />
-      <RecentChanges key={incident.id} incidentId={incident.id} />
+      <IncidentLifecycle key={`lifecycle-${incident.id}`} incidentId={incident.id} />
+      </section>
+      <section id="incident-panel-investigate" role="tabpanel" aria-labelledby="incident-workspace-investigate" hidden={view !== 'investigate'} tabIndex={0}>
+        <p className="mb-4 text-sm leading-relaxed text-text-secondary">Сопоставьте изменения с симптомами, соберите недостающие данные и проверьте состав группы. Проверки читают только разрешённые ресурсы инцидента.</p>
+        <RecentChanges key={incident.id} incidentId={incident.id} />
+        <GuidedDiagnostics key={`diagnostics-${incident.id}`} incidentId={incident.id} />
+        <DependencyContext key={`dependencies-${incident.id}`} incidentId={incident.id} alerts={incident.alerts || []} />
+      </section>
+      <section id="incident-panel-knowledge" role="tabpanel" aria-labelledby="incident-workspace-knowledge" hidden={view !== 'knowledge'} tabIndex={0}>
+        <p className="mb-4 text-sm leading-relaxed text-text-secondary">Сверьте версии и окружение перед применением прошлого решения. Запишите причину только после проверки.</p>
+        <IncidentMemory key={`memory-${incident.id}`} incidentId={incident.id} />
+      </section>
+      <section id="incident-panel-reports" role="tabpanel" aria-labelledby="incident-workspace-reports" hidden={view !== 'reports'} tabIndex={0}>
+        <p className="mb-4 text-sm leading-relaxed text-text-secondary">Подготовьте постмортем или передачу смены, проверьте источники и дополните черновик. Генерация сохраняет предыдущие версии.</p>
+        <IncidentReports key={`reports-${incident.id}`} incidentId={incident.id} />
+      </section>
 
       <Modal
         open={assignOpen}
@@ -635,9 +669,9 @@ export function IncidentDetail() {
           <>
             <Button
               size="sm"
+              disabled={update.isPending}
               onClick={() => {
-                update.mutate({ assignee: assignee.trim() || null })
-                setAssignOpen(false)
+                update.mutate({ assignee: assignee.trim() || null }, { onSuccess: () => setAssignOpen(false) })
               }}
             >
               Сохранить
@@ -648,6 +682,7 @@ export function IncidentDetail() {
           </>
         }
       >
+        {update.isError && <p role="alert" className="mb-3 text-xs text-severity-critical">Назначение не сохранено. {update.error.message}</p>}
         <Input
           label="Кто занимается"
           value={assignee}
@@ -657,6 +692,7 @@ export function IncidentDetail() {
         <p className="mt-2 text-[11.5px] text-text-muted">Пустое поле снимет назначение.</p>
       </Modal>
 
+      <section aria-label="История и контекст" hidden={view !== 'overview'}>
       {incident.history && incident.history.length > 0 && (
         <Card className="mt-3.5" title="Что делали с инцидентом">
           <div className="space-y-1.5">
@@ -696,6 +732,7 @@ export function IncidentDetail() {
           ))}
         </div>
       )}
+      </section>
     </div>
   )
 }

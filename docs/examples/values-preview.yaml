@@ -1,0 +1,33 @@
+# Isolated namespace: incidentgpt. Build images from the candidate commit first.
+# Replace registry/tag and credentials before use; never reuse production Redis.
+incidentgpt-enricher:
+  image:
+    repository: registry.example.com/incidentgpt-enricher
+    tag: REPLACE_WITH_CANDIDATE_TAG
+  env:
+    clusterName: incidentgpt-preview
+    environment: preview
+    prometheusUrl: http://prometheus.monitoring.svc:9090
+  changes:
+    clusterId: incidentgpt-preview
+ai-worker:
+  image:
+    repository: registry.example.com/incidentgpt-ai-worker
+    tag: REPLACE_WITH_CANDIDATE_TAG
+incidentgpt-sanitizer:
+  image:
+    repository: registry.example.com/incidentgpt-sanitizer
+    tag: REPLACE_WITH_CANDIDATE_TAG
+incidentgpt-backend:
+  image:
+    repository: registry.example.com/incidentgpt-backend
+    tag: REPLACE_WITH_CANDIDATE_TAG
+incidentgpt-ui:
+  image:
+    repository: registry.example.com/incidentgpt-ui
+    tag: REPLACE_WITH_CANDIDATE_TAG
+  ingress:
+    enabled: false
+  auth:
+    username: admin
+    password: REPLACE_WITH_PREVIEW_PASSWORD

@@ -1,48 +1,38 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-/* Дизайн-токены IncidentGPT. Тёмная тема без переключателя.
-   Severity — статус-шкала: цвет всегда идёт вместе с текстовой меткой (P1/P2/…),
-   никогда сам по себе. Палитра проверена на дейтеранопию и контраст к фону. */
+/* Shared surfaces, typography and semantic colors for the operator interface. */
 @theme {
-  /* поверхности: фон страницы → карточки → hover/вложенные блоки */
-  --color-surface-primary: #0C0D11;
-  --color-surface-secondary: #141620;
-  --color-surface-tertiary: #1B1E2A;
-  --color-border-default: #242838;
-  --color-border-soft: #1D2130;
-
-  /* текст: три уровня */
-  --color-text-primary: #EDEEF3;
-  --color-text-secondary: #9AA0B4;
-  --color-text-muted: #666C82;
-
-  /* акцент — только интерактив (ссылки, активный пункт, primary-кнопка).
-     Намеренно отделён от severity, чтобы «важно» и «кликабельно» не путались. */
-  --color-accent: #7C7CFF;
-  --color-accent-hover: #8F8FFF;
-
-  /* severity — те же метки, что в PrometheusRule: critical / warning / info */
-  --color-severity-critical: #FF5F52;
-  --color-severity-warning: #F5A623;
-  --color-severity-info: #4C9AFF;
-  --color-severity-unknown: #59636F;
-
-  /* статус инцидента */
-  --color-status-active: #FF5F52;
-  --color-status-resolved: #3FB950;
-  --color-status-muted: #59636F;
-  --color-status-acknowledged: #F5A623;
-
-  --radius-card: 10px;
-
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --color-surface-primary: #f7f8fa;
+  --color-surface-secondary: #ffffff;
+  --color-surface-tertiary: #eef1f5;
+  --color-border-default: #dde2e9;
+  --color-border-soft: #e9ecf1;
+  --color-text-primary: #202838;
+  --color-text-secondary: #4f5c70;
+  --color-text-muted: #667388;
+  --color-accent: #3456c5;
+  --color-accent-hover: #2845a8;
+  --color-text-on-accent: #ffffff;
+  --color-severity-critical: #b92f35;
+  --color-severity-warning: #8c5b13;
+  --color-severity-info: #2c5db2;
+  --color-severity-unknown: #626d7e;
+  --color-status-active: #b92f35;
+  --color-status-resolved: #24734f;
+  --color-status-muted: #626d7e;
+  --color-status-acknowledged: #8c5b13;
+  --color-selection: #dce4ff;
+  --color-scrollbar: #c7ced9;
+  --shadow-chart-tooltip: 0 4px 16px #20283812;
+  --radius-card: 8px;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
+  scroll-padding-top: 90px;
 }
-
 body {
   margin: 0;
   background: var(--color-surface-primary);
@@ -52,35 +42,156 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-
-/* Цифры в колонках и таймерах не должны «прыгать» при обновлении. */
 .tnum {
   font-variant-numeric: tabular-nums;
 }
-
 :focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
-
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+::selection {
+  background: var(--color-selection);
+  color: var(--color-text-primary);
+}
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  transform: translateY(-160%);
+  border-radius: 6px;
+  padding: 10px 16px;
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+.page-title {
+  font-size: clamp(25px, 3vw, 30px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+.page-description {
+  margin-top: 8px;
+  max-width: 64ch;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.metric-cell {
+  padding: 24px;
+  min-width: 0;
+  border-right: 1px solid var(--color-border-soft);
+}
+.metric-cell:nth-child(2n) {
+  border-right: 0;
+}
+.metric-cell:nth-child(-n + 2) {
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.guide-prose p + p {
+  margin-top: 14px;
+}
+.guide-prose li {
+  margin-top: 10px;
+}
+.guide-prose code {
+  border-radius: 4px;
+  padding: 2px 5px;
+  background: var(--color-surface-tertiary);
+  font-size: 0.9em;
+}
+.guide-prose > section + section {
+  padding-top: 32px;
+  border-top: 1px solid var(--color-border-soft);
+}
+@media (min-width: 1024px) {
+  .metric-cell:nth-child(n) {
+    border-right: 1px solid var(--color-border-soft);
+    border-bottom: 0;
+  }
+  .metric-cell:last-child {
+    border-right: 0;
+  }
+}
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  .metric-cell {
+    padding: 18px 16px;
+  }
+}
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
-
 .animate-pulse-dot {
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse-dot { animation: none; }
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    transition-duration: .01ms !important;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar);
+  border-radius: 4px;
+}
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+/* Keep the same visual hierarchy and restrained accents in both modes. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-surface-primary: #15181e;
+  --color-surface-secondary: #1c2027;
+  --color-surface-tertiary: #282e38;
+  --color-border-default: #3b4350;
+  --color-border-soft: #303742;
+  --color-text-primary: #e8ebf1;
+  --color-text-secondary: #bec7d5;
+  --color-text-muted: #a1aec1;
+  --color-accent: #a9bdff;
+  --color-accent-hover: #c4d1ff;
+  --color-text-on-accent: #15181e;
+  --color-severity-critical: #f49ba0;
+  --color-severity-warning: #e4bc79;
+  --color-severity-info: #96baff;
+  --color-severity-unknown: #aab5c7;
+  --color-status-active: #f49ba0;
+  --color-status-resolved: #86c6a2;
+  --color-status-muted: #aab5c7;
+  --color-status-acknowledged: #e4bc79;
+  --color-selection: #364768;
+  --color-scrollbar: #525e70;
+  --shadow-chart-tooltip: 0 4px 16px #00000040;
+}

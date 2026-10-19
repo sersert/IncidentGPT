@@ -1,8 +1,11 @@
 # IncidentGPT Architecture
 
-IncidentGPT consists of two Go services:
+IncidentGPT consists of four Go components and a React UI:
 
 - `enricher`: receives Alertmanager webhooks, enriches alerts with Prometheus and Kubernetes context, buffers related alerts in Redis and sends incidents to `ai-worker`.
+- `backend`: persists incidents/evidence/knowledge in Redis and serves authenticated investigation/report workflows.
+- `sanitizer`: HMAC-authenticated, fail-closed data boundary before configured destinations and new feature persistence.
+- `ui`: React pages served by nginx with shared-admin Basic authentication and API proxying.
 - `ai-worker`: posts raw alerts to Telegram, calls an OpenAI-compatible chat completions endpoint and publishes an engineering draft analysis.
 
 IncidentGPT does not make autonomous remediation decisions. It creates a draft for engineers; a human makes the final decision.
@@ -31,7 +34,7 @@ Default listen address: `:9099`.
 
 Default listen address: `:8080`.
 
-## Payload Flow
+## Legacy payload flow (default)
 
 1. Prometheus evaluates alert rules.
 2. Alertmanager sends a webhook to Enricher `POST /alert`.
@@ -106,3 +109,57 @@ The default endpoint is `https://openrouter.ai/api/v1/chat/completions`.
 - There is no durable queue between Enricher and AI Worker.
 - There is no full idempotency contract for webhook redelivery.
 - LLM output can be wrong and must be verified by humans.
+
+## Optional durable investigation flow
+
+```mermaid
+flowchart LR
+  AM[Alertmanager] --> E[Enricher]
+  E -->|independent raw path| W[AI worker]
+  E -->|leased Redis batch and Bearer ingest| B[Backend]
+  B <--> R[(Redis)]
+  B -->|immutable evidence and leased request| W
+  W --> L[Configured LLM]
+  W --> T[Telegram]
+  U[Authenticated UI] --> B
+  B -->|typed read-only diagnostics| E
+  B --> S[Sanitizer]
+  E --> S
+  W --> S
+```
+
+The diagram shows logical calls; external payloads cross sanitizer boundaries before
+LLM/Telegram. Durable mode replaces process-local batch deadlines with persisted
+due sets, atomic pending snapshots, leases, bounded retries and explicit acknowledgement.
+Arrivals during handoff remain in a separate pending hash. Backend schedules jobs
+with immutable input/evidence and only the requested analysis version can become
+current. Leased collectors append fresh evidence once; cancellation fences publication.
+Legacy callbacks by group are rejected when durable mode is active. Telegram remains
+best effort/at least once, not exactly once. Basic visibility does not require an LLM.
+
+Contracts and APIs are detailed in [the six guides](../README.md#evidence-durable-jobs-and-investigation-workflows).
+Key families include `igpt:change:*`, indexed change windows; `igpt:corr:*`, pending
+and delivery batches; `igpt:job:*`, due/ownership state; `igpt:evidence:*` and immutable
+analysis histories; `igpt:resolution:*`, authoritative confirmed-memory indices;
+`igpt:graph:*`, typed topology/provenance; `igpt:regroup:*`, composition audit and
+manual binding; `igpt:lifecycle:*`, distinct source/receipt/human verification events;
+and `igpt:report:*`/`igpt:reports:*`, reviewed revisions and retained snapshots.
+
+Graph ownership, placement and declared application dependencies remain separate.
+Correlation uses one fresh declared dependency at most and never infers service
+health or cause. Human moves retain old source pages and invalidate current analysis
+composition. Report jobs reuse the queue but generate deterministic cited Markdown
+from a sanitized snapshot, without an additional LLM call or notification.
+
+New reads use finite indexed candidates; some original incident/alert/volume/source
+list handlers still scan old records. New features require Redis rather than hiding
+persistence failure behind the legacy in-memory fallback. The shipped single Redis
+node is not HA; enable persistence/AOF, monitor queues/coverage, back up records and
+plan retention for non-expiring incident/job/audit histories. Multi-key Lua assumes
+one primary and is not compatible with Redis Cluster key-slot sharding.
+
+Deploy additive readers/contracts first; drain legacy groups before switching
+producers. Roll back in reverse workflow order: stop reports/diagnostics, drain
+analysis and durable correlation, disable topology/change collectors, then revert
+consumers. Preserve additive records and acknowledge documented AOF/disk loss windows.
+No historical timestamps or collector coverage are fabricated during migration.

@@ -107,7 +107,10 @@ func (s *Storage) ListIncidents() ([]*Incident, error) {
 	for _, id := range ids {
 		inc, err := s.GetIncident(id)
 		if err != nil {
-			continue // запись могла истечь или побиться — пропускаем, но не падаем
+			if err == redis.Nil {
+				continue
+			}
+			return nil, err // Failed reads must not masquerade as an empty result.
 		}
 		out = append(out, inc)
 	}

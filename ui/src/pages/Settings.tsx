@@ -333,7 +333,7 @@ export function Settings() {
               onClick={() => navigate(`/settings/${s.id}`, { replace: true })}
               className={`flex items-center gap-2.5 whitespace-nowrap rounded-[7px] px-2.5 py-2 text-[13px] transition-colors ${
                 active === s.id
-                  ? 'bg-accent/12 text-[#B9B9FF]'
+                  ? 'bg-accent/12 text-accent'
                   : 'text-text-secondary hover:bg-surface-tertiary hover:text-text-primary'
               }`}
             >
