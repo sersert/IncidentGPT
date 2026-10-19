@@ -30,6 +30,16 @@ spec:
             - containerPort: 9099
               name: http
           env:
+            - name: TOPOLOGY_OBSERVATIONS_ENABLED
+              value: {{ .Values.topology.observationsEnabled | quote }}
+            - name: DEPENDENCY_CORRELATION_ENABLED
+              value: {{ .Values.topology.correlationEnabled | quote }}
+            - name: TOPOLOGY_BACKEND_URL
+              value: {{ .Values.topology.backendUrl | quote }}
+            - name: GUIDED_DIAGNOSTICS_ENABLED
+              value: {{ .Values.diagnostics.enabled | quote }}
+            - name: DIAGNOSTIC_NAMESPACES
+              value: {{ .Values.diagnostics.namespaces | quote }}
             - name: DURABLE_CORRELATION_ENABLED
               value: {{ .Values.changes.durableCorrelation | quote }}
             {{- if .Values.changes.existingSecret }}

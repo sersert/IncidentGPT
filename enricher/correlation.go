@@ -54,6 +54,10 @@ func initRedis() error {
 
 // groupKeyFor возвращает namespace для группировки ("_nolabel" если пусто).
 func groupKeyFor(e EnrichedAlert) string {
+	if dependencyCorrelation() {
+		key, _ := dependencyDecision(e)
+		return key
+	}
 	ns := e.Labels["namespace"]
 	if ns == "" {
 		ns = "_nolabel"
@@ -72,6 +76,7 @@ func groupKeyFor(e EnrichedAlert) string {
 var errSkipResolved = fmt.Errorf("resolved alert, not buffered")
 
 func bufferAlert(e EnrichedAlert) error {
+	e.CorrelationReason = "same cluster/namespace within legacy correlation window; relationship not established"
 	if redisClient == nil {
 		return fmt.Errorf("redis not configured")
 	}

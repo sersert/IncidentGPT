@@ -9,8 +9,8 @@ import { timeAgo, formatDuration } from '@/lib/time.ts'
 import { plural } from '@/lib/plural.ts'
 
 export function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats()
-  const { data: active = [], isLoading: activeLoading } = useActiveIncidents()
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats()
+  const { data: active = [], isLoading: activeLoading, isError: activeError } = useActiveIncidents()
 
   // Самый старый активный инцидент — тот, к которому дежурному идти первым.
   const oldest = active.length
@@ -31,37 +31,38 @@ export function Dashboard() {
       <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Дашборд</h1>
       <p className="mt-0.5 mb-5 text-[13px] text-text-muted">Что происходит прямо сейчас</p>
 
+      {statsError && <p role="alert" className="mb-3 text-xs">Метрики недоступны или доступ запрещён.</p>}
       {/* Каждая карточка отвечает на вопрос дежурного, а не показывает достижение:
           что горит → к чему идти первым → жив ли AI-пайплайн → шторм или норма. */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           label="Активные инциденты"
-          value={stats?.active_incidents ?? 0}
+          value={statsError ? 'неизвестно' : stats?.active_incidents ?? 0}
           hint={
-            stats?.active_critical
+            statsError ? 'данные недоступны' : stats?.active_critical
               ? `${stats.active_critical} ${plural(stats.active_critical, 'критический', 'критических', 'критических')}`
               : 'критических нет'
           }
-          tone={stats?.active_critical ? 'bad' : 'good'}
+          tone={statsError ? 'mute' : stats?.active_critical ? 'bad' : 'good'}
           loading={statsLoading}
         />
         <KPICard
           label="Дольше всех горит"
           value={oldest ? formatDuration(oldest.ageSec) : '—'}
-          hint={oldest ? oldest.title : 'активных нет'}
+          hint={activeError ? 'данные недоступны' : oldest ? oldest.title : 'активных нет'}
           tone={oldest && oldest.ageSec > 1800 ? 'bad' : oldest ? 'warn' : 'good'}
           loading={activeLoading}
         />
         <KPICard
           label="Время до анализа"
-          value={formatDuration(stats?.avg_analysis_time_sec ?? 0)}
-          hint={stats && stats.avg_analysis_time_sec > 300 ? 'дольше нормы в 5 мин' : 'в пределах нормы'}
-          tone={stats && stats.avg_analysis_time_sec > 300 ? 'warn' : 'good'}
+          value={stats?.avg_analysis_time_sec != null ? formatDuration(stats.avg_analysis_time_sec) : 'неизвестно'}
+          hint={stats?.avg_analysis_time_sec != null ? 'от начала до завершения обработки AI' : 'нет завершённых версий с известным временем'}
+          tone={stats?.avg_analysis_time_sec != null && stats.avg_analysis_time_sec > 300 ? 'warn' : 'mute'}
           loading={statsLoading}
         />
         <KPICard
           label="Алертов за сутки"
-          value={stats?.alerts_today ?? 0}
+          value={statsError ? 'неизвестно' : stats?.alerts_today ?? 0}
           hint={surge ? 'всплеск против вчерашнего' : 'ровный поток'}
           tone={surge ? 'warn' : 'mute'}
           sparkline={spark}
@@ -78,7 +79,7 @@ export function Dashboard() {
           </Link>
         }
       >
-        {activeLoading ? (
+        {activeError ? <p role="alert">Активные инциденты недоступны. Состояние неизвестно.</p> : activeLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }, (_, i) => (
               <Skeleton key={i} className="h-11" />
