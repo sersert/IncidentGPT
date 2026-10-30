@@ -10,6 +10,12 @@ reader/sanitizer ключи, у enricher — непустой `diagnostics.names
 запятую, без wildcard и пустых элементов. При включении analysis-токен не optional.
 Список проверяется повторно во время исполнения, независимо от модели.
 
+При `DURABLE_ANALYSIS_ENABLED=true` backend требует `REDIS_ADDR` и до двух минут
+ожидает доступное хранилище до запуска HTTP и очереди. При превышении ожидания
+завершается с ошибкой для перезапуска оркестратором. Новая проба `/readyz`
+проверяет Redis и исключает неготовый backend из Service endpoints. Legacy-режим
+по-прежнему допускает работу в памяти; durable-задания в неё не переключаются.
+
 `DIAGNOSTIC_COLLECTOR_URL` по умолчанию равен
 `http://incidentgpt-enricher:9099/v1/diagnostics`: короткое имя работает в namespace
 релиза. Адрес можно переопределить через values. NetworkPolicy разрешает
