@@ -458,7 +458,7 @@ func main() {
 	}
 
 	// Kubernetes client (optional — graceful degradation if not in cluster)
-	if appCfg.EnableK8sContext || os.Getenv("CHANGE_COLLECTOR_ENABLED") == "true" {
+	if appCfg.EnableK8sContext || os.Getenv("CHANGE_COLLECTOR_ENABLED") == "true" || os.Getenv("GUIDED_DIAGNOSTICS_ENABLED") == "true" {
 		if err := initK8sClient(); err != nil {
 			log.Printf("WARN: k8s client init failed: %v (k8s enrichment disabled)", err)
 		} else {
@@ -483,6 +483,7 @@ func main() {
 	})
 	mux.HandleFunc("/readyz", readyzHandler)
 	mux.HandleFunc("/status", statusHandler)
+	mux.HandleFunc("POST /v1/diagnostics", diagnosticsHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
 	mux.HandleFunc("/alert", alertHandler)
 

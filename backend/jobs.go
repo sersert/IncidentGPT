@@ -69,6 +69,13 @@ var enqueueAnalysisScript = redis.NewScript(`
 if redis.call('EXISTS',KEYS[#KEYS]) == 1 then return -2 end
 if redis.call('EXISTS',KEYS[1]) == 1 then return 0 end
 local inc=redis.call('GET',KEYS[3]); if not inc then return -1 end
+local candidate=cjson.decode(ARGV[1])
+if candidate.job.kind=='diagnostics' then
+local activeKey='igpt:diagnostics:active:'..candidate.job.incident_id
+local active=redis.call('GET',activeKey)
+if active then local oldraw=redis.call('GET','igpt:job:'..active);if oldraw then local old=cjson.decode(oldraw);if old.job.status=='queued' or old.job.status=='running' then return -3 end end end
+redis.call('SET',activeKey,candidate.job.job_id)
+end
 local data=cjson.decode(inc); data.analysis_request_id=ARGV[3]
 redis.call('SET',KEYS[3],cjson.encode(data))
 redis.call('SET',KEYS[1],ARGV[1]); redis.call('ZADD',KEYS[2],ARGV[2],ARGV[4]);redis.call('ZADD','igpt:jobs:pending:created',ARGV[2],ARGV[4])
@@ -96,8 +103,12 @@ func incidentComposition(inc *Incident) string {
 	return digest(ids...)
 }
 func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid string) (string, error) {
+	normalizeJobInput(&input)
 	now := time.Now().UTC()
 	job := DurableJob{Version: 1, ID: jid, IncidentID: inc.ID, AnalysisID: input.AnalysisID, Kind: "analysis", Status: "queued", CreatedAt: now}
+	if input.JobKind != "" {
+		job.Kind = input.JobKind
+	}
 	envelope := jobEnvelope{Job: job, Input: input}
 	raw, _ := json.Marshal(envelope)
 	keys := []string{"igpt:job:" + jid, jobsDue, keyIncident + inc.ID, "igpt:analysis:requested:" + inc.ID, "igpt:jobs:incident:" + inc.ID}
@@ -112,6 +123,9 @@ func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid s
 	}
 	keys = append(keys, input.IngestKey)
 	n, err := enqueueAnalysisScript.Run(ctx, store.disk.rdb, keys, args...).Int()
+	if n == -3 && err == nil {
+		return "", fmt.Errorf("investigation already active")
+	}
 	if n == -2 && err == nil {
 		return store.disk.rdb.Get(ctx, input.IngestKey).Result()
 	}
@@ -121,6 +135,25 @@ func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid s
 	return jid, nil
 }
 
+// Redis Lua cjson encodes empty arrays as objects. Persist empty typed slices as
+// null so every claim, retry, cancel and completion can decode the same input.
+func normalizeJobInput(input *AnalysisInput) {
+	if len(input.Evidence) == 0 {
+		input.Evidence = nil
+	}
+	if len(input.Context) == 0 {
+		input.Context = nil
+	}
+	if op := input.Operation; op != nil {
+		if len(op.Checks) == 0 {
+			op.Checks = nil
+		}
+		if len(op.EvidenceIDs) == 0 {
+			op.EvidenceIDs = nil
+		}
+	}
+}
+
 var claimJobScript = redis.NewScript(`
 local ids=redis.call('ZRANGEBYSCORE',KEYS[1],'-inf',ARGV[1],'LIMIT',0,1)
 if #ids == 0 then return nil end
@@ -128,7 +161,7 @@ local key='igpt:job:'..ids[1];local raw=redis.call('GET',key)
 if not raw then redis.call('ZREM',KEYS[1],ids[1]);return nil end
 local e=cjson.decode(raw)
 if e.job.status == 'canceled' or e.job.status == 'complete' or e.job.status == 'failed' then redis.call('ZREM',KEYS[1],ids[1]);return nil end
-if e.job.attempts >= 4 then e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
+if e.job.attempts >= 4 then if e.job.kind=='diagnostics' and redis.call('GET','igpt:diagnostics:active:'..e.job.incident_id)==e.job.job_id then redis.call('DEL','igpt:diagnostics:active:'..e.job.incident_id) end;e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
 e.owner=ARGV[2];e.lease_until=tonumber(ARGV[3]);e.job.status='running';e.job.attempts=e.job.attempts+1; if e.job.attempts>1 then redis.call('INCR','igpt:jobs:retries') end
 raw=cjson.encode(e);redis.call('SET',key,raw);redis.call('ZADD',KEYS[1],ARGV[3],ids[1]);return raw`)
 
@@ -151,7 +184,7 @@ local raw=redis.call('GET',KEYS[1]);if not raw then return 0 end
 local e=cjson.decode(raw);if e.owner ~= ARGV[1] or e.job.status ~= 'running' or e.lease_until < tonumber(ARGV[2]) then return 0 end
 e.job.status=ARGV[3];e.job.error_code=ARGV[4]; if ARGV[3]=='failed' then redis.call('INCR','igpt:jobs:failures') end
 if ARGV[3] == 'queued' then redis.call('ZADD',KEYS[2],ARGV[5],e.job.job_id)
-else e.job.finished_at=ARGV[6];redis.call('ZREM',KEYS[2],e.job.job_id);redis.call('ZREM','igpt:jobs:pending:created',e.job.job_id) end
+else if e.job.kind=='diagnostics' and redis.call('GET','igpt:diagnostics:active:'..e.job.incident_id)==e.job.job_id then redis.call('DEL','igpt:diagnostics:active:'..e.job.incident_id) end;e.job.finished_at=ARGV[6];redis.call('ZREM',KEYS[2],e.job.job_id);redis.call('ZREM','igpt:jobs:pending:created',e.job.job_id) end
 redis.call('SET',KEYS[1],cjson.encode(e))
 if ARGV[3] == 'complete' then
 redis.call('INCR','igpt:jobs:completed');if tonumber(ARGV[8])>=0 then redis.call('INCRBYFLOAT','igpt:jobs:latency:sum',ARGV[8]);redis.call('INCR','igpt:jobs:latency:samples') end; redis.call('SET',KEYS[3],ARGV[7],'NX');redis.call('ZADD',KEYS[4],ARGV[2],e.job.analysis_id)
@@ -188,7 +221,13 @@ func finishJob(ctx context.Context, e *jobEnvelope, a *AnalysisVersion, code str
 var durableHTTP = &http.Client{Timeout: 55 * time.Second}
 
 func executeAnalysis(ctx context.Context, e *jobEnvelope) (*AnalysisVersion, error) {
-	raw, _ := json.Marshal(e.Input)
+	input := e.Input
+	if input.Operation != nil {
+		op := *input.Operation
+		op.Actor = "" // Audit identity stays in storage; it is not reasoning context.
+		input.Operation = &op
+	}
+	raw, _ := json.Marshal(input)
 	req, err := http.NewRequestWithContext(ctx, "POST", env("STRUCTURED_WORKER_URL", "http://ai-worker.incidentgpt.svc:8080/v1/analyze"), bytes.NewReader(raw))
 	if err != nil {
 		return nil, fmt.Errorf("invalid_worker_configuration")
@@ -228,22 +267,38 @@ func startAnalysisJobs() {
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
-				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 				e, err := claimJob(ctx)
 				if err == nil && e != nil {
-					a, runErr := executeAnalysis(ctx, e)
-					code := ""
-					if runErr != nil {
-						code = runErr.Error()
-						a = nil
-					}
-					_ = finishJob(ctx, e, a, code)
+					_ = runAnalysisJob(ctx, e)
 				}
 				cancel()
 			}
 		}()
 	}
 }
+
+func runAnalysisJob(ctx context.Context, e *jobEnvelope) error {
+	var a *AnalysisVersion
+	var runErr error
+	if e.Job.Kind == "diagnostics" {
+		runErr = collectDiagnosticEvidence(ctx, e)
+	}
+	if runErr == nil {
+		a, runErr = executeAnalysis(ctx, e)
+	}
+	code := ""
+	if runErr != nil {
+		code = runErr.Error()
+		a = nil
+	}
+	// The work deadline can expire; retain the lease's final five seconds for
+	// recording a retry without using that expired context. Fencing still applies.
+	finishCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return finishJob(finishCtx, e, a, code)
+}
+
 func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
 		return
@@ -296,6 +351,7 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobs := []DurableJob{}
+	operations := []DiagnosticOperation{}
 	for _, jid := range jids {
 		raw, err := store.disk.rdb.Get(ctx, "igpt:job:"+jid).Bytes()
 		if err != nil {
@@ -308,8 +364,11 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		jobs = append(jobs, e.Job)
+		if e.Input.Operation != nil {
+			operations = append(operations, *e.Input.Operation)
+		}
 	}
-	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "enabled": durableEnabled()})
+	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "enabled": durableEnabled(), "diagnostics_enabled": diagnosticsEnabled()})
 }
 func handleEvidence(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {

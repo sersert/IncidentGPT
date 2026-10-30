@@ -26,6 +26,52 @@ func testEngine(t *testing.T, cfg config.Config) *Engine {
 	return NewEngine(cfg, d, policy.NewEngine(cfg), pseudonymizer.New(cfg.HashKey))
 }
 
+func TestEvidenceHashesAreNotPhonesButCredentialsRemainMasked(t *testing.T) {
+	engine := testEngine(t, config.Config{})
+	// Real failing ID from the isolated diagnostics deployment: the decimal run
+	// inside its SHA256 digest used to be masked, invalidating evidence citations.
+	id := "evidence-00e5fbce111a80c765cc429e2cbdce93ae759179969133cdfff101d372830dff"
+	job := "job-aabbccdd1234567890123456aabbccdd"
+	phone := "+7 999 123-45-67"
+	input, _ := json.Marshal(map[string]any{
+		"evidence_id":             id,
+		"operation_id":            job,
+		"supporting_evidence_ids": []string{id},
+		"excerpt":                 phone + " " + id + " " + phone,
+		"password":                id,
+		"authorization":           "Bearer " + strings.TrimPrefix(id, "evidence-"),
+		"numeric":                 strings.Repeat("1", 32),
+	})
+	for _, destination := range []string{"llm", "webhook", "telegram"} {
+		out, summary, err := engine.SanitizePayload(destination, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := out.(map[string]any)
+		if data["evidence_id"] != id || data["operation_id"] != job || data["supporting_evidence_ids"].([]any)[0] != id {
+			t.Fatalf("%s corrupted routing/citation IDs: %v", destination, data)
+		}
+		if strings.Contains(data["excerpt"].(string), phone) || !strings.Contains(data["excerpt"].(string), id) {
+			t.Fatalf("%s lost hash or leaked adjacent phone: %v", destination, data)
+		}
+		if data["password"] == id || strings.Contains(data["authorization"].(string), strings.TrimPrefix(id, "evidence-")) || data["numeric"] == strings.Repeat("1", 32) {
+			t.Fatalf("%s weakened secret/numeric masking: %v", destination, data)
+		}
+		if summary.AppliedRules["phone"] != 3 {
+			t.Fatalf("%s must mask the two real phones and numeric string: %+v", destination, summary)
+		}
+		findings, err := engine.InspectText(destination, id)
+		if err != nil || len(findings) != 0 {
+			t.Fatalf("inspect falsely reports hash as phone: %v %v", findings, err)
+		}
+	}
+	custom := testEngine(t, config.Config{CustomPatterns: []config.CustomPattern{{Name: "id", Pattern: `evidence-[0-9a-f]{64}`, Replacement: "[CUSTOM_REDACTED]"}}})
+	text, _, err := custom.SanitizeText("llm", id)
+	if err != nil || text != "[CUSTOM_REDACTED]" {
+		t.Fatalf("hash handling bypassed configured custom rules: %s %v", text, err)
+	}
+}
+
 func TestSanitizePayloadRedactsBuiltInRules(t *testing.T) {
 	engine := testEngine(t, config.Config{RedactEmails: true, RedactPhones: true, IPMode: "partial"})
 	payload := json.RawMessage(`{
