@@ -103,6 +103,7 @@ func incidentComposition(inc *Incident) string {
 	return digest(ids...)
 }
 func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid string) (string, error) {
+	normalizeJobInput(&input)
 	now := time.Now().UTC()
 	job := DurableJob{Version: 1, ID: jid, IncidentID: inc.ID, AnalysisID: input.AnalysisID, Kind: "analysis", Status: "queued", CreatedAt: now}
 	if input.JobKind != "" {
@@ -132,6 +133,25 @@ func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid s
 		return "", fmt.Errorf("analysis scheduling unavailable")
 	}
 	return jid, nil
+}
+
+// Redis Lua cjson encodes empty arrays as objects. Persist empty typed slices as
+// null so every claim, retry, cancel and completion can decode the same input.
+func normalizeJobInput(input *AnalysisInput) {
+	if len(input.Evidence) == 0 {
+		input.Evidence = nil
+	}
+	if len(input.Context) == 0 {
+		input.Context = nil
+	}
+	if op := input.Operation; op != nil {
+		if len(op.Checks) == 0 {
+			op.Checks = nil
+		}
+		if len(op.EvidenceIDs) == 0 {
+			op.EvidenceIDs = nil
+		}
+	}
 }
 
 var claimJobScript = redis.NewScript(`
@@ -201,7 +221,13 @@ func finishJob(ctx context.Context, e *jobEnvelope, a *AnalysisVersion, code str
 var durableHTTP = &http.Client{Timeout: 55 * time.Second}
 
 func executeAnalysis(ctx context.Context, e *jobEnvelope) (*AnalysisVersion, error) {
-	raw, _ := json.Marshal(e.Input)
+	input := e.Input
+	if input.Operation != nil {
+		op := *input.Operation
+		op.Actor = "" // Audit identity stays in storage; it is not reasoning context.
+		input.Operation = &op
+	}
+	raw, _ := json.Marshal(input)
 	req, err := http.NewRequestWithContext(ctx, "POST", env("STRUCTURED_WORKER_URL", "http://ai-worker.incidentgpt.svc:8080/v1/analyze"), bytes.NewReader(raw))
 	if err != nil {
 		return nil, fmt.Errorf("invalid_worker_configuration")
@@ -244,26 +270,35 @@ func startAnalysisJobs() {
 				ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 				e, err := claimJob(ctx)
 				if err == nil && e != nil {
-					var a *AnalysisVersion
-					var runErr error
-					if e.Job.Kind == "diagnostics" {
-						runErr = collectDiagnosticEvidence(ctx, e)
-					}
-					if runErr == nil {
-						a, runErr = executeAnalysis(ctx, e)
-					}
-					code := ""
-					if runErr != nil {
-						code = runErr.Error()
-						a = nil
-					}
-					_ = finishJob(ctx, e, a, code)
+					_ = runAnalysisJob(ctx, e)
 				}
 				cancel()
 			}
 		}()
 	}
 }
+
+func runAnalysisJob(ctx context.Context, e *jobEnvelope) error {
+	var a *AnalysisVersion
+	var runErr error
+	if e.Job.Kind == "diagnostics" {
+		runErr = collectDiagnosticEvidence(ctx, e)
+	}
+	if runErr == nil {
+		a, runErr = executeAnalysis(ctx, e)
+	}
+	code := ""
+	if runErr != nil {
+		code = runErr.Error()
+		a = nil
+	}
+	// The work deadline can expire; retain the lease's final five seconds for
+	// recording a retry without using that expired context. Fencing still applies.
+	finishCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return finishJob(finishCtx, e, a, code)
+}
+
 func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
 		return
@@ -333,7 +368,7 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 			operations = append(operations, *e.Input.Operation)
 		}
 	}
-	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "enabled": durableEnabled()})
+	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "enabled": durableEnabled(), "diagnostics_enabled": diagnosticsEnabled()})
 }
 func handleEvidence(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {

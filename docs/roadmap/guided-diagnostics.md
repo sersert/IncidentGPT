@@ -1,21 +1,80 @@
-# Guided read-only diagnostics
+# Управляемые проверки чтения
 
-Enable backend GUIDED_DIAGNOSTICS_ENABLED together with DURABLE_ANALYSIS_ENABLED, and enricher diagnostics.enabled/GUIDED_DIAGNOSTICS_ENABLED only after deploying compatible readers. Default false. Configure DIAGNOSTIC_NAMESPACES explicitly (Helm diagnostics.namespaces); collector refuses unlisted namespaces or a cluster differing from configured CLUSTER_ID. Reuse ANALYSIS_SERVICE_TOKEN and existing reader/sanitizer credentials. Backend DIAGNOSTIC_COLLECTOR_URL points at the internal enricher /v1/diagnostics endpoint. Its NetworkPolicy permits same-namespace backend pods; existing get/list Kubernetes RBAC is sufficient. No write RBAC or exec capability is added.
+Флаги backend `GUIDED_DIAGNOSTICS_ENABLED` и `DURABLE_ANALYSIS_ENABLED`, а также
+`diagnostics.enabled` у enricher по умолчанию выключены. Сначала обновите
+ai-worker и enricher, затем backend и UI. После этого настройте общий
+`ANALYSIS_SERVICE_TOKEN`, sanitizer и `TIMELINE_READ_*`, разрешённые namespace
+и включите флаги. Helm требует `changes.existingSecret`; в нём должен быть
+`analysis-service-token` (имя ключа настраивается). У backend также обязательны
+reader/sanitizer ключи, у enricher — непустой `diagnostics.namespaces` через
+запятую, без wildcard и пустых элементов. При включении analysis-токен не optional.
+Список проверяется повторно во время исполнения, независимо от модели.
 
-## Actions and resource boundaries
+`DIAGNOSTIC_COLLECTOR_URL` по умолчанию равен
+`http://incidentgpt-enricher:9099/v1/diagnostics`: короткое имя работает в namespace
+релиза. Адрес можно переопределить через values. NetworkPolicy разрешает
+одноимённый namespace и метку `diagnostics.backendAppLabel` (по умолчанию
+`incidentgpt-backend`). Kubernetes RBAC остаётся только get/list, без exec и записи.
 
-`POST /api/v1/incidents/{id}/investigations` accepts only action refresh/hypothesis/compare, question (max 500 characters), and optional change_event_id. Unknown fields/scope/tool/query/URL overrides are rejected. Reader credentials are independently verified by backend before incident access. Resource identities come from stored incident alerts/ownership, never model text. Backend selects a fixed allowlist: pod termination, pod events, Deployment rollout state, node conditions, parameterized pod restart metrics and bounded configured OpenSearch/Elasticsearch logs. A question such as “OOM or node failure?” provides reasoning context; it does not choose new tools or permission scope.
+## API и доступ
 
-Collector revalidates cluster, explicit namespace allowlist, typed DNS resource names, source time window (max 1h within last 7d) and unique allowlisted checks. Prometheus accepts only the generated namespace/pod restart expression; logs use configured source with exact namespace/pod/time filters. No client-chosen destinations, arbitrary PromQL/search, terminal commands, kubectl exec, Kubernetes writes or remediation exists. Existing integration forms are not assumed to wire through automatically: source configuration is the enricher's working environment configuration. Disabled, unauthorized, timed-out, failed and successful-empty results remain distinct.
+`POST /api/v1/incidents/{id}/investigations` принимает только `action`
+(`refresh`, `hypothesis`, `compare`), `question` (до 500 Unicode-символов) и
+необязательный `change_event_id`. Неизвестные поля, произвольные scope, tool,
+query и URL отвергаются. Вопрос влияет на объяснение, но не выбирает инструменты.
+Ресурсы берутся из сохранённого инцидента. Collector повторно проверяет cluster,
+namespace, имена ресурсов, окно до часа за последние семь дней и список проверок.
 
-Compare requires a stored change matching incident cluster/namespace/workload and a known upstream source timestamp; unknown time is rejected rather than substituting observation time. Before/after checks are two bounded windows around that source event, clamped to now. Only historical metrics/logs are compared; live Kubernetes snapshots do not fabricate past state. Live pod/node/rollout evidence records collection-point observation time, while ranged queries record their actual requested interval. Source results and excerpts have explicit limits and pass sanitizer before persistence/LLM egress.
+`GET` того же маршрута возвращает историю operations/jobs и флаг
+`diagnostics_enabled`, учитывающий оба backend-флага. Выключенная фича блокирует
+новые запросы, но не скрывает историю и не мешает отменить активную операцию
+через `POST /api/v1/incidents/{id}/investigations/{job}/cancel`.
 
-## Jobs, cancellation and versions
+Все эти маршруты проверяют HTTP Basic независимо от nginx. `TIMELINE_READ_*`
+сейчас обозначает единую admin-учётку: она может читать, запускать и отменять
+проверки. Это не роль только для чтения. Отдельные роли потребуют согласованного
+изменения аутентификации UI и backend. Actor сохраняется для аудита, но очищается
+перед отправкой операции в ai-worker. Старый ai-worker использует json.Unmarshal
+и игнорирует неизвестные поля, однако для полной семантики операций нужен новый.
 
-Investigations reuse PR 2's leases, four-attempt retry budget, ownership fencing and immutable analysis history. Per-incident concurrency is atomically limited to one queued/running investigation in the scheduling transaction. Collector allows four concurrent requests and six calls/request, per-call 3s timeout and 25s total collector budget. Backend job deadline is 85s under its 90s lease; worker reasoning retains its 50s total budget. Comparison uses two calls with two checks each, never an autonomous loop.
+## Сбор и временные ограничения
 
-Collected evidence and operation status persist with ownership checks before reasoning. Provider retries reuse the stored collection time/results, not falsely fresh observations; a new refresh creates a new operation/analysis. Partial sources remain explicit and usable observations continue to reasoning. Previous unconfirmed analysis is versioned context, and relevant human-confirmed resolution snapshots become cited incident-owned evidence with source incident/revision and compatibility caveats. Historical actions are data, never executed.
+Фиксированные проверки читают завершение контейнеров, события pod, rollout
+Deployment, условия node, метрику перезапусков и настроенные OpenSearch/Elasticsearch
+логи. Источники настраиваются в enricher; форма интеграций UI не подменяет их.
+Успешный пустой ответ отличается от disabled, unavailable, unauthorized, failed
+и timed_out. Результаты проходят sanitizer до сохранения и повторно перед LLM;
+отказ sanitizer закрывает отправку.
 
-`GET /api/v1/incidents/{id}/investigations` returns bounded operation/job history. `POST /api/v1/incidents/{id}/investigations/{job}/cancel` verifies ownership and cancels queued/running work atomically. Cancellation fences persistence/analysis acknowledgement and retains earlier collected evidence. Already-running external read/provider requests may finish within their bounded deadline; cancellation does not promise instantaneous cross-replica transport abort. Late results cannot publish an analysis for the canceled job. Terminal completion/failure/cancellation releases the incident concurrency slot. UI shows queued/running/canceled/failed/complete jobs, partial collection, actor/question and actual collection time, with explicit error/access states.
+Compare требует сохранённого изменения того же cluster/namespace/workload
+с известным временем источника. Два окна вокруг этого времени используют только
+исторические метрики и логи; живые Kubernetes-снимки не изображают прошлое.
+У каждой evidence остаются собственные observation_start/end и collection_time;
+operation.collected_at — время завершения последнего окна, а не замена этих полей.
 
-Retention/backups follow PR 2 evidence/job/analysis records and PR 3 resolution history. No automatic deletion/backfill. Disable new investigations first, cancel/drain pending jobs and retain completed evidence before rollback; older consumers do not understand diagnostic job kinds. No external notifications or production rollout were performed for validation.
+Collector допускает четыре одновременных запроса, до шести проверок в запросе,
+3 секунды на источник и 25 секунд на весь сбор с sanitizer. Compare делает два
+запроса с двумя проверками в каждом. Backend ограничивает работу 85 секундами
+при lease 90 секунд; ai-worker — 50 секундами. Запись завершения/повтора имеет
+отдельный контекст 3 секунды, но всё равно проверяет владельца, lease и отмену.
+
+## Очередь, совместимость и откат
+
+Lua атомарно допускает одну queued/running проверку на инцидент через
+`igpt:diagnostics:active:{id}`. Новые задания имеют `job.kind=diagnostics`,
+а AnalysisInput — необязательные `job_kind` и `operation`.
+Пустые типизированные массивы перед enqueue и сохранением результатов
+нормализуются в null: Redis Lua cjson иначе перекодирует [] в {} и ломает
+последующий Go decode. Формат остальных корректных записей не меняется.
+
+Evidence сохраняются до обращения к модели. Повтор после отказа провайдера
+использует сохранённые результаты и время сбора; новый refresh создаёт новую
+операцию и версию анализа. Подтверждённые решения — цитируемые исторические
+данные с оговорками о применимости, без автоматического выполнения.
+
+Четыре попытки, lease и отмена защищают публикацию от устаревшего владельца.
+Отмена сохраняет собранные evidence; уже начатое чтение может завершиться
+в пределах своего таймаута. Перед откатом выключите новые запросы, отмените
+или завершите очередь и сохраните evidence/историю и резервную копию Redis.
+Автоматического удаления и backfill нет. До слияния нужны CI и проверка
+изолированного развёртывания точного кандидата с рабочей runtime-конфигурацией.

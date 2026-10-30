@@ -23,7 +23,7 @@ spec:
               kubernetes.io/metadata.name: {{ .Release.Namespace }}
           podSelector:
             matchLabels:
-              app: incidentgpt-backend
+              app: {{ .Values.diagnostics.backendAppLabel | quote }}
       ports:
         - port: 9099
           protocol: TCP

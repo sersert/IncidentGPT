@@ -204,8 +204,8 @@ func collectTypedDiagnostic(ctx context.Context, check string, scope DiagnosticS
 				continue
 			}
 			message := e.Message
-			if len(message) > 1024 {
-				message = string([]rune(message)[:min(200, len([]rune(message)))]) + " [truncated]"
+			if runes := []rune(message); len(runes) > 1024 {
+				message = string(runes[:1024]) + " [truncated]"
 			}
 			data = append(data, map[string]any{"reason": e.Reason, "type": e.Type, "count": e.Count, "message": message, "source_timestamp": at})
 		}
@@ -294,7 +294,13 @@ func diagnosticsHandler(w http.ResponseWriter, r *http.Request) {
 			from = at
 			to = at
 		}
-		e := Evidence{Version: 1, ID: "diagnostic-" + request.OperationID + "-" + check, IncidentID: request.IncidentID, ClusterID: request.Scope.ClusterID, Resource: request.Scope.Namespace + "/" + request.Scope.Pod, Source: check, ObservedFrom: &from, ObservedTo: &to, CollectedAt: &at, IngestedAt: at, Excerpt: string(raw), SourceQuery: query, CollectorVersion: "typed-diagnostics/v1", Availability: status}
+		resource := request.Scope.Namespace + "/" + request.Scope.Pod
+		if check == "node_conditions" {
+			resource = request.Scope.Node
+		} else if check == "workload_rollout" {
+			resource = request.Scope.Namespace + "/" + request.Scope.Workload
+		}
+		e := Evidence{Version: 1, ID: "diagnostic-" + request.OperationID + "-" + check, IncidentID: request.IncidentID, ClusterID: request.Scope.ClusterID, Resource: resource, Source: check, ObservedFrom: &from, ObservedTo: &to, CollectedAt: &at, IngestedAt: at, Excerpt: string(raw), SourceQuery: query, CollectorVersion: "typed-diagnostics/v1", Availability: status}
 		result.Evidence = append(result.Evidence, e)
 	}
 	result.CollectedAt = time.Now().UTC()

@@ -1,3 +1,13 @@
+{{- if .Values.diagnostics.enabled }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "diagnostics.enabled requires changes.existingSecret with the analysis service token" }}
+{{- end }}
+{{- range (splitList "," .Values.diagnostics.namespaces) }}
+{{- if not (trim .) }}
+{{- fail "diagnostics.enabled requires diagnostics.namespaces with explicit nonempty namespace names" }}
+{{- end }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,7 +52,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.analysisServiceTokenKey }}
-                  optional: true
+                  optional: {{ not .Values.diagnostics.enabled }}
             {{- end }}
             - name: CHANGE_COLLECTOR_ENABLED
               value: {{ .Values.changes.enabled | quote }}

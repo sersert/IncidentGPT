@@ -1,3 +1,14 @@
+{{- if eq (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true" }}
+{{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
+{{- fail "GUIDED_DIAGNOSTICS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
+{{- end }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "GUIDED_DIAGNOSTICS_ENABLED requires changes.existingSecret with reader, analysis and sanitizer credentials" }}
+{{- end }}
+{{- if not (.Values.env.DIAGNOSTIC_COLLECTOR_URL | default "" | trim) }}
+{{- fail "GUIDED_DIAGNOSTICS_ENABLED requires env.DIAGNOSTIC_COLLECTOR_URL" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,7 +58,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.analysisServiceTokenKey }}
-                  optional: true
+                  optional: {{ ne (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true" }}
             - name: CHANGE_INGEST_TOKEN
               valueFrom:
                 secretKeyRef:
