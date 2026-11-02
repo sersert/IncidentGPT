@@ -111,15 +111,60 @@ func (s *Storage) SaveIncident(inc *Incident) error {
 	})
 }
 
+// decodeIncident also reads records rewritten by older Redis cjson scripts.
+// Only the two known empty slice fields are repaired; malformed data stays an error.
+func decodeIncident(data []byte) (*Incident, error) {
+	var inc Incident
+	if err := json.Unmarshal(data, &inc); err != nil {
+		var object map[string]json.RawMessage
+		if json.Unmarshal(data, &object) != nil {
+			return nil, err
+		}
+		var analysis map[string]json.RawMessage
+		if json.Unmarshal(object["analysis"], &analysis) != nil {
+			return nil, err
+		}
+		changed := false
+		for _, key := range []string{"recommendations", "similar_incidents"} {
+			var empty map[string]json.RawMessage
+			value := analysis[key]
+			if len(value) > 0 && json.Unmarshal(value, &empty) == nil && empty != nil && len(empty) == 0 {
+				analysis[key] = json.RawMessage(`[]`)
+				changed = true
+			}
+		}
+		if !changed {
+			return nil, err
+		}
+		object["analysis"], _ = json.Marshal(analysis)
+		data, _ = json.Marshal(object)
+		inc = Incident{}
+		if err := json.Unmarshal(data, &inc); err != nil {
+			return nil, err
+		}
+	}
+	return &inc, nil
+}
+
 func (s *Storage) GetIncident(id string) (*Incident, error) {
-	data, err := s.rdb.Get(s.ctx, keyIncident+id).Bytes()
+	var record, metadata *redis.StringCmd
+	_, err := s.rdb.Pipelined(s.ctx, func(p redis.Pipeliner) error {
+		record = p.Get(s.ctx, keyIncident+id)
+		metadata = p.Get(s.ctx, "igpt:incident:postmortem:"+id)
+		return nil
+	})
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+	data, err := record.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	var inc Incident
-	if err := json.Unmarshal(data, &inc); err != nil {
+	inc, err := decodeIncident(data)
+	if err != nil {
 		return nil, err
 	}
+	inc.HasPostmortem = inc.HasPostmortem || metadata.Val() == "1"
 	// Legacy records did not observe a deployment; their creation time was
 	// previously written into last_deploy_at. Do not present that as evidence.
 	if inc.AnalysisRequestID == "" && inc.Context != nil {
@@ -130,7 +175,7 @@ func (s *Storage) GetIncident(id string) (*Incident, error) {
 	for _, a := range inc.Alerts {
 		inc.Fingerprints[a.Fingerprint] = true
 	}
-	return &inc, nil
+	return inc, nil
 }
 
 // ListIncidents отдаёт инциденты, новые сверху.

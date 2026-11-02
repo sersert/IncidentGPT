@@ -102,16 +102,8 @@ func changeServiceAuth(w http.ResponseWriter, r *http.Request) bool {
 // Timeline readers use real HTTP Basic credentials. X-Auth-User alone grants
 // no access. All authenticated readers have the existing single-admin scope.
 func changeReadAuth(w http.ResponseWriter, r *http.Request) bool {
-	// Browser mutations must originate from the UI host. Service/CLI callers
-	// authenticate independently and do not send a browser Origin header.
-	if r.Method != "GET" && r.Method != "HEAD" {
-		if origin := r.Header.Get("Origin"); origin != "" {
-			u, err := url.Parse(origin)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || !strings.EqualFold(u.Host, r.Host) || u.User != nil || u.Path != "" || u.RawQuery != "" {
-				http.Error(w, "browser origin denied", 403)
-				return false
-			}
-		}
+	if !browserOriginAllowed(w, r) {
+		return false
 	}
 	user, pass, ok := r.BasicAuth()
 	expectedUser, expectedPass := env("TIMELINE_READ_USER", ""), env("TIMELINE_READ_PASSWORD", "")

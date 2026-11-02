@@ -74,11 +74,24 @@ If you discover a security issue, avoid posting exploit details publicly. Contac
 
 ## Investigation, knowledge and report boundaries
 
-New feature ingestion uses explicit service Bearer tokens; UI mutations/reads verify
-backend Basic credentials, independently of nginx and untrusted actor headers.
-Status/assignee PATCH also verifies Basic identity. Browser mutations verify that Origin matches the UI host; nginx and the development proxy preserve Host, including its port. The umbrella development install shares its existing UI account through a generated reader Secret; installations with external htpasswd must supply matching backend reader credentials. The current deployment has a
-shared administrator scope; cluster-aware IDs and query scope do not constitute
-team tenancy. Keep backend/Redis/internal diagnostics private under NetworkPolicy.
+Новые API используют сервисные Bearer-токены или собственную проверку Basic-auth
+backend (`TIMELINE_READ_*`), независимо от nginx и `X-Auth-User`. Старые PATCH
+status/assignee и dashboard/analytics сохраняют защиту UI Basic-auth и NetworkPolicy.
+Для дополнительной проверки этих старых API включите `LEGACY_API_AUTH_REQUIRED=true`
+и задайте `changes.existingSecret` либо `readerAuth.existingSecret`. Отсутствие
+credentials в этом режиме даёт 401, автоматического ослабления защиты нет.
+Новые reports/lifecycle/analysis API всегда требуют backend credentials.
+
+Учётная запись backend должна совпадать с UI. При внешнем htpasswd нужен отдельный
+Secret с исходными username/password; хеш htpasswd не подходит. Чарт не копирует
+admin/admin в backend и не создаёт reader Secret автоматически. Выбранный Secret
+обязателен: ошибка имени/ключа блокирует запуск, вместо скрытого 401 после установки.
+Браузерные изменения проверяют Origin. Для прокси, меняющего Host, задайте полные
+доверенные адреса в `ALLOWED_ORIGINS` через запятую, например
+`http://127.0.0.1:8088,https://incident.example`. Wildcard, path и произвольные
+forwarded-заголовки не дают доступа; Basic-auth остаётся обязательным для новых API.
+Общая administrator-роль не обеспечивает разделение команд. Backend/Redis/diagnostics
+должны оставаться приватными под NetworkPolicy.
 
 Change collectors read allowlisted deployment/ReplicaSet metadata, not Secret or
 ConfigMap values. Graph observations use actual ownership/placement metadata and

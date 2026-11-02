@@ -254,7 +254,7 @@ func TestDiagnosticActorStaysOutOfWorkerPayload(t *testing.T) {
 		if json.NewDecoder(r.Body).Decode(&received) != nil || received.Operation == nil || received.Operation.Actor != "" {
 			t.Error("audit identity reached worker")
 		}
-		writeJSON(w, 200, AnalysisVersion{Version: 1, ID: input.AnalysisID, IncidentID: input.IncidentID, EvidenceIDs: []string{"evidence-1"}, Status: "complete", Summary: "fixture"})
+		writeJSON(w, 200, AnalysisVersion{Version: 1, ID: input.AnalysisID, IncidentID: input.IncidentID, EvidenceIDs: []string{"evidence-1"}, Status: "complete", Summary: "fixture", StartedAt: time.Now().UTC().Add(-time.Second), CompletedAt: time.Now().UTC()})
 	}))
 	defer worker.Close()
 	t.Setenv("STRUCTURED_WORKER_URL", worker.URL)

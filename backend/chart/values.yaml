@@ -18,6 +18,15 @@ service:
 env:
   LISTEN_ADDR: ":8080"
   REPORTS_ENABLED: "false"
+  # Старые API по умолчанию защищает UI Basic-auth / NetworkPolicy.
+  # true требует также backend reader Secret; отсутствие credentials даёт 401.
+  LEGACY_API_AUTH_REQUIRED: "false"
+  # Полные Origin через запятую для прокси, меняющего Host; без wildcard.
+  ALLOWED_ORIGINS: ""
+  # Дополнительный opt-in; durable/reports также включают запись lifecycle.
+  LIFECYCLE_ENABLED: "false"
+  # 0 — история хранится до архивирования оператором; >0 — TTL новых ревизий.
+  LIFECYCLE_HISTORY_RETENTION_DAYS: "0"
   GUIDED_DIAGNOSTICS_ENABLED: "false"
   DIAGNOSTIC_COLLECTOR_URL: "http://incidentgpt-enricher:9099/v1/diagnostics"
   RUNBOOK_DIRECTORY: ""
@@ -57,7 +66,7 @@ logsStore:
   existingSecret: ""
   passwordKey: password
 
-# Same reader password as the UI Basic-auth account; separate service token.
+# Учётная запись читателя должна совпадать с UI; сервисный token отдельный.
 changes:
   existingSecret: ""
   ingestTokenKey: change-ingest-token
@@ -71,7 +80,7 @@ runbooks:
 serviceGraph:
   existingConfigMap: ""
 
-# Independent backend identity check; match the UI account.
+# Независимая проверка backend: Secret с username/password учётной записи UI.
 readerAuth:
   existingSecret: ""
   usernameKey: username

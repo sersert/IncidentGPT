@@ -60,10 +60,10 @@ grafanaDashboard:
 
 incidentgpt-backend:
   enabled: true
-  # Default development UI credentials are shared through a generated Secret.
-  # For an external htpasswd Secret, provide matching backend reader credentials.
+  # Для новых API задайте Secret с учётной записью, совпадающей с UI Basic-auth.
+  # При внешнем htpasswd нужен отдельный Secret с исходными username/password.
   readerAuth:
-    existingSecret: incidentgpt-backend-reader
+    existingSecret: ""
   image:
     repository: ghcr.io/sersert/incidentgpt-backend
     tag: "0.2.0"

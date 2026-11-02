@@ -1,3 +1,17 @@
+{{- if eq (toString .Values.env.REPORTS_ENABLED) "true" }}
+{{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
+{{- fail "REPORTS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
+{{- end }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "REPORTS_ENABLED requires changes.existingSecret with reader, analysis and sanitizer credentials" }}
+{{- end }}
+{{- end }}
+{{- if and (eq (toString .Values.env.LEGACY_API_AUTH_REQUIRED) "true") (not .Values.changes.existingSecret) (not .Values.readerAuth.existingSecret) }}
+{{- fail "LEGACY_API_AUTH_REQUIRED requires readerAuth.existingSecret or changes.existingSecret" }}
+{{- end }}
+{{- if and .Values.readerAuth.existingSecret .Values.changes.existingSecret }}
+{{- fail "choose readerAuth.existingSecret or changes.existingSecret for backend reader credentials, not both" }}
+{{- end }}
 {{- if and (eq (toString .Values.env.MANUAL_REGROUP_ENABLED) "true") (ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true") }}
 {{- fail "MANUAL_REGROUP_ENABLED requires DURABLE_ANALYSIS_ENABLED" }}
 {{- end }}
@@ -54,13 +68,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.readerAuth.existingSecret }}
                   key: {{ .Values.readerAuth.usernameKey }}
-                  optional: true
+                  optional: false
             - name: TIMELINE_READ_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.readerAuth.existingSecret }}
                   key: {{ .Values.readerAuth.passwordKey }}
-                  optional: true
+                  optional: false
             {{- end }}
             {{- if .Values.logsStore.existingSecret }}
             # Пароль к хранилищу логов — из секрета: конфиг интеграций живёт в памяти

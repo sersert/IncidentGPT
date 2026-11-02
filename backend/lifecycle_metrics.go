@@ -16,9 +16,6 @@ type metricIncident struct {
 }
 
 func metricSnapshot(r *http.Request) ([]metricIncident, bool, error) {
-	if store.disk == nil {
-		return nil, false, fmt.Errorf("persistent lifecycle metrics unavailable")
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	days := 30
@@ -30,6 +27,20 @@ func metricSnapshot(r *http.Request) ([]metricIncident, bool, error) {
 	case "", "30d":
 	default:
 		return nil, false, fmt.Errorf("unsupported period")
+	}
+	if store.disk == nil {
+		cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+		out := []metricIncident{}
+		for _, inc := range store.List() {
+			if inc.CreatedAt.Before(cutoff) {
+				continue
+			}
+			if len(out) == 1000 {
+				return out, true, nil
+			}
+			out = append(out, metricIncident{Incident: inc, Lifecycle: deriveLifecycle(inc)})
+		}
+		return out, false, nil
 	}
 	ids, err := store.disk.rdb.ZRevRangeByScore(ctx, keyIncidentIdx, &redis.ZRangeBy{Min: fmt.Sprint(time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()), Max: "+inf", Offset: 0, Count: 1001}).Result()
 	if err != nil {
@@ -61,11 +72,11 @@ func metricSnapshot(r *http.Request) ([]metricIncident, bool, error) {
 		if !ok {
 			return nil, false, fmt.Errorf("incident metrics invalid")
 		}
-		var inc Incident
-		if json.Unmarshal([]byte(raw), &inc) != nil {
+		inc, err := decodeIncident([]byte(raw))
+		if err != nil {
 			return nil, false, fmt.Errorf("incident metrics invalid")
 		}
-		l := deriveLifecycle(&inc)
+		l := deriveLifecycle(inc)
 		if value := values[i*3+1]; value != nil {
 			if json.Unmarshal([]byte(value.(string)), &l) != nil {
 				return nil, false, fmt.Errorf("lifecycle metrics invalid")
@@ -78,7 +89,7 @@ func metricSnapshot(r *http.Request) ([]metricIncident, bool, error) {
 		if l.IncidentID != id {
 			return nil, false, fmt.Errorf("lifecycle identity invalid")
 		}
-		out = append(out, metricIncident{Incident: &inc, Lifecycle: l})
+		out = append(out, metricIncident{Incident: inc, Lifecycle: l})
 	}
 	if len(analysisKeys) > 0 {
 		analyses, err := store.disk.rdb.MGet(ctx, analysisKeys...).Result()
@@ -148,7 +159,7 @@ func metricSummary(records []metricIncident, kind string) map[string]any {
 	return map[string]any{"mean_seconds": metricMean(values), "median_seconds": median, "p90_seconds": p90, "samples": len(values), "missing": len(records) - len(values)}
 }
 func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
-	if !changeReadAuth(w, r) {
+	if !legacyAPIAuth(w, r) {
 		return
 	}
 	records, bounded, err := metricSnapshot(r)
@@ -166,10 +177,10 @@ func handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, today := store.AlertStats()
-	writeJSON(w, 200, map[string]any{"active_incidents": active, "active_critical": critical, "mttr_reduction_pct": nil, "noise_reduction_pct": nil, "avg_analysis_time_sec": metricMean(metricValues(records, "analysis")), "alerts_today": today, "alerts_sparkline": []int{}, "bounded": bounded, "sample_incidents": len(records), "metrics_note": "bounded last 30 days; unknown metrics are null; no causal AI benefit estimate"})
+	writeJSON(w, 200, map[string]any{"active_incidents": active, "active_critical": critical, "mttr_reduction_pct": nil, "noise_reduction_pct": nil, "avg_analysis_time_sec": metricMean(metricValues(records, "analysis")), "alerts_today": today, "alerts_sparkline": []int{}, "bounded": bounded, "persistent": store.disk != nil, "sample_incidents": len(records), "metrics_note": "bounded last 30 days; unknown metrics are null; no causal AI benefit estimate"})
 }
 func handleAnalyticsSummary(w http.ResponseWriter, r *http.Request) {
-	if !changeReadAuth(w, r) {
+	if !legacyAPIAuth(w, r) {
 		return
 	}
 	records, bounded, err := metricSnapshot(r)
@@ -178,10 +189,10 @@ func handleAnalyticsSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total, _ := store.AlertStats()
-	writeJSON(w, 200, map[string]any{"mttr_before_min": nil, "mttr_after_min": nil, "mttr_reduction_pct": nil, "mtta_before_min": nil, "mtta_after_min": nil, "mtta_reduction_pct": nil, "noise_before": total, "noise_after": len(records), "noise_reduction_pct": nil, "time_saved_hours": nil, "analysis": metricSummary(records, "analysis"), "acknowledgement": metricSummary(records, "ack"), "verified_recovery": metricSummary(records, "recovery"), "administrative_closure": metricSummary(records, "closure"), "bounded": bounded, "sample_incidents": len(records), "count_note": "alert counter is all-time; incident sample follows requested period; no reduction comparison is computed", "metrics_note": "observational lifecycle durations; missing events excluded; no inferred recovery or causal AI benefit"})
+	writeJSON(w, 200, map[string]any{"mttr_before_min": nil, "mttr_after_min": nil, "mttr_reduction_pct": nil, "mtta_before_min": nil, "mtta_after_min": nil, "mtta_reduction_pct": nil, "noise_before": total, "noise_after": len(records), "noise_reduction_pct": nil, "time_saved_hours": nil, "analysis": metricSummary(records, "analysis"), "acknowledgement": metricSummary(records, "ack"), "verified_recovery": metricSummary(records, "recovery"), "administrative_closure": metricSummary(records, "closure"), "bounded": bounded, "persistent": store.disk != nil, "sample_incidents": len(records), "count_note": "alert counter is all-time; incident sample follows requested period; no reduction comparison is computed", "metrics_note": "observational lifecycle durations; missing events excluded; no inferred recovery or causal AI benefit"})
 }
 func handleMTTRTrend(w http.ResponseWriter, r *http.Request) {
-	if !changeReadAuth(w, r) {
+	if !legacyAPIAuth(w, r) {
 		return
 	}
 	records, bounded, err := metricSnapshot(r)
@@ -215,10 +226,10 @@ func handleMTTRTrend(w http.ResponseWriter, r *http.Request) {
 		}
 		data = append(data, p)
 	}
-	writeJSON(w, 200, map[string]any{"data": data, "bounded": bounded, "cohort": "incident creation day UTC; observational, no AI attribution"})
+	writeJSON(w, 200, map[string]any{"data": data, "bounded": bounded, "persistent": store.disk != nil, "cohort": "incident creation day UTC; observational, no AI attribution"})
 }
 func handleAnalyticsQuality(w http.ResponseWriter, r *http.Request) {
-	if !changeReadAuth(w, r) {
+	if !legacyAPIAuth(w, r) {
 		return
 	}
 	records, bounded, err := metricSnapshot(r)
@@ -243,5 +254,5 @@ func handleAnalyticsQuality(w http.ResponseWriter, r *http.Request) {
 		no = &b
 	}
 	values := metricValues(records, "analysis")
-	writeJSON(w, 200, map[string]any{"total_analyses": len(values), "feedback_samples": total, "helpful_pct": yes, "not_helpful_pct": no, "edited_pct": nil, "avg_confidence": nil, "avg_response_time_sec": metricMean(values), "bounded": bounded, "metrics_note": "structured completed analysis processing time only; feedback is not cause confirmation"})
+	writeJSON(w, 200, map[string]any{"total_analyses": len(values), "feedback_samples": total, "helpful_pct": yes, "not_helpful_pct": no, "edited_pct": nil, "avg_confidence": nil, "avg_response_time_sec": metricMean(values), "bounded": bounded, "persistent": store.disk != nil, "metrics_note": "structured completed analysis processing time only; feedback is not cause confirmation"})
 }

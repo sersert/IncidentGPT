@@ -145,6 +145,20 @@ analysis histories; `igpt:resolution:*`, authoritative confirmed-memory indices;
 manual binding; `igpt:lifecycle:*`, distinct source/receipt/human verification events;
 and `igpt:report:*`/`igpt:reports:*`, reviewed revisions and retained snapshots.
 
+Публикация postmortem атомарно пишет `igpt:incident:postmortem:{id}=1` вместе с
+результатом job, не пересериализуя incident JSON. Ключ без TTL, как сам incident;
+при удалении инцидента оператор удаляет и этот ключ. Старый `has_postmortem` внутри
+JSON также читается. Reader совместим с пустыми `recommendations`/`similar_incidents`,
+которые старый Lua cjson превращал в `{}`; остальные ошибки чтения не скрываются.
+Запись lifecycle включают durable/reports либо `LIFECYCLE_ENABLED=true`. Неизменные
+факты не создают ревизий. `LIFECYCLE_HISTORY_RETENTION_DAYS=0` сохраняет историю до
+архивирования оператором; положительное значение задаёт TTL только новых ревизий,
+не текущего состояния и не уже существующих ключей. Старые ревизии архивируются
+и удаляются отдельно согласно политике оператора.
+Метрики старых dashboard/analytics работают также из памяти с `persistent:false`,
+соблюдая период и лимит 1000 инцидентов. Неизвестные измерения остаются `null`;
+статус resolved и старое analysis.generated_at не заменяют фактические события.
+
 Graph ownership, placement and declared application dependencies remain separate.
 Correlation uses one fresh declared dependency at most and never infers service
 health or cause. Human moves retain old source pages and invalidate current analysis

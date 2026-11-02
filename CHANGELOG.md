@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+- Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`
+  (без TTL, удалять вместе с incident) исключает порчу JSON через Lua cjson;
+  reader поддерживает старый флаг и известные пустые массивы, записанные как `{}`.
+- Lifecycle пишет только изменения при opt-in durable/reports/`LIFECYCLE_ENABLED`.
+  `LIFECYCLE_HISTORY_RETENTION_DAYS` задаёт TTL новых audit-ревизий (0 — политика
+  оператора), текущие записи и прежняя история автоматически не удаляются.
+- Старые PATCH и dashboard/analytics сохраняют доступ через доверенный UI-прокси;
+  `LEGACY_API_AUTH_REQUIRED=true` явно включает fail-closed проверку backend Basic.
+  Новые API всегда требуют credentials. Убрано автоматическое копирование admin/admin;
+  reader Secret обязателен при его выборе. Прокси с заменой Host поддержан через
+  явный `ALLOWED_ORIGINS`, без доверия к произвольным forwarded-заголовкам.
+- Dashboard/analytics восстановлены в memory fallback (`persistent:false`), без
+  выдуманных времён восстановления/анализа; устранено повторное чтение списка.
+
 - Dependency graph API и additive Redis-ключи `igpt:graph:*`: идентичности
   cluster/namespace/kind/name, provenance и TTL 30 дней. Declared edges заменяются
   сразу; metadata не создаёт application dependencies. Новые флаги enricher

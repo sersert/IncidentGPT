@@ -1043,7 +1043,7 @@ func handleGetIncident(w http.ResponseWriter, r *http.Request) {
 // нарисованы, но ничего не делали. Каждое действие пишется в журнал вместе с
 // именем пользователя — его отдаёт nginx после basic-авторизации.
 func handleIncidentPatch(w http.ResponseWriter, r *http.Request) {
-	if !changeReadAuth(w, r) {
+	if !legacyAPIAuth(w, r) {
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/incidents/")
@@ -1066,7 +1066,10 @@ func handleIncidentPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, _, _ := r.BasicAuth()
+	user, _, authenticated := r.BasicAuth()
+	if !authenticated {
+		user = requestUser(r)
+	}
 	now := time.Now()
 	changed := false
 
@@ -1376,7 +1379,7 @@ func avg(vals []float64) float64 {
 // GET /api/v1/dashboard/active
 func handleDashboardActive(w http.ResponseWriter, r *http.Request) {
 	limit := intQuery(r, "limit", 10)
-	all := store.List()
+	var all []*Incident
 	if store.disk != nil {
 		var err error
 		all, err = store.disk.ListIncidents()
@@ -1384,6 +1387,9 @@ func handleDashboardActive(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "active incidents unavailable", 503)
 			return
 		}
+	}
+	if store.disk == nil {
+		all = store.List()
 	}
 	active := []*Incident{}
 	for _, inc := range all {
@@ -1724,6 +1730,12 @@ func backendHandler() http.Handler {
 }
 
 func main() {
+	if _, err := allowedBrowserOrigins(); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := lifecycleHistoryRetention(); err != nil {
+		log.Fatal(err)
+	}
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	if err := awaitDurableStorage(startupCtx); err != nil {
 		startupCancel()
