@@ -411,12 +411,10 @@ func (s *Store) FindIncidentForGroup(fingerprints []string) *Incident {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, inc := range s.incidents {
-		if inc.Status == "resolved" {
-			continue
-		}
-		for _, fp := range fingerprints {
-			if inc.Fingerprints[fp] {
+	// Match the persistent path's fingerprint order rather than Go map order.
+	for _, fp := range fingerprints {
+		for _, inc := range s.incidents {
+			if inc.Status != "resolved" && inc.Fingerprints[fp] {
 				return inc
 			}
 		}
