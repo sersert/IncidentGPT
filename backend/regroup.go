@@ -11,6 +11,7 @@ import (
 // Move one alert, or split it into a new incident. Source records and their
 // immutable evidence/analysis remain accessible through history_sources.
 var regroupScript = redis.NewScript(`
+if redis.call('GET',KEYS[7])~=ARGV[12] then return 0 end
 if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end
 local target=redis.call('GET',KEYS[2]);if ARGV[2]=='' then if target then return 0 end else if target~=ARGV[2] then return 0 end end
 if redis.call('GET',KEYS[3])~=ARGV[3] then return 0 end
@@ -18,6 +19,10 @@ redis.call('DEL','igpt:analysis:requested:'..ARGV[10],'igpt:analysis:requested:'
 
 func handleRegroup(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
+		return
+	}
+	if !regroupEnabled() {
+		http.Error(w, "manual regrouping disabled", 503)
 		return
 	}
 	if store.disk == nil || !durableEnabled() {
@@ -113,7 +118,7 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 	dst, _ := json.Marshal(target)
 	alert, _ := json.Marshal(moved)
 	audit, _ := json.Marshal(map[string]any{"schema_version": 1, "audit_id": auditID, "actor": actor, "at": now, "alert_id": moved.ID, "source_incident_id": source.ID, "target_incident_id": target.ID, "source_composition": incidentComposition(&source), "target_composition": incidentComposition(&target)})
-	n, err := regroupScript.Run(ctx, store.disk.rdb, []string{keyIncident + source.ID, keyIncident + target.ID, keyAlert + moved.ID, keyFingerprint + moved.Fingerprint, keyIncidentIdx, "igpt:regroup:" + auditID}, sourceRaw, targetRaw, alertRaw, src, dst, alert, target.ID, target.CreatedAt.Unix(), audit, source.ID, moved.Fingerprint).Int()
+	n, err := regroupScript.Run(ctx, store.disk.rdb, []string{keyIncident + source.ID, keyIncident + target.ID, keyAlert + moved.ID, keyFingerprint + moved.Fingerprint, keyIncidentIdx, "igpt:regroup:" + auditID, "igpt:composition:lock"}, sourceRaw, targetRaw, alertRaw, src, dst, alert, target.ID, target.CreatedAt.Unix(), audit, source.ID, moved.Fingerprint, owner).Int()
 	if err != nil {
 		http.Error(w, "regroup persistence unavailable", 503)
 		return
@@ -134,4 +139,8 @@ func appendUnique(ids []string, id string) []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func regroupEnabled() bool {
+	return durableEnabled() && env("MANUAL_REGROUP_ENABLED", "false") == "true"
 }

@@ -213,7 +213,7 @@ func serviceGraph(w http.ResponseWriter, r *http.Request) {
 		cluster = incidentCluster(inc)
 	}
 	if cluster == "" {
-		writeJSON(w, 200, map[string]any{"nodes": []GraphNode{}, "edges": []GraphEdge{}, "status": "cluster_unknown"})
+		writeJSON(w, 200, map[string]any{"nodes": []GraphNode{}, "edges": []GraphEdge{}, "status": "cluster_unknown", "regroup_enabled": regroupEnabled()})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -272,7 +272,7 @@ func serviceGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
-	writeJSON(w, 200, map[string]any{"nodes": nodes, "edges": edges, "stale_edges_omitted": stale, "bounded": len(nids) == 200 || len(eids) == 400, "status": "available"})
+	writeJSON(w, 200, map[string]any{"nodes": nodes, "edges": edges, "stale_edges_omitted": stale, "bounded": len(nids) == 200 || len(eids) == 400, "status": "available", "regroup_enabled": regroupEnabled()})
 }
 func serviceDetail(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {

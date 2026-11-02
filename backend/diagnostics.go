@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -64,7 +65,7 @@ func handleInvestigations(w http.ResponseWriter, r *http.Request) {
 		Question string `json:"question"`
 		EventID  string `json:"change_event_id"`
 	}
-	if decodeChange(r, &request) != nil || len(request.Question) > 500 || (request.Action != "refresh" && request.Action != "hypothesis" && request.Action != "compare") {
+	if decodeChange(r, &request) != nil || utf8.RuneCountInString(request.Question) > 500 || (request.Action != "refresh" && request.Action != "hypothesis" && request.Action != "compare") {
 		http.Error(w, "unsupported investigation", 400)
 		return
 	}
@@ -198,7 +199,7 @@ func collectDiagnosticEvidence(ctx context.Context, e *jobEnvelope) error {
 	at := time.Now().UTC()
 	for _, input := range requests {
 		raw, _ := json.Marshal(input)
-		req, err := http.NewRequestWithContext(ctx, "POST", env("DIAGNOSTIC_COLLECTOR_URL", "http://incidentgpt-enricher.incidentgpt.svc:9099/v1/diagnostics"), bytes.NewReader(raw))
+		req, err := http.NewRequestWithContext(ctx, "POST", env("DIAGNOSTIC_COLLECTOR_URL", "http://incidentgpt-enricher:9099/v1/diagnostics"), bytes.NewReader(raw))
 		if err != nil {
 			return fmt.Errorf("diagnostic_configuration_invalid")
 		}
@@ -241,6 +242,7 @@ func collectDiagnosticEvidence(ctx context.Context, e *jobEnvelope) error {
 	}
 	e.Input.Evidence = evidence
 	e.Input.Context = append(e.Input.Context, "Human question (untrusted text): "+op.Question, "Compare the new evidence with the previous analysis; describe changes, contradictions and missing data. Do not execute historical solutions.")
+	normalizeJobInput(&e.Input)
 	input, _ := json.Marshal(e.Input)
 	keys := []string{"igpt:job:" + e.Job.ID}
 	args := []any{e.Owner, time.Now().UnixMilli(), input}
@@ -297,7 +299,7 @@ func handleDiagnosticCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func confirmedMemoryEvidence(ctx context.Context, inc *Incident) ([]Evidence, error) {
-	result := []Evidence{}
+	var result []Evidence
 	service := incidentWorkload(inc)
 	if service == "" {
 		service = inc.Labels["service"]

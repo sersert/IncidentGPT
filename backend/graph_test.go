@@ -25,6 +25,7 @@ func TestGraphTypesAndClusterIdentity(t *testing.T) {
 	}
 }
 func TestRegroupPreservesHistoryAndFencesCompletion(t *testing.T) {
+	t.Setenv("MANUAL_REGROUP_ENABLED", "true")
 	addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
 	if addr == "" {
 		t.Skip("requires Redis")
@@ -254,4 +255,63 @@ func TestDurableCompositionLimitAndClosedAlertRecurrence(t *testing.T) {
 			t.Fatal("new standalone alert binding missing")
 		}
 	}
+}
+
+func TestCompositionOptInAndExpiredOwner(t *testing.T) {
+	disk, inc := diagnosticTestStore(t)
+	t.Setenv("DURABLE_ANALYSIS_ENABLED", "true")
+	t.Setenv("MANUAL_REGROUP_ENABLED", "false")
+	t.Setenv("TIMELINE_READ_USER", "admin")
+	t.Setenv("TIMELINE_READ_PASSWORD", "pw")
+	t.Setenv("ANALYSIS_SERVICE_TOKEN", "service")
+	ctx := context.Background()
+	sanitizer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req sanitizerPayloadRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		writeJSON(w, 200, map[string]any{"status": "sanitized", "payload": req.Payload})
+	}))
+	defer sanitizer.Close()
+	t.Setenv("SANITIZER_URL", sanitizer.URL)
+	t.Setenv("SANITIZER_AUTH_SHARED_SECRET", "hmac")
+	disk.rdb.Set(ctx, "igpt:composition:lock", "other-owner", time.Minute)
+	defer disk.rdb.Del(ctx, "igpt:composition:lock")
+	ingest := func() *httptest.ResponseRecorder {
+		payload, _ := json.Marshal(map[string]any{"group_key": newStableID("group"), "alerts": []EnrichedAlert{{ClusterName: "test", Status: "firing", Fingerprint: newStableID("fp"), Labels: map[string]string{"namespace": "test", "alertname": "Test"}}}})
+		r := httptest.NewRequest("POST", "/", bytes.NewReader(payload))
+		r.Header.Set("Authorization", "Bearer service")
+		w := httptest.NewRecorder()
+		handleDurableIngest(w, r)
+		return w
+	}
+	if w := ingest(); w.Code != 202 {
+		t.Fatalf("default ingest serialized globally: %d %s", w.Code, w.Body.String())
+	}
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"alert_id":"unused"}`))
+	r.SetBasicAuth("admin", "pw")
+	w := httptest.NewRecorder()
+	handleRegroup(w, r)
+	if w.Code != 503 || !strings.Contains(w.Body.String(), "disabled") {
+		t.Fatal("regroup enabled by default", w.Code)
+	}
+	t.Setenv("MANUAL_REGROUP_ENABLED", "true")
+	if w := ingest(); w.Code != 503 {
+		t.Fatal("enabled ingest bypassed composition lock", w.Code)
+	}
+	key := newStableID("lease")
+	disk.rdb.Set(ctx, key, "expired-owner", time.Minute)
+	scoped := &Storage{rdb: disk.rdb, ctx: ctx, lockKey: key, lockOwner: "expired-owner"}
+	disk.rdb.Set(ctx, key, "new-owner", time.Minute)
+	original := store.Get(inc.ID)
+	inc.Title = "stale overwrite"
+	if scoped.SaveIncident(inc) == nil {
+		t.Fatal("expired owner wrote incident")
+	}
+	if got := store.Get(inc.ID); got.Title != original.Title {
+		t.Fatal("late write overwrote current incident")
+	}
+	a := &Alert{ID: newStableID("alert"), Fingerprint: newStableID("fp")}
+	if scoped.SaveAlert(a) == nil || disk.rdb.Exists(ctx, keyAlert+a.ID).Val() != 0 {
+		t.Fatal("expired owner wrote alert")
+	}
+	disk.rdb.Del(ctx, key)
 }

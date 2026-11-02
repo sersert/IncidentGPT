@@ -104,6 +104,7 @@ func incidentComposition(inc *Incident) string {
 	return digest(ids...)
 }
 func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid string) (string, error) {
+	normalizeJobInput(&input)
 	now := time.Now().UTC()
 	job := DurableJob{Version: 1, ID: jid, IncidentID: inc.ID, AnalysisID: input.AnalysisID, Kind: "analysis", Status: "queued", CreatedAt: now}
 	if input.JobKind != "" {
@@ -133,6 +134,25 @@ func enqueueInput(ctx context.Context, inc *Incident, input AnalysisInput, jid s
 		return "", fmt.Errorf("analysis scheduling unavailable")
 	}
 	return jid, nil
+}
+
+// Redis Lua cjson encodes empty arrays as objects. Persist empty typed slices as
+// null so every claim, retry, cancel and completion can decode the same input.
+func normalizeJobInput(input *AnalysisInput) {
+	if len(input.Evidence) == 0 {
+		input.Evidence = nil
+	}
+	if len(input.Context) == 0 {
+		input.Context = nil
+	}
+	if op := input.Operation; op != nil {
+		if len(op.Checks) == 0 {
+			op.Checks = nil
+		}
+		if len(op.EvidenceIDs) == 0 {
+			op.EvidenceIDs = nil
+		}
+	}
 }
 
 var claimJobScript = redis.NewScript(`
@@ -202,7 +222,13 @@ func finishJob(ctx context.Context, e *jobEnvelope, a *AnalysisVersion, code str
 var durableHTTP = &http.Client{Timeout: 55 * time.Second}
 
 func executeAnalysis(ctx context.Context, e *jobEnvelope) (*AnalysisVersion, error) {
-	raw, _ := json.Marshal(e.Input)
+	input := e.Input
+	if input.Operation != nil {
+		op := *input.Operation
+		op.Actor = "" // Audit identity stays in storage; it is not reasoning context.
+		input.Operation = &op
+	}
+	raw, _ := json.Marshal(input)
 	req, err := http.NewRequestWithContext(ctx, "POST", env("STRUCTURED_WORKER_URL", "http://ai-worker.incidentgpt.svc:8080/v1/analyze"), bytes.NewReader(raw))
 	if err != nil {
 		return nil, fmt.Errorf("invalid_worker_configuration")
@@ -245,26 +271,35 @@ func startAnalysisJobs() {
 				ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 				e, err := claimJob(ctx)
 				if err == nil && e != nil {
-					var a *AnalysisVersion
-					var runErr error
-					if e.Job.Kind == "diagnostics" {
-						runErr = collectDiagnosticEvidence(ctx, e)
-					}
-					if runErr == nil {
-						a, runErr = executeAnalysis(ctx, e)
-					}
-					code := ""
-					if runErr != nil {
-						code = runErr.Error()
-						a = nil
-					}
-					_ = finishJob(ctx, e, a, code)
+					_ = runAnalysisJob(ctx, e)
 				}
 				cancel()
 			}
 		}()
 	}
 }
+
+func runAnalysisJob(ctx context.Context, e *jobEnvelope) error {
+	var a *AnalysisVersion
+	var runErr error
+	if e.Job.Kind == "diagnostics" {
+		runErr = collectDiagnosticEvidence(ctx, e)
+	}
+	if runErr == nil {
+		a, runErr = executeAnalysis(ctx, e)
+	}
+	code := ""
+	if runErr != nil {
+		code = runErr.Error()
+		a = nil
+	}
+	// The work deadline can expire; retain the lease's final five seconds for
+	// recording a retry without using that expired context. Fencing still applies.
+	finishCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return finishJob(finishCtx, e, a, code)
+}
+
 func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
 		return
@@ -334,7 +369,7 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 			operations = append(operations, *e.Input.Operation)
 		}
 	}
-	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "composition_hash": incidentComposition(inc), "history_sources": inc.HistorySources, "enabled": durableEnabled()})
+	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "composition_hash": incidentComposition(inc), "history_sources": inc.HistorySources, "enabled": durableEnabled(), "diagnostics_enabled": diagnosticsEnabled()})
 }
 func handleEvidence(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
@@ -413,7 +448,10 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 	if cluster == "" || cluster == "unknown" {
 		cluster = alerts[0].Labels["cluster"]
 	}
-	lockKey := "igpt:composition:lock"
+	lockKey := "igpt:ingest:lock:" + digest(cluster, gk, alerts[0].Labels["namespace"])
+	if regroupEnabled() {
+		lockKey = "igpt:composition:lock"
+	}
 	owner := newStableID("ingest-owner")
 	claimed, err := store.disk.rdb.SetNX(ctx, lockKey, owner, 30*time.Second).Result()
 	if err != nil || !claimed {
@@ -423,6 +461,10 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		_ = redis.NewScript("if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0").Run(context.Background(), store.disk.rdb, []string{lockKey}, owner).Err()
 	}()
+	// Scope every ingest read/write to the request budget and fence composition
+	// writes with the lock owner. A stalled owner cannot overwrite a later move.
+	disk := &Storage{rdb: store.disk.rdb, ctx: ctx, lockKey: lockKey, lockOwner: owner}
+	ingestStore := &Store{disk: disk}
 	prior, err := store.disk.rdb.Get(ctx, "igpt:ingest:batch:"+digest(cluster, batchID)).Result()
 	if err == nil {
 		writeJSON(w, 202, map[string]any{"job_id": prior, "scheduled": true, "duplicate": true})
@@ -463,7 +505,7 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 			}
 			fps = append(fps, fp)
 		}
-		if existing := store.FindIncidentForGroup(fps); existing != nil {
+		if existing := ingestStore.FindIncidentForGroup(fps); existing != nil {
 			count := len(existing.Alerts)
 			known := map[string]bool{}
 			for _, a := range existing.Alerts {
@@ -480,7 +522,11 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		inc := ingestGroup(part, gk)
+		inc := ingestStore.ingestGroup(part, gk)
+		if disk.writeErr != nil || ctx.Err() != nil {
+			http.Error(w, "composition persistence unavailable; retry same batch", 503)
+			return
+		}
 		if inc == nil || inc.Status == "resolved" {
 			continue
 		}

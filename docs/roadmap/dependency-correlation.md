@@ -43,15 +43,22 @@ Audit records retain trusted Basic actor, UTC time and compositions. Durable ing
 and latest/requested pointers are cleared, fencing late results; history returns the
 current composition hash for comparison. Request refresh to interpret the new group.
 
-Durable ingestion and regrouping share a Redis composition lock (30-second lease),
-with 15/10-second request budgets; atomic compare-and-set rejects concurrent changes.
-This serializes durable ingestion globally, reducing peak throughput deliberately.
+Ручная перегруппировка требует `MANUAL_REGROUP_ENABLED=true` на backend и durable Redis.
+По умолчанию флаг выключен, POST отвечает 503, UI блокирует перенос; ingest сохраняет
+прежний lock по cluster/group/namespace. Только при включении ручной перегруппировки
+ingest и regroup разделяют общий composition lock (lease 30 секунд), что снижает
+пиковую пропускную способность. Сам флаг корреляции на enricher общего lock не требует.
+Запросы ограничены 15/10 секундами; все записи ingest проверяют владельца lease
+через WATCH/MULTI, а атомарный CAS переноса проверяет владельца и исходные записи.
+Запись от истёкшего или заменённого владельца отклоняется.
 Legacy concurrent writers are protected against lost updates during the move by CAS,
 but legacy grouping must be drained before enabling manual correction. Single-primary
 Redis/AOF/backup assumptions from evidence-and-delivery.md apply. Audit and incident
 records have no automatic expiry; include them in backup/retention policies.
 
 Rollout: load and inspect topology first, drain legacy batches, enable durable mode,
-then opt into correlation for a limited environment. No topology backfill is invented.
+then opt into correlation for a limited environment. Enable `MANUAL_REGROUP_ENABLED`
+only after draining older writers and observing the global serialization cost.
+Drain ingest before disabling manual regrouping or rolling back; retain manual bindings. No topology backfill is invented.
 Disable new correlation/observations before rollback; drain durable batches before
 reverting their consumer. Human moves and historical source links remain additive.
