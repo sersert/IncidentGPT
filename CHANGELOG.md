@@ -35,6 +35,8 @@
   перед анализом и повторно используются при отказе провайдера.
 
 ### Fixed
+- Enricher в durable correlation ожидает Redis перед запуском HTTP/очереди,
+  закрывает неудачные клиенты и использует startupProbe; legacy fallback сохранён.
 - После ручного regroup текущие namespace/labels/context пересчитываются по
   оставшимся алертам; удалённый ресурс не используется при следующем refresh.
   Старые enrichment/chain pointers очищаются, immutable history сохраняется.

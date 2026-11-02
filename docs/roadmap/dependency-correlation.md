@@ -67,3 +67,8 @@ only after draining older writers and observing the global serialization cost.
 Drain ingest before disabling manual regrouping or rolling back; retain manual bindings. No topology backfill is invented.
 Disable new correlation/observations before rollback; drain durable batches before
 reverting their consumer. Human moves and historical source links remain additive.
+
+Durable correlation waits up to two minutes for Redis before serving HTTP or starting
+its queue; a startup probe covers the wait. Failed clients are closed and retried.
+Legacy optional Redis behavior is unchanged. Late Redis startup does not require
+a manual enricher restart.

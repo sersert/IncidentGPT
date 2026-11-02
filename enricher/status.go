@@ -24,7 +24,7 @@ func readyzHandler(w http.ResponseWriter, _ *http.Request) {
 	checks := map[string]dependencyCheck{
 		"config":         {OK: appCfg.PromURL != "" && appCfg.BackendURL != ""},
 		"metrics_config": {OK: metricsCfgLoaded()},
-		"redis":          {OK: redisClient != nil, Optional: true},
+		"redis":          {OK: redisClient != nil, Optional: !durableCorrelation()},
 		"kubernetes":     checkK8sReady(),
 	}
 

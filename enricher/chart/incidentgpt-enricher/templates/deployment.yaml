@@ -179,6 +179,12 @@ spec:
               mountPath: /etc/enricher
               readOnly: true
 
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 75
           readinessProbe:
             httpGet:
               path: /readyz
