@@ -52,15 +52,17 @@ type AnalysisVersion struct {
 	Notification      string         `json:"notification_status,omitempty"`
 }
 type AnalysisInput struct {
-	IngestKey   string     `json:"ingest_key,omitempty"`
-	Version     int        `json:"schema_version"`
-	IncidentID  string     `json:"incident_id"`
-	AnalysisID  string     `json:"analysis_id"`
-	ClusterID   string     `json:"cluster_id"`
-	Evidence    []Evidence `json:"evidence"`
-	PreviousID  string     `json:"previous_analysis_id,omitempty"`
-	Composition string     `json:"composition_hash"`
-	Context     []string   `json:"confirmed_context,omitempty"`
+	JobKind     string               `json:"job_kind,omitempty"`
+	Operation   *DiagnosticOperation `json:"operation,omitempty"`
+	IngestKey   string               `json:"ingest_key,omitempty"`
+	Version     int                  `json:"schema_version"`
+	IncidentID  string               `json:"incident_id"`
+	AnalysisID  string               `json:"analysis_id"`
+	ClusterID   string               `json:"cluster_id"`
+	Evidence    []Evidence           `json:"evidence"`
+	PreviousID  string               `json:"previous_analysis_id,omitempty"`
+	Composition string               `json:"composition_hash"`
+	Context     []string             `json:"confirmed_context,omitempty"`
 }
 type DurableJob struct {
 	Version    int        `json:"schema_version"`
@@ -122,3 +124,38 @@ func validateAnalysis(a AnalysisVersion, input AnalysisInput) error {
 }
 
 func constantToken(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
+
+type DiagnosticScope struct {
+	ClusterID string    `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+	Pod       string    `json:"pod"`
+	Node      string    `json:"node"`
+	Workload  string    `json:"workload"`
+	From      time.Time `json:"from"`
+	To        time.Time `json:"to"`
+}
+type DiagnosticOperation struct {
+	ID          string          `json:"operation_id"`
+	IncidentID  string          `json:"incident_id"`
+	Actor       string          `json:"actor"`
+	Action      string          `json:"action"`
+	Question    string          `json:"question"`
+	Scope       DiagnosticScope `json:"scope"`
+	Checks      []string        `json:"checks"`
+	Status      string          `json:"status"`
+	CreatedAt   time.Time       `json:"created_at"`
+	CollectedAt *time.Time      `json:"collected_at,omitempty"`
+	EvidenceIDs []string        `json:"evidence_ids"`
+}
+type DiagnosticRequest struct {
+	Version     int             `json:"schema_version"`
+	IncidentID  string          `json:"incident_id"`
+	OperationID string          `json:"operation_id"`
+	Scope       DiagnosticScope `json:"scope"`
+	Checks      []string        `json:"checks"`
+}
+type DiagnosticResult struct {
+	Evidence    []Evidence `json:"evidence"`
+	Status      string     `json:"status"`
+	CollectedAt time.Time  `json:"collected_at"`
+}

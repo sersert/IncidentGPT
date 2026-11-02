@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1785,6 +1786,18 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"status": "ok", "incidents": len(store.List())})
 }
 
+func handleReady(w http.ResponseWriter, r *http.Request) {
+	if durableEnabled() {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+		if store.disk == nil || store.disk.rdb.Ping(ctx).Err() != nil {
+			http.Error(w, "durable storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]bool{"ready": true})
+}
+
 func intQuery(r *http.Request, key string, def int) int {
 	v := r.URL.Query().Get(key)
 	if v == "" {
@@ -1800,13 +1813,23 @@ func intQuery(r *http.Request, key string, def int) int {
 // ── Router ──────────────────────────────────────────────────────────────────
 
 func main() {
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	if err := awaitDurableStorage(startupCtx); err != nil {
+		startupCancel()
+		log.Fatalf("durable storage startup failed: %v", err)
+	}
+	startupCancel()
 	startAnalysisJobs()
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /readyz", handleReady)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/evidence/{evidence}", handleEvidence)
 	mux.HandleFunc("GET /api/v1/jobs/metrics", handleJobMetrics)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/resolution", handleResolution)
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolution", handleResolution)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/investigations", handleInvestigations)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/investigations", handleInvestigations)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/investigations/{job}/cancel", handleDiagnosticCancel)
 
 	mux.HandleFunc("POST /api/v1/changes", handleChangeIngest)
 	mux.HandleFunc("POST /api/v1/changes/coverage", handleChangeCoverage)

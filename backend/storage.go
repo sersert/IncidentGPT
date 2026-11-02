@@ -39,6 +39,10 @@ type Storage struct {
 
 // NewStorage подключается к Redis. nil означает «работаем в памяти».
 func NewStorage(addr, password string) *Storage {
+	return connectStorage(context.Background(), addr, password)
+}
+
+func connectStorage(parent context.Context, addr, password string) *Storage {
 	if addr == "" {
 		log.Printf("REDIS_ADDR не задан — история будет теряться при рестарте")
 		return nil
@@ -50,14 +54,43 @@ func NewStorage(addr, password string) *Storage {
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
+		rdb.Close()
 		log.Printf("Redis недоступен (%v) — работаем в памяти", err)
 		return nil
 	}
 	log.Printf("Redis подключён: %s", addr)
 	return &Storage{rdb: rdb, ctx: context.Background()}
+}
+
+// Durable queues cannot run in the legacy in-memory fallback. Retry before
+// serving traffic so a fresh Helm install does not depend on Redis pod ordering.
+func awaitDurableStorage(ctx context.Context) error {
+	if !durableEnabled() || store.disk != nil {
+		return nil
+	}
+	addr := env("REDIS_ADDR", "")
+	if addr == "" {
+		return fmt.Errorf("durable analysis requires REDIS_ADDR")
+	}
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if disk := connectStorage(ctx, addr, env("REDIS_PASSWORD", "")); disk != nil {
+			store.disk = disk
+			return nil
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *Storage) SaveIncident(inc *Incident) error {
