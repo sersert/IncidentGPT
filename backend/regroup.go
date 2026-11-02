@@ -109,6 +109,7 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 	target.HistorySources = appendUnique(target.HistorySources, source.ID)
 	source.HistorySources = appendUnique(source.HistorySources, target.ID)
 	for _, inc := range []*Incident{&source, &target} {
+		refreshCompositionContext(inc)
 		inc.AnalysisSummary = nil
 		inc.Analysis = nil
 		inc.Confidence = nil
@@ -143,4 +144,35 @@ func appendUnique(ids []string, id string) []string {
 
 func regroupEnabled() bool {
 	return durableEnabled() && env("MANUAL_REGROUP_ENABLED", "false") == "true"
+}
+
+// Current context must describe a member of the new composition. The original
+// enrichment and immutable evidence remain available in stored analysis history.
+func refreshCompositionContext(inc *Incident) {
+	inc.Context = nil
+	inc.EnrichedData = nil
+	inc.RawAlert = nil
+	inc.Chain = nil
+	inc.ChainLength = 0
+	inc.RootCauseID = nil
+	inc.Labels = nil
+	inc.Namespace = ""
+	inc.Source = ""
+	inc.Severity = "unknown"
+	if len(inc.Alerts) > 0 {
+		lead := inc.Alerts[0]
+		inc.Namespace = lead.Namespace
+		if inc.Namespace == "" {
+			inc.Namespace = lead.Labels["namespace"]
+		}
+		inc.Labels = lead.Labels
+		inc.Source = lead.Source
+		inc.Context = &IncidentContext{Namespace: inc.Namespace, Pod: lead.Labels["pod"], Node: lead.Labels["node"], PodStatus: "Unknown", Labels: lead.Labels}
+		for _, a := range inc.Alerts {
+			if severityRank(a.Severity) < severityRank(inc.Severity) {
+				inc.Severity = a.Severity
+			}
+		}
+	}
+	inc.Title = buildGroupTitle(inc.Alerts, inc.Namespace, "")
 }

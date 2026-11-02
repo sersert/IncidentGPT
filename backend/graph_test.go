@@ -315,3 +315,18 @@ func TestCompositionOptInAndExpiredOwner(t *testing.T) {
 	}
 	disk.rdb.Del(ctx, key)
 }
+
+func TestRegroupContextFollowsCurrentComposition(t *testing.T) {
+	inc := &Incident{ClusterID: "prod", Namespace: "api", Labels: map[string]string{"deployment": "old-api"}, Context: &IncidentContext{Pod: "removed-pod"}, EnrichedData: map[string]any{"k8s_context": map[string]any{"deployment": "removed-deployment"}}, Alerts: []*Alert{{Namespace: "jobs", Severity: "warning", Labels: map[string]string{"namespace": "jobs", "deployment": "worker", "pod": "worker-pod", "node": "worker-node"}}}}
+	refreshCompositionContext(inc)
+	scope := incidentDiagnosticScope(inc)
+	if scope.Namespace != "jobs" || scope.Workload != "worker" || scope.Pod != "worker-pod" || scope.Node != "worker-node" || inc.EnrichedData != nil {
+		t.Fatalf("refresh still targets removed composition: %+v", scope)
+	}
+	inc.Alerts = nil
+	refreshCompositionContext(inc)
+	scope = incidentDiagnosticScope(inc)
+	if scope.Namespace != "" || scope.Pod != "" || scope.Workload != "" {
+		t.Fatalf("empty composition still exposes old resources: %+v", scope)
+	}
+}

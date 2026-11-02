@@ -41,7 +41,12 @@ remain valid. `history_sources` references both records; original immutable evid
 and analyses retain their original incident identity and are read on that page.
 Audit records retain trusted Basic actor, UTC time and compositions. Durable ingestion partitions moved fingerprints before scheduling, with idempotent child batches, so a later automatic batch cannot undo human separation. Current summaries
 and latest/requested pointers are cleared, fencing late results; history returns the
-current composition hash for comparison. Request refresh to interpret the new group.
+current composition hash for comparison. Current labels/namespace/context are rebuilt
+from the remaining alerts; old enrichment and chain pointers are cleared, so refresh
+cannot target a removed workload. Refresh uses one representative current workload,
+not every namespace in a cross-namespace group; the collector namespace allowlist
+still applies. Original evidence remains available through analysis history.
+Request refresh to interpret the new group.
 
 Ручная перегруппировка требует `MANUAL_REGROUP_ENABLED=true` на backend и durable Redis.
 По умолчанию флаг выключен, POST отвечает 503, UI блокирует перенос; ingest сохраняет
