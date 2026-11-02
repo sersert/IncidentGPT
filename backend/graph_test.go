@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -328,5 +329,54 @@ func TestRegroupContextFollowsCurrentComposition(t *testing.T) {
 	scope = incidentDiagnosticScope(inc)
 	if scope.Namespace != "" || scope.Pod != "" || scope.Workload != "" {
 		t.Fatalf("empty composition still exposes old resources: %+v", scope)
+	}
+}
+
+func TestLegacyRepeatedBatchKeepsActiveIncidentBindings(t *testing.T) {
+	for _, persistent := range []bool{false, true} {
+		t.Run(fmt.Sprint("redis=", persistent), func(t *testing.T) {
+			old := store
+			defer func() { store = old }()
+			t.Setenv("DURABLE_ANALYSIS_ENABLED", "false")
+			t.Setenv("MANUAL_REGROUP_ENABLED", "false")
+			store = &Store{incidents: map[string]*Incident{}, alerts: map[string]*Alert{}}
+			if persistent {
+				addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
+				if addr == "" {
+					t.Skip("requires dedicated Redis")
+				}
+				disk := NewStorage(addr, "")
+				if disk == nil {
+					t.Fatal("Redis unavailable")
+				}
+				defer disk.rdb.Close()
+				store = &Store{disk: disk}
+			}
+			cluster := newStableID("cluster")
+			a := EnrichedAlert{ClusterName: cluster, Fingerprint: "a", Status: "firing", Labels: map[string]string{"namespace": "apps", "alertname": "A"}}
+			b := EnrichedAlert{ClusterName: cluster, Fingerprint: "b", Status: "firing", Labels: map[string]string{"namespace": "apps", "alertname": "B"}}
+			first := ingestGroup([]EnrichedAlert{a}, "group-a")
+			second := ingestGroup([]EnrichedAlert{b}, "group-b")
+			before := store.GetAlert(second.Alerts[0].ID).ReceivedAt
+			ingestGroup([]EnrichedAlert{a, b}, "combined")
+			if len(store.Get(first.ID).Alerts) != 1 || len(store.Get(second.ID).Alerts) != 1 {
+				t.Fatal("active alert duplicated between incidents")
+			}
+			fp := "cluster-" + digest(cluster, "b")
+			bound := store.FindIncidentForGroup([]string{fp})
+			if bound == nil || bound.ID != second.ID {
+				t.Fatal("active fingerprint binding overwritten")
+			}
+			if !store.GetAlert(second.Alerts[0].ID).ReceivedAt.After(before) {
+				t.Fatal("repeat delivery did not refresh received_at")
+			}
+			a.Status = "resolved"
+			b.Status = "resolved"
+			ingestGroup([]EnrichedAlert{a, b}, "combined")
+			ingestGroup([]EnrichedAlert{b}, "group-b")
+			if store.Get(first.ID).Status != "resolved" || store.Get(second.ID).Status != "resolved" {
+				t.Fatal("active incident became unreachable for resolution")
+			}
+		})
 	}
 }

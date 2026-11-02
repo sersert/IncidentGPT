@@ -546,9 +546,21 @@ func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident
 				continue
 			}
 			if existing != nil && *prev.IncidentID == existing.ID {
+				prev.ReceivedAt = time.Now()
+				s.PutAlert(prev)
+				for _, member := range existing.Alerts {
+					if member.ID == prev.ID {
+						member.ReceivedAt = prev.ReceivedAt
+					}
+				}
 				continue
 			}
-			// A closed incident's firing alert may recur as a new episode.
+			if previous := s.Get(*prev.IncidentID); previous == nil || previous.Status != "resolved" {
+				prev.ReceivedAt = time.Now()
+				s.PutAlert(prev)
+				continue
+			}
+			// Only a closed incident's firing alert may recur as a new episode.
 		}
 		a := s.toAlert(ea)
 		s.PutAlert(a)
