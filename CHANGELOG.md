@@ -7,6 +7,66 @@
 
 ## [Unreleased]
 
+- Dependency graph API и additive Redis-ключи `igpt:graph:*`: идентичности
+  cluster/namespace/kind/name, provenance и TTL 30 дней. Declared edges заменяются
+  сразу; metadata не создаёт application dependencies. Новые флаги enricher
+  `topology.observationsEnabled` / `topology.correlationEnabled` выключены по умолчанию.
+- Ручной `POST /incidents/{id}/regroup` требует opt-in `MANUAL_REGROUP_ENABLED=true`
+  и durable Redis. История/audit/bindings `igpt:regroup:*` сохраняются без TTL;
+  analysis history получает composition/hash и source links. Без флага ingest
+  сохраняет прежний lock по группе; с флагом использует общий fenced composition lock.
+  Перед переключением флага дренировать ingest, перед rollback сохранить Redis backup.
+
+
+### Added
+- Управляемые проверки чтения по инциденту: `POST/GET
+  /api/v1/incidents/{id}/investigations` и `POST
+  /api/v1/incidents/{id}/investigations/{job}/cancel`. Действия `refresh`,
+  `hypothesis`, `compare` ограничены ресурсами инцидента; вопрос — до 500
+  Unicode-символов. Доступ использует существующую единую admin-учётку
+  `TIMELINE_READ_*`, включая запуск и отмену; отдельной роли reader пока нет.
+- Внутренний `POST /v1/diagnostics` у enricher: фиксированные проверки
+  Kubernetes, метрик и логов; обязательные сервисный токен и список namespace.
+  По умолчанию выключен вместе с `GUIDED_DIAGNOSTICS_ENABLED` у backend.
+- GET истории анализа дополнен `operations` и `diagnostics_enabled`.
+  Вход анализа дополнен необязательными `job_kind` и `operation`; очередь
+  использует `job.kind=diagnostics` и ключ `igpt:diagnostics:active:{id}`
+  для одной активной проверки на инцидент. Собранные evidence сохраняются
+  перед анализом и повторно используются при отказе провайдера.
+
+### Fixed
+- Повторная пачка алертов не дублирует fingerprint из другого активного
+  инцидента и не перезаписывает его binding. Новый эпизод создаётся только
+  после закрытия прежнего инцидента; received_at обновляется при повторе.
+- Enricher в durable correlation ожидает Redis перед запуском HTTP/очереди,
+  закрывает неудачные клиенты и использует startupProbe; legacy fallback сохранён.
+- После ручного regroup текущие namespace/labels/context пересчитываются по
+  оставшимся алертам; удалённый ресурс не используется при следующем refresh.
+  Старые enrichment/chain pointers очищаются, immutable history сохраняется.
+- Телефонный детектор sanitizer не маскирует цифровые фрагменты внутри
+  смешанных hex-ID длиной 32/64 символа: они связывают observations и citations.
+  Телефоны рядом с ID, числовые строки и секреты в чувствительных полях
+  продолжают маскироваться; custom/credential правила не обходятся.
+- В durable-режиме backend ожидает Redis до приёма трафика и запуска очереди,
+  поэтому свежая установка не зависит от порядка старта подов. `/readyz`
+  проверяет доступность Redis; Helm использует его для readiness. Legacy-режим
+  сохраняет прежний fallback в память. Без `REDIS_ADDR` durable-запуск отклоняется.
+- Пустые типизированные массивы входа очереди сохраняются как `null`, чтобы
+  Lua cjson не превращал их в `{}` при claim, retry, cancel и finish.
+  Существующие корректные записи сохраняют формат; backfill не требуется.
+- Отказ обработки по таймауту записывает повторную попытку отдельным коротким
+  контекстом, сохраняя проверки владельца, lease и отмены.
+- UI блокирует запуск выключенных проверок, сохраняя историю и отмену.
+  Helm отклоняет включение без обязательных секретов/namespace; адрес
+  collector по умолчанию разрешается в namespace релиза.
+
+Порядок обновления: сначала совместимые ai-worker и enricher, затем backend
+и UI; флаги включать только после настройки общих analysis/sanitizer секретов,
+admin-доступа и явного списка namespace. Старый ai-worker игнорирует новые
+JSON-поля, но не предоставляет всю семантику диагностических операций.
+Перед откатом выключить новые запросы, отменить или дождаться завершения
+очереди и сохранить evidence/историю и резервную копию Redis.
+
 ## [0.2.0] - 2026-08-09
 
 Веб-интерфейс, логи в обогащении и разбор, который не отправляет инженера за данными.

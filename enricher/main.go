@@ -451,7 +451,18 @@ func main() {
 	metricsConfigLoaded = true
 
 	// Redis для лёгкой корреляции (optional — фолбэк на поштучную отправку)
-	if err := initRedis(); err != nil {
+	var redisErr error
+	if durableCorrelation() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		redisErr = awaitCorrelationRedis(ctx)
+		cancel()
+		if redisErr != nil {
+			log.Fatalf("durable correlation storage unavailable: %v", redisErr)
+		}
+	} else {
+		redisErr = initRedis()
+	}
+	if err := redisErr; err != nil {
 		log.Printf("WARN: redis init failed: %v (correlation disabled, alerts sent individually)", err)
 	} else {
 		log.Printf("INFO: redis connected at %s, correlation enabled (window=%s settle=%s raw_dedup_ttl=%s)",

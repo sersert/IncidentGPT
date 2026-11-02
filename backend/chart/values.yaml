@@ -19,8 +19,10 @@ env:
   LISTEN_ADDR: ":8080"
   REPORTS_ENABLED: "false"
   GUIDED_DIAGNOSTICS_ENABLED: "false"
-  DIAGNOSTIC_COLLECTOR_URL: "http://incidentgpt-enricher.incidentgpt.svc:9099/v1/diagnostics"
+  DIAGNOSTIC_COLLECTOR_URL: "http://incidentgpt-enricher:9099/v1/diagnostics"
   RUNBOOK_DIRECTORY: ""
+  # Ручной перенос алертов включает общий composition lock; по умолчанию выключен.
+  MANUAL_REGROUP_ENABLED: "false"
   DURABLE_ANALYSIS_ENABLED: "false"
   STRUCTURED_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/v1/analyze"
   CHANGES_ENABLED: "false"

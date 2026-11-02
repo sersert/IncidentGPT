@@ -73,7 +73,7 @@ func (d *Detector) InspectString(s, path string, pol policy.Policy) []domain.Fin
 	if pol.RedactEmails && emailRE.MatchString(s) {
 		findings = append(findings, domain.Finding{Rule: "email", Path: path, Action: "mask"})
 	}
-	if pol.RedactPhones && phoneRE.MatchString(s) {
+	if pol.RedactPhones && redactPhones(s, &domain.Summary{}) != s {
 		findings = append(findings, domain.Finding{Rule: "phone", Path: path, Action: "mask"})
 	}
 	if pol.IPMode != "none" && ipCandidateRE.MatchString(s) {
@@ -107,8 +107,31 @@ func redactEmails(s string, summary *domain.Summary) string {
 }
 
 var phoneRE = regexp.MustCompile(`(?:\+?\d[\d ()-]{8,}\d)`)
+var hexIdentifierRE = regexp.MustCompile(`\b[0-9a-fA-F]{32}(?:[0-9a-fA-F]{32})?\b`)
 
 func redactPhones(s string, summary *domain.Summary) string {
+	// Do not treat digit runs inside opaque hashes/IDs as phone numbers. Keep
+	// numeric-only strings subject to masking, and process real phones on either
+	// side independently. Sensitive-key, credential and custom rules still apply.
+	var out strings.Builder
+	last := 0
+	for _, span := range hexIdentifierRE.FindAllStringIndex(s, -1) {
+		identifier := s[span[0]:span[1]]
+		if !strings.ContainsAny(identifier, "abcdefABCDEF") {
+			continue
+		}
+		out.WriteString(redactPhoneText(s[last:span[0]], summary))
+		out.WriteString(identifier)
+		last = span[1]
+	}
+	if last == 0 {
+		return redactPhoneText(s, summary)
+	}
+	out.WriteString(redactPhoneText(s[last:], summary))
+	return out.String()
+}
+
+func redactPhoneText(s string, summary *domain.Summary) string {
 	return phoneRE.ReplaceAllStringFunc(s, func(phone string) string {
 		digits := onlyDigits(phone)
 		if len(digits) < 10 {

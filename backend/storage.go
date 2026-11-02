@@ -33,26 +33,35 @@ const (
 )
 
 type Storage struct {
-	rdb *redis.Client
-	ctx context.Context
+	rdb       *redis.Client
+	ctx       context.Context
+	lockKey   string
+	lockOwner string
+	writeErr  error
 }
 
 // NewStorage подключается к Redis. nil означает «работаем в памяти».
 func NewStorage(addr, password string) *Storage {
+	return connectStorage(context.Background(), addr, password)
+}
+
+func connectStorage(parent context.Context, addr, password string) *Storage {
 	if addr == "" {
 		log.Printf("REDIS_ADDR не задан — история будет теряться при рестарте")
 		return nil
 	}
 	rdb := redis.NewClient(&redis.Options{
-		Addr:         addr,
-		Password:     password,
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
+		Addr:                  addr,
+		ContextTimeoutEnabled: true,
+		Password:              password,
+		DialTimeout:           5 * time.Second,
+		ReadTimeout:           3 * time.Second,
+		WriteTimeout:          3 * time.Second,
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {
+		rdb.Close()
 		log.Printf("Redis недоступен (%v) — работаем в памяти", err)
 		return nil
 	}
@@ -60,19 +69,46 @@ func NewStorage(addr, password string) *Storage {
 	return &Storage{rdb: rdb, ctx: context.Background()}
 }
 
+// Durable queues cannot run in the legacy in-memory fallback. Retry before
+// serving traffic so a fresh Helm install does not depend on Redis pod ordering.
+func awaitDurableStorage(ctx context.Context) error {
+	if !durableEnabled() || store.disk != nil {
+		return nil
+	}
+	addr := env("REDIS_ADDR", "")
+	if addr == "" {
+		return fmt.Errorf("durable analysis requires REDIS_ADDR")
+	}
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if disk := connectStorage(ctx, addr, env("REDIS_PASSWORD", "")); disk != nil {
+			store.disk = disk
+			return nil
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
 func (s *Storage) SaveIncident(inc *Incident) error {
 	data, err := json.Marshal(inc)
 	if err != nil {
 		return err
 	}
-	pipe := s.rdb.TxPipeline()
-	pipe.Set(s.ctx, keyIncident+inc.ID, data, 0)
-	pipe.ZAdd(s.ctx, keyIncidentIdx, redis.Z{Score: float64(inc.CreatedAt.Unix()), Member: inc.ID})
-	for fp := range inc.Fingerprints {
-		pipe.Set(s.ctx, keyFingerprint+fp, inc.ID, 0)
-	}
-	_, err = pipe.Exec(s.ctx)
-	return err
+	return s.compositionWrite(func(pipe redis.Pipeliner) {
+		pipe.Set(s.ctx, keyIncident+inc.ID, data, 0)
+		pipe.ZAdd(s.ctx, keyIncidentIdx, redis.Z{Score: float64(inc.CreatedAt.Unix()), Member: inc.ID})
+		for fp := range inc.Fingerprints {
+			pipe.Set(s.ctx, keyFingerprint+fp, inc.ID, 0)
+		}
+	})
 }
 
 func (s *Storage) GetIncident(id string) (*Incident, error) {
@@ -130,11 +166,10 @@ func (s *Storage) SaveAlert(a *Alert) error {
 	if err != nil {
 		return err
 	}
-	pipe := s.rdb.TxPipeline()
-	pipe.Set(s.ctx, keyAlert+a.ID, data, 0)
-	pipe.ZAdd(s.ctx, keyAlertIdx, redis.Z{Score: float64(a.ReceivedAt.Unix()), Member: a.ID})
-	_, err = pipe.Exec(s.ctx)
-	return err
+	return s.compositionWrite(func(pipe redis.Pipeliner) {
+		pipe.Set(s.ctx, keyAlert+a.ID, data, 0)
+		pipe.ZAdd(s.ctx, keyAlertIdx, redis.Z{Score: float64(a.ReceivedAt.Unix()), Member: a.ID})
+	})
 }
 
 func (s *Storage) GetAlert(id string) (*Alert, error) {
@@ -218,4 +253,31 @@ func sortIncidents(list []*Incident) {
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].CreatedAt.After(list[j].CreatedAt)
 	})
+}
+
+// A Redis WATCH fences all composition writes, including delayed writes after
+// lock expiry or replacement. Legacy callers keep their existing transaction.
+func (s *Storage) compositionWrite(queue func(redis.Pipeliner)) error {
+	if s.writeErr != nil {
+		return s.writeErr
+	}
+	var err error
+	if s.lockKey == "" {
+		pipe := s.rdb.TxPipeline()
+		queue(pipe)
+		_, err = pipe.Exec(s.ctx)
+	} else {
+		err = s.rdb.Watch(s.ctx, func(tx *redis.Tx) error {
+			owner, e := tx.Get(s.ctx, s.lockKey).Result()
+			if e != nil || owner != s.lockOwner {
+				return fmt.Errorf("composition lease lost")
+			}
+			_, e = tx.TxPipelined(s.ctx, func(pipe redis.Pipeliner) error { queue(pipe); return nil })
+			return e
+		}, s.lockKey)
+	}
+	if s.lockKey != "" && err != nil {
+		s.writeErr = err
+	}
+	return err
 }

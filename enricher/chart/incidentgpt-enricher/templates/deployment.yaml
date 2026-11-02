@@ -1,3 +1,24 @@
+{{- if or .Values.topology.observationsEnabled .Values.topology.correlationEnabled }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "topology requires changes.existingSecret with the analysis service token" }}
+{{- end }}
+{{- if and .Values.topology.observationsEnabled (not .Values.topology.backendUrl) }}
+{{- fail "topology observations require topology.backendUrl" }}
+{{- end }}
+{{- if and .Values.topology.correlationEnabled (not .Values.changes.durableCorrelation) }}
+{{- fail "topology.correlationEnabled requires changes.durableCorrelation" }}
+{{- end }}
+{{- end }}
+{{- if .Values.diagnostics.enabled }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "diagnostics.enabled requires changes.existingSecret with the analysis service token" }}
+{{- end }}
+{{- range (splitList "," .Values.diagnostics.namespaces) }}
+{{- if not (trim .) }}
+{{- fail "diagnostics.enabled requires diagnostics.namespaces with explicit nonempty namespace names" }}
+{{- end }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -48,7 +69,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.analysisServiceTokenKey }}
-                  optional: true
+                  optional: {{ not (or .Values.diagnostics.enabled .Values.topology.observationsEnabled .Values.topology.correlationEnabled .Values.changes.durableCorrelation) }}
             {{- end }}
             - name: CHANGE_COLLECTOR_ENABLED
               value: {{ .Values.changes.enabled | quote }}
@@ -158,6 +179,12 @@ spec:
               mountPath: /etc/enricher
               readOnly: true
 
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 75
           readinessProbe:
             httpGet:
               path: /readyz

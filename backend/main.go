@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -448,6 +449,10 @@ var store = NewStore()
 
 // toAlert разбирает обогащённый алерт в сущность потока.
 func toAlert(ea EnrichedAlert) *Alert {
+	return store.toAlert(ea)
+}
+
+func (s *Store) toAlert(ea EnrichedAlert) *Alert {
 	alertname := ea.Labels["alertname"]
 	if alertname == "" {
 		alertname = "Unknown Alert"
@@ -461,7 +466,7 @@ func toAlert(ea EnrichedAlert) *Alert {
 		status = "firing"
 	}
 	return &Alert{
-		ID:                store.NextAlertID(),
+		ID:                s.NextAlertID(),
 		CorrelationReason: ea.CorrelationReason,
 		Fingerprint:       ea.Fingerprint,
 		AlertName:         alertname,
@@ -482,6 +487,10 @@ func toAlert(ea EnrichedAlert) *Alert {
 // ОДИН инцидент. Раньше здесь был цикл по алертам, и группа из 8 связанных
 // алертов превращалась в 8 инцидентов — веб показывал не то, что Telegram.
 func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
+	return store.ingestGroup(enriched, groupKey)
+}
+
+func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 	if len(enriched) == 0 {
 		return nil
 	}
@@ -506,7 +515,7 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 		}
 	}
 
-	existing := store.FindIncidentForGroup(fingerprints)
+	existing := s.FindIncidentForGroup(fingerprints)
 
 	// Вся группа погасла — закрываем инцидент.
 	if len(firing) == 0 {
@@ -518,10 +527,10 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 			existing.DurationSec = &dur
 			for _, a := range existing.Alerts {
 				a.Status = "resolved"
-				store.PutAlert(a)
+				s.PutAlert(a)
 			}
 			// В памяти хватило бы мутации по указателю, в Redis нужно записать.
-			store.Put(existing)
+			s.Put(existing)
 			log.Printf("Resolved incident %s", existing.ID)
 		}
 		recordIngestLifecycle(existing)
@@ -531,18 +540,30 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 	// Собираем алерты потока; повторные по fingerprint не дублируем.
 	newAlerts := make([]*Alert, 0, len(firing))
 	for _, ea := range firing {
-		if prev := store.FindAlertByFingerprint(ea.Fingerprint); prev != nil {
+		if prev := s.FindAlertByFingerprint(ea.Fingerprint); prev != nil {
 			if prev.IncidentID == nil {
 				newAlerts = append(newAlerts, prev)
 				continue
 			}
 			if existing != nil && *prev.IncidentID == existing.ID {
+				prev.ReceivedAt = time.Now()
+				s.PutAlert(prev)
+				for _, member := range existing.Alerts {
+					if member.ID == prev.ID {
+						member.ReceivedAt = prev.ReceivedAt
+					}
+				}
 				continue
 			}
-			// A closed incident's firing alert may recur as a new episode.
+			if previous := s.Get(*prev.IncidentID); previous == nil || previous.Status != "resolved" {
+				prev.ReceivedAt = time.Now()
+				s.PutAlert(prev)
+				continue
+			}
+			// Only a closed incident's firing alert may recur as a new episode.
 		}
-		a := toAlert(ea)
-		store.PutAlert(a)
+		a := s.toAlert(ea)
+		s.PutAlert(a)
 		newAlerts = append(newAlerts, a)
 	}
 
@@ -555,11 +576,11 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 			a.IncidentID = &existing.ID
 			existing.Alerts = append(existing.Alerts, a)
 			existing.Fingerprints[a.Fingerprint] = true
-			store.PutAlert(a)
+			s.PutAlert(a)
 		}
 		existing.AlertCount = len(existing.Alerts)
 		existing.UpdatedAt = time.Now()
-		store.Put(existing)
+		s.Put(existing)
 		if len(newAlerts) > 0 {
 			log.Printf("Incident %s: +%d alerts (total %d)", existing.ID, len(newAlerts), existing.AlertCount)
 		}
@@ -569,7 +590,7 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 
 	// Новая группа — новый инцидент.
 	lead := firing[0]
-	id := store.NextID()
+	id := s.NextID()
 	now := time.Now()
 
 	ns := strVal(lead.K8sContext, "namespace")
@@ -650,11 +671,11 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 	}
 	for _, a := range newAlerts {
 		a.IncidentID = &id
-		store.PutAlert(a)
+		s.PutAlert(a)
 		inc.Fingerprints[a.Fingerprint] = true
 	}
 
-	store.Put(inc)
+	s.Put(inc)
 	log.Printf("Created incident %s from %d alerts: %s [%s]", id, len(newAlerts), title, severity)
 	recordIngestLifecycle(inc)
 	return inc
@@ -1595,6 +1616,18 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"status": "ok", "incidents": len(store.List())})
 }
 
+func handleReady(w http.ResponseWriter, r *http.Request) {
+	if durableEnabled() {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+		if store.disk == nil || store.disk.rdb.Ping(ctx).Err() != nil {
+			http.Error(w, "durable storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]bool{"ready": true})
+}
+
 func intQuery(r *http.Request, key string, def int) int {
 	v := r.URL.Query().Get(key)
 	if v == "" {
@@ -1611,6 +1644,7 @@ func intQuery(r *http.Request, key string, def int) int {
 
 func backendHandler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /readyz", handleReady)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/evidence/{evidence}", handleEvidence)
 	mux.HandleFunc("GET /api/v1/jobs/metrics", handleJobMetrics)
@@ -1690,6 +1724,12 @@ func backendHandler() http.Handler {
 }
 
 func main() {
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	if err := awaitDurableStorage(startupCtx); err != nil {
+		startupCancel()
+		log.Fatalf("durable storage startup failed: %v", err)
+	}
+	startupCancel()
 	startAnalysisJobs()
 	startGraphConfiguration()
 	log.Printf("incidentgpt-backend listening on %s", listenAddr)

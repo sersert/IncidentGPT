@@ -132,6 +132,8 @@ jobs:
       - run: helm lint backend/chart
       - run: helm lint ui/chart
       - run: helm lint deploy/redis
+      - name: diagnostics configuration guards
+        run: bash deploy/test-diagnostics-charts.sh
       # Зонтичный чарт линтуется только с собранными зависимостями.
       - run: helm dependency build deploy/incidentgpt
       - run: helm lint deploy/incidentgpt

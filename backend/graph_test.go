@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,7 @@ func TestGraphTypesAndClusterIdentity(t *testing.T) {
 	}
 }
 func TestRegroupPreservesHistoryAndFencesCompletion(t *testing.T) {
+	t.Setenv("MANUAL_REGROUP_ENABLED", "true")
 	addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
 	if addr == "" {
 		t.Skip("requires Redis")
@@ -253,5 +255,128 @@ func TestDurableCompositionLimitAndClosedAlertRecurrence(t *testing.T) {
 		if err != nil || stored.IncidentID == nil || *stored.IncidentID != next.ID {
 			t.Fatal("new standalone alert binding missing")
 		}
+	}
+}
+
+func TestCompositionOptInAndExpiredOwner(t *testing.T) {
+	disk, inc := diagnosticTestStore(t)
+	t.Setenv("DURABLE_ANALYSIS_ENABLED", "true")
+	t.Setenv("MANUAL_REGROUP_ENABLED", "false")
+	t.Setenv("TIMELINE_READ_USER", "admin")
+	t.Setenv("TIMELINE_READ_PASSWORD", "pw")
+	t.Setenv("ANALYSIS_SERVICE_TOKEN", "service")
+	ctx := context.Background()
+	sanitizer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req sanitizerPayloadRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		writeJSON(w, 200, map[string]any{"status": "sanitized", "payload": req.Payload})
+	}))
+	defer sanitizer.Close()
+	t.Setenv("SANITIZER_URL", sanitizer.URL)
+	t.Setenv("SANITIZER_AUTH_SHARED_SECRET", "hmac")
+	disk.rdb.Set(ctx, "igpt:composition:lock", "other-owner", time.Minute)
+	defer disk.rdb.Del(ctx, "igpt:composition:lock")
+	ingest := func() *httptest.ResponseRecorder {
+		payload, _ := json.Marshal(map[string]any{"group_key": newStableID("group"), "alerts": []EnrichedAlert{{ClusterName: "test", Status: "firing", Fingerprint: newStableID("fp"), Labels: map[string]string{"namespace": "test", "alertname": "Test"}}}})
+		r := httptest.NewRequest("POST", "/", bytes.NewReader(payload))
+		r.Header.Set("Authorization", "Bearer service")
+		w := httptest.NewRecorder()
+		handleDurableIngest(w, r)
+		return w
+	}
+	if w := ingest(); w.Code != 202 {
+		t.Fatalf("default ingest serialized globally: %d %s", w.Code, w.Body.String())
+	}
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"alert_id":"unused"}`))
+	r.SetBasicAuth("admin", "pw")
+	w := httptest.NewRecorder()
+	handleRegroup(w, r)
+	if w.Code != 503 || !strings.Contains(w.Body.String(), "disabled") {
+		t.Fatal("regroup enabled by default", w.Code)
+	}
+	t.Setenv("MANUAL_REGROUP_ENABLED", "true")
+	if w := ingest(); w.Code != 503 {
+		t.Fatal("enabled ingest bypassed composition lock", w.Code)
+	}
+	key := newStableID("lease")
+	disk.rdb.Set(ctx, key, "expired-owner", time.Minute)
+	scoped := &Storage{rdb: disk.rdb, ctx: ctx, lockKey: key, lockOwner: "expired-owner"}
+	disk.rdb.Set(ctx, key, "new-owner", time.Minute)
+	original := store.Get(inc.ID)
+	inc.Title = "stale overwrite"
+	if scoped.SaveIncident(inc) == nil {
+		t.Fatal("expired owner wrote incident")
+	}
+	if got := store.Get(inc.ID); got.Title != original.Title {
+		t.Fatal("late write overwrote current incident")
+	}
+	a := &Alert{ID: newStableID("alert"), Fingerprint: newStableID("fp")}
+	if scoped.SaveAlert(a) == nil || disk.rdb.Exists(ctx, keyAlert+a.ID).Val() != 0 {
+		t.Fatal("expired owner wrote alert")
+	}
+	disk.rdb.Del(ctx, key)
+}
+
+func TestRegroupContextFollowsCurrentComposition(t *testing.T) {
+	inc := &Incident{ClusterID: "prod", Namespace: "api", Labels: map[string]string{"deployment": "old-api"}, Context: &IncidentContext{Pod: "removed-pod"}, EnrichedData: map[string]any{"k8s_context": map[string]any{"deployment": "removed-deployment"}}, Alerts: []*Alert{{Namespace: "jobs", Severity: "warning", Labels: map[string]string{"namespace": "jobs", "deployment": "worker", "pod": "worker-pod", "node": "worker-node"}}}}
+	refreshCompositionContext(inc)
+	scope := incidentDiagnosticScope(inc)
+	if scope.Namespace != "jobs" || scope.Workload != "worker" || scope.Pod != "worker-pod" || scope.Node != "worker-node" || inc.EnrichedData != nil {
+		t.Fatalf("refresh still targets removed composition: %+v", scope)
+	}
+	inc.Alerts = nil
+	refreshCompositionContext(inc)
+	scope = incidentDiagnosticScope(inc)
+	if scope.Namespace != "" || scope.Pod != "" || scope.Workload != "" {
+		t.Fatalf("empty composition still exposes old resources: %+v", scope)
+	}
+}
+
+func TestLegacyRepeatedBatchKeepsActiveIncidentBindings(t *testing.T) {
+	for _, persistent := range []bool{false, true} {
+		t.Run(fmt.Sprint("redis=", persistent), func(t *testing.T) {
+			old := store
+			defer func() { store = old }()
+			t.Setenv("DURABLE_ANALYSIS_ENABLED", "false")
+			t.Setenv("MANUAL_REGROUP_ENABLED", "false")
+			store = &Store{incidents: map[string]*Incident{}, alerts: map[string]*Alert{}}
+			if persistent {
+				addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
+				if addr == "" {
+					t.Skip("requires dedicated Redis")
+				}
+				disk := NewStorage(addr, "")
+				if disk == nil {
+					t.Fatal("Redis unavailable")
+				}
+				defer disk.rdb.Close()
+				store = &Store{disk: disk}
+			}
+			cluster := newStableID("cluster")
+			a := EnrichedAlert{ClusterName: cluster, Fingerprint: "a", Status: "firing", Labels: map[string]string{"namespace": "apps", "alertname": "A"}}
+			b := EnrichedAlert{ClusterName: cluster, Fingerprint: "b", Status: "firing", Labels: map[string]string{"namespace": "apps", "alertname": "B"}}
+			first := ingestGroup([]EnrichedAlert{a}, "group-a")
+			second := ingestGroup([]EnrichedAlert{b}, "group-b")
+			before := store.GetAlert(second.Alerts[0].ID).ReceivedAt
+			ingestGroup([]EnrichedAlert{a, b}, "combined")
+			if len(store.Get(first.ID).Alerts) != 1 || len(store.Get(second.ID).Alerts) != 1 {
+				t.Fatal("active alert duplicated between incidents")
+			}
+			fp := "cluster-" + digest(cluster, "b")
+			bound := store.FindIncidentForGroup([]string{fp})
+			if bound == nil || bound.ID != second.ID {
+				t.Fatal("active fingerprint binding overwritten")
+			}
+			if !store.GetAlert(second.Alerts[0].ID).ReceivedAt.After(before) {
+				t.Fatal("repeat delivery did not refresh received_at")
+			}
+			a.Status = "resolved"
+			b.Status = "resolved"
+			ingestGroup([]EnrichedAlert{a, b}, "combined")
+			ingestGroup([]EnrichedAlert{b}, "group-b")
+			if store.Get(first.ID).Status != "resolved" || store.Get(second.ID).Status != "resolved" {
+				t.Fatal("active incident became unreachable for resolution")
+			}
+		})
 	}
 }
