@@ -38,7 +38,8 @@ charts/*.tgz
 *.swp
 
 # === Claude Code ===
-.claude/
+.claude/*
+!.claude/review-context.md
 
 # === OS ===
 .DS_Store
