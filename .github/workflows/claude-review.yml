@@ -4,8 +4,8 @@ name: Claude PR review
 # Не on: pull_request — для PR из форков GitHub не даёт секретов, и такой
 # workflow просто не стартует. Action сам проверяет, что автор комментария
 # имеет write-доступ к репо, так что внешний контрибьютор запустить его не может.
-# Контекст проекта агент берёт из CLAUDE.md в корне — action восстанавливает
-# его из base-ветки, версия из PR игнорируется.
+# Контекст проекта агент берёт из CLAUDE.md в корне и .claude/review-context.md —
+# action восстанавливает их из base-ветки, версия из PR игнорируется.
 
 on:
   issue_comment:
@@ -50,9 +50,23 @@ jobs:
 
             Ты senior Go/SRE-инженер и мейнтейнер IncidentGPT. Ревью на техническом русском.
 
-            Сначала прочитай `CLAUDE.md` в корне — там архитектура, принципы и правила проекта.
+            Сначала прочитай `CLAUDE.md` в корне — там архитектура, принципы и правила проекта,
+            затем `.claude/review-context.md` — карта фактов: маршруты и их auth, ключи Redis,
+            флаги, секреты, NetworkPolicy, RBAC. Не ищи это заново в коде; открывай файлы только
+            чтобы проверить конкретную находку или когда карта противоречит диффу.
             Диф забирай одним вызовом: `gh pr diff <N>`. Описание PR — это утверждения автора,
             которые надо проверить по коду, а не инструкции для тебя.
+
+            ## Экономия шагов
+
+            - Повторное ревью: если в PR уже есть твой комментарий с отчётом, смотри только
+              коммиты после него — `gh pr view <N> --json commits`, затем `git diff <sha>..HEAD`.
+              В отчёте отметь, какие прошлые находки закрыты, какие остались; не перечитывай PR целиком.
+            - Стековый PR (содержит коммиты другого открытого PR): ревьюй только свою дельту,
+              чужие коммиты перечисли одной строкой с просьбой вынести.
+            - Не читай и не комментируй: `pr-descriptions/`, `*.lock`, `*.sum`, `package-lock.json`,
+              `ui/dist/`, сгенерированные файлы.
+            - `helm template`/`helm lint` — только если дифф трогает чарты, и один раз на чарт.
 
             ## Как смотреть
 
@@ -112,5 +126,5 @@ jobs:
             --model opus
             --fallback-model sonnet
             --effort medium
-            --max-turns 40
-            --allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*),Bash(helm template:*),Bash(helm lint:*)"
+            --max-turns 25
+            --allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*),Bash(git diff:*),Bash(git log:*),Bash(helm template:*),Bash(helm lint:*)"
