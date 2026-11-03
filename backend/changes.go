@@ -102,6 +102,9 @@ func changeServiceAuth(w http.ResponseWriter, r *http.Request) bool {
 // Timeline readers use real HTTP Basic credentials. X-Auth-User alone grants
 // no access. All authenticated readers have the existing single-admin scope.
 func changeReadAuth(w http.ResponseWriter, r *http.Request) bool {
+	if !browserOriginAllowed(w, r) {
+		return false
+	}
 	user, pass, ok := r.BasicAuth()
 	expectedUser, expectedPass := env("TIMELINE_READ_USER", ""), env("TIMELINE_READ_PASSWORD", "")
 	if !ok || expectedUser == "" || expectedPass == "" || subtle.ConstantTimeCompare([]byte(user), []byte(expectedUser)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(expectedPass)) != 1 {

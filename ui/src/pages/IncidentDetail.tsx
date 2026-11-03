@@ -510,6 +510,7 @@ export function IncidentDetail() {
           {tab === 'logs' && <LogsViewer logs={logs} loading={logsQuery.isLoading} reason={logsQuery.data?.reason} />}
           {tab === 'raw' && (
             <>
+              {!!incident.history_sources?.length && !incident.raw_alert && !incident.enriched_data && <p className="mb-3 text-sm text-text-muted">Состав инцидента изменён. Исходные данные сохранены в истории разборов; обновите контекст для текущего состава.</p>}
               <EnrichmentLogs data={incident.enriched_data} />
               <RawViewer data={incident.raw_alert} title="Исходный алерт" />
               <RawViewer data={incident.enriched_data} title="Обогащённые данные" />

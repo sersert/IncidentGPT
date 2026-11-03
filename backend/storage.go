@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -33,11 +34,12 @@ const (
 )
 
 type Storage struct {
-	rdb       *redis.Client
-	ctx       context.Context
-	lockKey   string
-	lockOwner string
-	writeErr  error
+	rdb               *redis.Client
+	ctx               context.Context
+	lockKey           string
+	lockOwner         string
+	writeErr          error
+	alertIndexEnabled atomic.Bool
 }
 
 // NewStorage подключается к Redis. nil означает «работаем в памяти».
@@ -166,6 +168,9 @@ func (s *Storage) SaveAlert(a *Alert) error {
 	return s.compositionWrite(func(pipe redis.Pipeliner) {
 		pipe.Set(s.ctx, keyAlert+a.ID, data, 0)
 		pipe.ZAdd(s.ctx, keyAlertIdx, redis.Z{Score: float64(a.ReceivedAt.Unix()), Member: a.ID})
+		if s.alertIndexEnabled.Load() || regroupEnabled() {
+			pipe.Eval(s.ctx, updateAlertIndex, []string{alertFingerprintKey(a.Fingerprint), keyAlert + a.ID}, a.ID, a.ReceivedAt.UnixMicro(), a.Status, "")
+		}
 	})
 }
 
@@ -198,6 +203,34 @@ func (s *Storage) ListAlerts() ([]*Alert, error) {
 }
 
 func (s *Storage) FindAlertByFingerprint(fp string) (*Alert, error) {
+	id, err := s.rdb.HGet(s.ctx, alertFingerprintKey(fp), "alert_id").Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+	if id != "" {
+		s.alertIndexEnabled.Store(true)
+		a, err := s.GetAlert(id)
+		if err != nil {
+			return nil, err
+		}
+		if a.Fingerprint != fp {
+			return nil, fmt.Errorf("alert fingerprint index mismatch")
+		}
+		if a.Status == "firing" {
+			return a, nil
+		}
+	}
+	ready, err := s.rdb.Exists(s.ctx, alertIndexReady).Result()
+	if err != nil {
+		return nil, err
+	}
+	if ready != 0 {
+		s.alertIndexEnabled.Store(true)
+		return nil, redis.Nil
+	}
+	if regroupEnabled() {
+		return nil, fmt.Errorf("alert fingerprint index requires startup migration")
+	}
 	alerts, err := s.ListAlerts()
 	if err != nil {
 		return nil, err

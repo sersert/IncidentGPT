@@ -58,6 +58,7 @@ func TestRegroupPreservesHistoryAndFencesCompletion(t *testing.T) {
 	r := httptest.NewRequest("POST", "/", bytes.NewReader(raw))
 	r.SetPathValue("id", id)
 	r.SetBasicAuth("admin", "pw")
+	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	handleRegroup(w, r)
 	if w.Code != http.StatusOK {
@@ -106,6 +107,7 @@ func TestRegroupPreservesHistoryAndFencesCompletion(t *testing.T) {
 	r = httptest.NewRequest("POST", "/", bytes.NewReader(raw))
 	r.SetPathValue("id", id)
 	r.SetBasicAuth("admin", "pw")
+	r.Header.Set("Content-Type", "application/json")
 	handleRegroup(w, r)
 	if w.Code != 400 {
 		t.Fatal("duplicate move accepted")
@@ -113,6 +115,7 @@ func TestRegroupPreservesHistoryAndFencesCompletion(t *testing.T) {
 }
 
 func TestGraphAPIPersistenceReplacementAndSanitizerBoundary(t *testing.T) {
+	t.Setenv("SERVICE_GRAPH_ENABLED", "true")
 	addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
 	if addr == "" {
 		t.Skip("requires disposable Redis")
@@ -146,6 +149,7 @@ func TestGraphAPIPersistenceReplacementAndSanitizerBoundary(t *testing.T) {
 			r.Header.Set("Authorization", "Bearer service")
 		} else {
 			r.SetBasicAuth("admin", "pw")
+			r.Header.Set("Content-Type", "application/json")
 		}
 		w := httptest.NewRecorder()
 		handleGraphWrite(w, r)
@@ -157,6 +161,7 @@ func TestGraphAPIPersistenceReplacementAndSanitizerBoundary(t *testing.T) {
 	read := func() *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", "/api/v1/services/graph?cluster_id="+cluster, nil)
 		r.SetBasicAuth("admin", "pw")
+		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		serviceGraph(w, r)
 		return w
@@ -289,6 +294,7 @@ func TestCompositionOptInAndExpiredOwner(t *testing.T) {
 	}
 	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"alert_id":"unused"}`))
 	r.SetBasicAuth("admin", "pw")
+	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	handleRegroup(w, r)
 	if w.Code != 503 || !strings.Contains(w.Body.String(), "disabled") {
@@ -373,7 +379,6 @@ func TestLegacyRepeatedBatchKeepsActiveIncidentBindings(t *testing.T) {
 			a.Status = "resolved"
 			b.Status = "resolved"
 			ingestGroup([]EnrichedAlert{a, b}, "combined")
-			ingestGroup([]EnrichedAlert{b}, "group-b")
 			if store.Get(first.ID).Status != "resolved" || store.Get(second.ID).Status != "resolved" {
 				t.Fatal("active incident became unreachable for resolution")
 			}

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -383,6 +385,9 @@ func (s *Store) FindAlertByFingerprint(fp string) *Alert {
 	if s.persistent() {
 		a, err := s.disk.FindAlertByFingerprint(fp)
 		if err != nil {
+			if err != redis.Nil && s.disk.lockKey != "" {
+				s.disk.writeErr = err
+			}
 			return nil
 		}
 		return a
@@ -412,12 +417,9 @@ func (s *Store) FindIncidentForGroup(fingerprints []string) *Incident {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, inc := range s.incidents {
-		if inc.Status == "resolved" {
-			continue
-		}
-		for _, fp := range fingerprints {
-			if inc.Fingerprints[fp] {
+	for _, fp := range fingerprints {
+		for _, inc := range s.incidents {
+			if inc.Status != "resolved" && inc.Fingerprints[fp] {
 				return inc
 			}
 		}
@@ -516,26 +518,15 @@ func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident
 		}
 	}
 
-	existing := s.FindIncidentForGroup(fingerprints)
-
-	// Вся группа погасла — закрываем инцидент.
+	resolved := s.resolveDeliveredAlerts(enriched)
 	if len(firing) == 0 {
-		if existing != nil {
-			existing.Status = "resolved"
-			now := time.Now()
-			existing.UpdatedAt = now
-			dur := int(now.Sub(existing.CreatedAt).Seconds())
-			existing.DurationSec = &dur
-			for _, a := range existing.Alerts {
-				a.Status = "resolved"
-				s.PutAlert(a)
-			}
-			// В памяти хватило бы мутации по указателю, в Redis нужно записать.
-			s.Put(existing)
-			log.Printf("Resolved incident %s", existing.ID)
-		}
-		return existing
+		return resolved
 	}
+	fingerprints = fingerprints[:0]
+	for _, alert := range firing {
+		fingerprints = append(fingerprints, alert.Fingerprint)
+	}
+	existing := s.FindIncidentForGroup(fingerprints)
 
 	// Собираем алерты потока; повторные по fingerprint не дублируем.
 	newAlerts := make([]*Alert, 0, len(firing))
@@ -555,9 +546,15 @@ func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident
 				}
 				continue
 			}
-			if previous := s.Get(*prev.IncidentID); previous == nil || previous.Status != "resolved" {
+			if previous := s.Get(*prev.IncidentID); previous != nil && previous.Status != "resolved" {
 				prev.ReceivedAt = time.Now()
 				s.PutAlert(prev)
+				for _, member := range previous.Alerts {
+					if member.ID == prev.ID {
+						member.ReceivedAt = prev.ReceivedAt
+					}
+				}
+				s.Put(previous)
 				continue
 			}
 			// Only a closed incident's firing alert may recur as a new episode.
@@ -585,6 +582,10 @@ func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident
 			log.Printf("Incident %s: +%d alerts (total %d)", existing.ID, len(newAlerts), existing.AlertCount)
 		}
 		return existing
+	}
+
+	if len(newAlerts) == 0 {
+		return nil
 	}
 
 	// Новая группа — новый инцидент.
@@ -785,7 +786,13 @@ func strVal(m map[string]any, key string) string {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodGet && r.Header.Get("Authorization") == "" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if trustedBrowserOrigin(r) {
+			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Add("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == "OPTIONS" {
@@ -1840,10 +1847,31 @@ func intQuery(r *http.Request, key string, def int) int {
 // ── Router ──────────────────────────────────────────────────────────────────
 
 func main() {
+	if _, err := allowedBrowserOrigins(); err != nil {
+		log.Fatal(err)
+	}
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	if err := awaitDurableStorage(startupCtx); err != nil {
 		startupCancel()
 		log.Fatalf("durable storage startup failed: %v", err)
+	}
+	if store.disk != nil {
+		indexed, err := store.disk.rdb.Exists(startupCtx, alertIndexReady).Result()
+		if err != nil && regroupEnabled() {
+			startupCancel()
+			log.Fatalf("alert lookup startup check failed: %v", err)
+		}
+		if err != nil {
+			log.Printf("optional alert lookup startup check unavailable")
+		}
+		if regroupEnabled() || indexed != 0 {
+			// Rebuild at startup to include records written during an older-binary
+			// rollback; an old persistent ready marker cannot prove completeness.
+			if err := store.disk.rebuildAlertIndex(startupCtx); err != nil {
+				startupCancel()
+				log.Fatalf("alert fingerprint index migration failed: %v", err)
+			}
+		}
 	}
 	startupCancel()
 	startAnalysisJobs()

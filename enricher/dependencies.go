@@ -6,8 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log"
+	"maps"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
@@ -55,26 +58,36 @@ func dependencyDecision(e EnrichedAlert) (string, string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	ids, err := redisClient.ZRevRange(ctx, "igpt:graph:out:"+topologyNode(cluster, ns, kind, workload), 0, 15).Result()
-	if err != nil || len(ids) >= 16 {
-		return fallback, "degraded: topology unavailable or candidate limit; workload grouping"
+	// The authoritative declaration is bounded (200 nodes/400 edges) and is
+	// independent of observed ownership/placement indexes. It also works with
+	// records written by the prior backend: no index backfill or outage window.
+	raw, err := redisClient.Get(ctx, "igpt:graph:declared:"+topologyDigest(cluster)).Bytes()
+	var declaration GraphDocument
+	if err != nil || len(raw) > 512<<10 || json.Unmarshal(raw, &declaration) != nil || declaration.Version != 1 || declaration.ClusterID != cluster || len(declaration.Nodes) > 200 || len(declaration.Edges) > 400 {
+		return fallback, "degraded: declaration unavailable; workload grouping"
 	}
+	from := topologyNode(cluster, ns, kind, workload)
 	target, ref := "", ""
-	for _, id := range ids {
-		raw, err := redisClient.Get(ctx, "igpt:graph:edge:"+id).Bytes()
-		if err != nil {
-			return fallback, "degraded: missing topology record; workload grouping"
+	candidates := 0
+	for _, edge := range declaration.Edges {
+		if edge.From != from {
+			continue
 		}
-		var edge GraphEdge
-		if json.Unmarshal(raw, &edge) != nil {
-			return fallback, "degraded: invalid topology; workload grouping"
+		candidates++
+		if candidates > 16 {
+			return fallback, "degraded: dependency candidate limit; workload grouping"
 		}
 		if edge.Kind != "application_dependency" || edge.Observed || edge.StaleSeconds <= 0 || time.Since(edge.LastSeen) > time.Duration(edge.StaleSeconds)*time.Second {
 			continue
 		}
-		nodeRaw, err := redisClient.Get(ctx, "igpt:graph:node:"+edge.To).Bytes()
-		var node GraphNode
-		if err != nil || json.Unmarshal(nodeRaw, &node) != nil || node.ClusterID != cluster {
+		valid := false
+		for _, node := range declaration.Nodes {
+			if node.ID == edge.To && node.ClusterID == cluster {
+				valid = true
+				break
+			}
+		}
+		if !valid {
 			return fallback, "degraded: dependency identity unavailable; workload grouping"
 		}
 		if target != "" && target != edge.To {
@@ -89,17 +102,47 @@ func dependencyDecision(e EnrichedAlert) (string, string) {
 }
 
 var topologySlots = make(chan struct{}, 4)
+var topologyObservationFailures atomic.Uint64
+var topologyObservationDropped atomic.Uint64
 
+func topologyObservationEnabled(e EnrichedAlert) bool {
+	return os.Getenv("TOPOLOGY_OBSERVATIONS_ENABLED") == "true" && e.ClusterName != "" && e.ClusterName != "unknown" && e.K8sContext["observed_pod"] != ""
+}
+func submitTopologyObservation(e EnrichedAlert) {
+	if !topologyObservationEnabled(e) {
+		return
+	}
+	select {
+	case topologySlots <- struct{}{}:
+	default:
+		topologyObservationDropped.Add(1)
+		return
+	}
+	e.Labels = maps.Clone(e.Labels)
+	e.K8sContext = maps.Clone(e.K8sContext)
+	go func() { defer func() { <-topologySlots }(); sendTopologyObservation(context.Background(), e) }()
+}
 func observeTopology(ctx context.Context, e EnrichedAlert) {
-	if os.Getenv("TOPOLOGY_OBSERVATIONS_ENABLED") != "true" || e.ClusterName == "" || e.ClusterName == "unknown" || e.K8sContext["observed_pod"] == "" {
+	if !topologyObservationEnabled(e) {
 		return
 	}
 	select {
 	case topologySlots <- struct{}{}:
 		defer func() { <-topologySlots }()
 	default:
+		topologyObservationDropped.Add(1)
 		return
 	}
+	sendTopologyObservation(ctx, e)
+}
+func topologyObservationFailure(code string) {
+	n := topologyObservationFailures.Add(1)
+	// Log the first failure and powers of two, without payloads, URLs or tokens.
+	if n&(n-1) == 0 {
+		log.Printf("topology observation failed: %s (total=%d)", code, n)
+	}
+}
+func sendTopologyObservation(ctx context.Context, e EnrichedAlert) {
 	d := GraphDocument{Version: 1, ClusterID: e.ClusterName}
 	ns := e.Labels["namespace"]
 	add := func(alias, kind, name, namespace string) {
@@ -123,12 +166,18 @@ func observeTopology(ctx context.Context, e EnrichedAlert) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "POST", os.Getenv("TOPOLOGY_BACKEND_URL"), bytes.NewReader(raw))
 	if err != nil {
+		topologyObservationFailure("invalid_endpoint")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("ANALYSIS_SERVICE_TOKEN"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
-	if err == nil {
-		resp.Body.Close()
+	if err != nil {
+		topologyObservationFailure("transport")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		topologyObservationFailure(http.StatusText(resp.StatusCode))
 	}
 }

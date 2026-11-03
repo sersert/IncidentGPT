@@ -43,8 +43,14 @@ spec:
               protocol: TCP
           env:
             {{- range $key, $value := .Values.env }}
+            {{- if not (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.serviceGraph.existingConfigMap }}
+            - name: SERVICE_GRAPH_FILE
+              value: /etc/incidentgpt/topology/dependencies.json
             {{- end }}
             {{- if .Values.logsStore.existingSecret }}
             # Пароль к хранилищу логов — из секрета: конфиг интеграций живёт в памяти
@@ -123,6 +129,9 @@ spec:
         - name: service-graph
           configMap:
             name: {{ .Values.serviceGraph.existingConfigMap }}
+            items:
+              - key: {{ .Values.serviceGraph.key | default "dependencies.json" | quote }}
+                path: dependencies.json
         {{- end }}
         {{- if .Values.runbooks.existingConfigMap }}
         - name: runbooks

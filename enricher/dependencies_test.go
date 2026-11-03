@@ -45,6 +45,12 @@ func TestDependencyCorrelationBoundaries(t *testing.T) {
 		redisClient.Set(ctx, "igpt:graph:edge:"+edge.ID, raw, time.Minute)
 		redisClient.ZAdd(ctx, "igpt:graph:out:"+from, redis.Z{Score: 1, Member: edge.ID})
 	}
+	declaration := GraphDocument{Version: 1, ClusterID: cluster, Nodes: []GraphNode{node}, Edges: edges}
+	writeDeclaration := func() {
+		raw, _ := json.Marshal(declaration)
+		redisClient.Set(ctx, "igpt:graph:declared:"+topologyDigest(cluster), raw, time.Minute)
+	}
+	writeDeclaration()
 	ka, reason := dependencyDecision(a)
 	kb, _ = dependencyDecision(b)
 	if ka != kb || !strings.Contains(reason, "suspected") {
@@ -57,6 +63,8 @@ func TestDependencyCorrelationBoundaries(t *testing.T) {
 	}
 	edge := edges[0]
 	edge.LastSeen = time.Now().Add(-time.Hour)
+	declaration.Edges[0] = edge
+	writeDeclaration()
 	raw, _ = json.Marshal(edge)
 	redisClient.Set(ctx, "igpt:graph:edge:"+edge.ID, raw, time.Minute)
 	stale, _ := dependencyDecision(a)
@@ -65,6 +73,8 @@ func TestDependencyCorrelationBoundaries(t *testing.T) {
 	}
 	edge.LastSeen = time.Now()
 	edge.Kind = "placement"
+	declaration.Edges[0] = edge
+	writeDeclaration()
 	raw, _ = json.Marshal(edge)
 	redisClient.Set(ctx, "igpt:graph:edge:"+edge.ID, raw, time.Minute)
 	placement, _ := dependencyDecision(a)

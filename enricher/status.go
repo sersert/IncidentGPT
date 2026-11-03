@@ -49,10 +49,11 @@ func readyzHandler(w http.ResponseWriter, _ *http.Request) {
 
 func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	writeStatusJSON(w, http.StatusOK, map[string]interface{}{
-		"service":          "enricher",
-		"enricher_version": appCfg.EnricherVersion,
-		"cluster":          appCfg.ClusterName,
-		"environment":      appCfg.Environment,
+		"service":               "enricher",
+		"enricher_version":      appCfg.EnricherVersion,
+		"topology_observations": map[string]any{"failures": topologyObservationFailures.Load(), "dropped": topologyObservationDropped.Load()},
+		"cluster":               appCfg.ClusterName,
+		"environment":           appCfg.Environment,
 		"prometheus": map[string]interface{}{
 			"url_configured": appCfg.PromURL != "",
 			"reachable":      checkPrometheusReady().OK,

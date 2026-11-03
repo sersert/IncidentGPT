@@ -20,21 +20,23 @@ func diagnosticsEnabled() bool {
 func incidentDiagnosticScope(inc *Incident) DiagnosticScope {
 	now := time.Now().UTC()
 	scope := DiagnosticScope{ClusterID: incidentCluster(inc), Namespace: inc.Namespace, Workload: incidentWorkload(inc), From: now.Add(-15 * time.Minute), To: now}
-	for _, a := range inc.Alerts {
-		if scope.Pod == "" {
-			scope.Pod = a.Labels["pod"]
+	if lead := representativeAlert(inc); lead != nil {
+		if namespace := alertNamespace(lead); namespace != "" {
+			scope.Namespace = namespace
+			scope.Workload = lead.Labels["deployment"]
+			if scope.Workload == "" {
+				scope.Workload = lead.Labels["service"]
+			}
+		} else if len(inc.Alerts) > 1 {
+			// Only a single legacy member can safely inherit the incident's scope.
+			scope.Namespace, scope.Workload = "", ""
 		}
-		if scope.Node == "" {
-			scope.Node = a.Labels["node"]
+		scope.Pod, scope.Node = lead.Labels["pod"], lead.Labels["node"]
+		if scope.Workload == "" && inc.Context != nil && inc.Context.Namespace == scope.Namespace && inc.Context.Pod == scope.Pod && scope.Pod != "" {
+			scope.Workload = incidentWorkload(inc)
 		}
-	}
-	if inc.Context != nil {
-		if scope.Pod == "" {
-			scope.Pod = inc.Context.Pod
-		}
-		if scope.Node == "" {
-			scope.Node = inc.Context.Node
-		}
+	} else if inc.Context != nil && (inc.Context.Namespace == "" || inc.Context.Namespace == scope.Namespace) {
+		scope.Pod, scope.Node = inc.Context.Pod, inc.Context.Node
 	}
 	return scope
 }
