@@ -1,3 +1,6 @@
+{{- if and .Values.changes.durableCorrelation (or (lt (int .Values.redisStartup.timeoutSeconds) 5) (gt (int .Values.redisStartup.timeoutSeconds) 600)) }}
+{{- fail "redisStartup.timeoutSeconds must be between 5 and 600" }}
+{{- end }}
 {{- if or .Values.topology.observationsEnabled .Values.topology.correlationEnabled }}
 {{- if not .Values.changes.existingSecret }}
 {{- fail "topology requires changes.existingSecret with the analysis service token" }}
@@ -51,6 +54,10 @@ spec:
             - containerPort: 9099
               name: http
           env:
+            {{- if .Values.changes.durableCorrelation }}
+            - name: REDIS_STARTUP_TIMEOUT
+              value: {{ printf "%ds" (int .Values.redisStartup.timeoutSeconds) | quote }}
+            {{- end }}
             - name: TOPOLOGY_OBSERVATIONS_ENABLED
               value: {{ .Values.topology.observationsEnabled | quote }}
             - name: DEPENDENCY_CORRELATION_ENABLED
@@ -179,12 +186,14 @@ spec:
               mountPath: /etc/enricher
               readOnly: true
 
+          {{- if .Values.changes.durableCorrelation }}
           startupProbe:
             httpGet:
               path: /readyz
               port: http
             periodSeconds: 2
-            failureThreshold: 75
+            failureThreshold: {{ div (add (int .Values.redisStartup.timeoutSeconds) 31) 2 }}
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /readyz

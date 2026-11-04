@@ -136,6 +136,8 @@ jobs:
         run: bash deploy/test-diagnostics-charts.sh
       - name: report configuration and auth compatibility
         run: bash deploy/test-report-charts.sh
+      - name: dependency review configuration guards
+        run: bash deploy/test-dependency-review-charts.sh
       # Зонтичный чарт линтуется только с собранными зависимостями.
       - run: helm dependency build deploy/incidentgpt
       - run: helm lint deploy/incidentgpt

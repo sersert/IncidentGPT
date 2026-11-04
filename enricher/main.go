@@ -453,7 +453,11 @@ func main() {
 	// Redis для лёгкой корреляции (optional — фолбэк на поштучную отправку)
 	var redisErr error
 	if durableCorrelation() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		timeout, err := correlationStartupTimeout()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		redisErr = awaitCorrelationRedis(ctx)
 		cancel()
 		if redisErr != nil {
@@ -675,7 +679,7 @@ func enrichAlert(ctx context.Context, a AMAlert) EnrichedAlert {
 	// Kubernetes API enrichment (pod status, events, node conditions, namespace health)
 	if appCfg.EnableK8sContext {
 		runK8sEnrichment(ctx, &e, a)
-		observeTopology(ctx, e)
+		submitTopologyObservation(e)
 	}
 
 	// Логи вокруг алерта — последний слой обогащения. Включается только если

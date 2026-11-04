@@ -114,3 +114,18 @@ Redis incidents, jobs, resolution/composition/lifecycle audits require backup an
 operator retention policy. Graph/change data defaults to 30 days; report records to
 90 days, while captured report job input follows non-expiring durable job history.
 Deletion/archival must consider both. Read the [workflow-specific limits and rollback](roadmap/postmortem-and-handoff.md).
+
+## Граф и ручное изменение состава
+
+`TIMELINE_READ_*` — историческое имя общей administrator-пары, а не отдельная
+read-only роль. Она авторизует новые graph/regroup/diagnostics API; разделения
+операторов и tenancy пока нет. Нельзя выдавать эти credentials как read-only.
+Имя в audit берётся из проверенного Basic principal. `X-Auth-User` от прямого
+клиента не является доказательством другой личности и не может подменять actor.
+
+Graph/regroup требуют JSON и проверяют browser Origin; произвольный сторонний
+`text/plain` POST отклоняется до мутации. При замене Host доверенные адреса задаются
+явно в `ALLOWED_ORIGINS`. Для authenticated browser-запросов нет wildcard CORS.
+Чтение выключенного графа возвращает только `enabled:false` и пустые списки,
+без новых credentials/metadata; включённый граф требует backend Basic-auth.
+Подробные флаги, сроки хранения и rollout: [руководство](roadmap/dependency-correlation.md).

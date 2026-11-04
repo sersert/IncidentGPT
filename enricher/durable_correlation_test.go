@@ -27,7 +27,7 @@ func TestDurableCorrelationSnapshotPreservesArrivals(t *testing.T) {
 	batchID := requestID()
 	first := EnrichedAlert{Fingerprint: "first", Status: "firing"}
 	raw, _ := json.Marshal(first)
-	if _, err := bufferDurableScript.Run(ctx, rdb, []string{pending, correlationDue}, "first", raw, time.Now().Add(-time.Second).UnixMilli(), gk).Result(); err != nil {
+	if _, err := bufferDurableScript.Run(ctx, rdb, []string{pending, correlationDue, pendingFingerprintGroup(first)}, "first", raw, time.Now().Add(-time.Second).UnixMilli(), gk, 60000).Result(); err != nil {
 		t.Fatal(err)
 	}
 	id, err := snapshotBatchScript.Run(ctx, rdb, []string{correlationDue, batchesDue}, time.Now().UnixMilli(), batchID).Text()
@@ -38,7 +38,7 @@ func TestDurableCorrelationSnapshotPreservesArrivals(t *testing.T) {
 	second := first
 	second.Fingerprint = "second"
 	raw, _ = json.Marshal(second)
-	_, _ = bufferDurableScript.Run(ctx, rdb, []string{pending, correlationDue}, "second", raw, time.Now().Add(-time.Second).UnixMilli(), gk).Result()
+	_, _ = bufferDurableScript.Run(ctx, rdb, []string{pending, correlationDue, pendingFingerprintGroup(second)}, "second", raw, time.Now().Add(-time.Second).UnixMilli(), gk, 60000).Result()
 	_, err = claimBatchScript.Run(ctx, rdb, []string{batchesDue}, time.Now().UnixMilli(), "owner", time.Now().Add(time.Minute).UnixMilli()).Result()
 	if err != nil {
 		t.Fatal(err)

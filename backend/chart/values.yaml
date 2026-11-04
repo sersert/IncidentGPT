@@ -32,6 +32,10 @@ env:
   RUNBOOK_DIRECTORY: ""
   # Ручной перенос алертов включает общий composition lock; по умолчанию выключен.
   MANUAL_REGROUP_ENABLED: "false"
+  # Без opt-in граф/карточка не требуют новой backend-авторизации.
+  SERVICE_GRAPH_ENABLED: "false"
+  # Полные доверенные Origin через запятую для прокси с заменой Host.
+  ALLOWED_ORIGINS: ""
   DURABLE_ANALYSIS_ENABLED: "false"
   STRUCTURED_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/v1/analyze"
   CHANGES_ENABLED: "false"
@@ -66,7 +70,8 @@ logsStore:
   existingSecret: ""
   passwordKey: password
 
-# Учётная запись читателя должна совпадать с UI; сервисный token отдельный.
+# Общая administrator-учётка UI/backend; отдельной read-only роли пока нет.
+# Учётная запись должна совпадать с UI; сервисный token отдельный.
 changes:
   existingSecret: ""
   ingestTokenKey: change-ingest-token
@@ -78,7 +83,10 @@ runbooks:
   existingConfigMap: ""
 
 serviceGraph:
+  # ConfigMap с декларацией; при выборе чарт сам задаёт SERVICE_GRAPH_FILE.
+  # В режиме файла PUT графа запрещён, чтобы фоновое чтение не откатывало правки API.
   existingConfigMap: ""
+  key: dependencies.json
 
 # Независимая проверка backend: Secret с username/password учётной записи UI.
 readerAuth:

@@ -20,6 +20,33 @@
   явный `ALLOWED_ORIGINS`, без доверия к произвольным forwarded-заголовкам.
 - Dashboard/analytics восстановлены в memory fallback (`persistent:false`), без
   выдуманных времён восстановления/анализа; устранено повторное чтение списка.
+- Исправлен resolve общей пачки: обновляются все затронутые инциденты, закрытие
+  возможно только без оставшихся firing-участников. Повторный эпизод после закрытия
+  и восстановление orphan не создают пустые инциденты. Диагностика после regroup
+  использует один согласованный namespace/workload/pod/node; labels копируются.
+- Корреляция читает bounded declared-документ, а не общий outgoing-индекс: поток
+  observed ownership/placement не вытесняет зависимости. Файловый граф блокирует
+  PUT (409), логирует ошибки загрузки; ConfigMap автоматически задаёт путь и ключ.
+- `SERVICE_GRAPH_ENABLED` — opt-in графа; без новых флагов GET graph возвращает
+  `enabled:false` без Basic challenge, detail — 404, карточка/контролы UI скрыты.
+  При opt-in чтение графа требует `TIMELINE_READ_*`: это общая administrator-роль,
+  не read-only. Мутации graph/regroup требуют JSON и доверенный Origin; прокси с
+  другим Host поддержан явным `ALLOWED_ORIGINS`. Actor — проверенный Basic user.
+- `igpt:alertfp:{digest(fp)}` (HASH) и `igpt:alertfp:ready:v1` — additive,
+  восстанавливаемый индекс активного алерта; при opt-in достраивается перед трафиком
+  вне composition lock, включая restart после rollback старых writers. Legacy без
+  opt-in новые ключи не пишет. TTL как у alert, удалять при архивировании alerts.
+- Ручные `igpt:regroup:binding:{fp}` имеют TTL 7 дней и снимаются при закрытом target;
+  прежние ключи получают TTL при чтении, при выключенном regroup игнорируются.
+  Audit сохраняется отдельно. Пачка ставит один анализ на каждого фактического
+  владельца алертов без чужих evidence и дублей при схождении partitions.
+- `igpt:corr:fpgroup:{digest(cluster,fp,starts_at)}` живёт в течение окна корреляции:
+  resolve очищает правильный pending даже при изменившемся/недоступном графе.
+  Наблюдения topology отправляются асинхронно, ограничены четырьмя слотами,
+  ошибки/переполнение видны в status и логах; provenance не растёт на каждый повтор.
+- startupProbe enricher включён только для durable. `redisStartup.timeoutSeconds`
+  задаёт согласованные runtime timeout и probe budget. Для durable/observations
+  ключ `analysis-service-token` в existingSecret обязателен: подготовить до upgrade.
 
 - Dependency graph API и additive Redis-ключи `igpt:graph:*`: идентичности
   cluster/namespace/kind/name, provenance и TTL 30 дней. Declared edges заменяются

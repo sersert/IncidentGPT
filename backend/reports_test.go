@@ -119,6 +119,7 @@ func TestOfflineIncidentWorkflow(t *testing.T) {
 		r := httptest.NewRequest(method, path, bytes.NewReader(body))
 		r.SetPathValue("id", id)
 		r.SetBasicAuth("admin", "pw")
+		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("X-Auth-User", "spoofed")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)

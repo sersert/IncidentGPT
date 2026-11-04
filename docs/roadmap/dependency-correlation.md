@@ -1,74 +1,127 @@
-# Dependency correlation and manual composition
+# Граф зависимостей и ручной состав инцидента
 
-The graph stores cluster/namespace/kind/name identities and directed relationships.
-Kubernetes metadata produces ownership (Deployment → ReplicaSet → Pod) and
-placement (Pod → Node), never application dependencies. Enable the optional
-bounded metadata submission with `TOPOLOGY_OBSERVATIONS_ENABLED=true` and
-`TOPOLOGY_BACKEND_URL=http://backend:8080/api/v1/services/observations`. It reuses
-actual GET results, four concurrent submissions and a three-second deadline.
-Service authentication and backend sanitization are required. Failed submissions
-leave topology unknown; they do not block basic alert ingestion beyond the deadline.
+Граф различает объявленные `application_dependency` и наблюдаемые Kubernetes-связи:
+Deployment → ReplicaSet → Pod (`ownership`), Pod → Node (`placement`). Метаданные не
+доказывают зависимости приложений, здоровье сервиса или причину инцидента.
+Идентичность ресурса включает cluster/namespace/kind/name.
 
-Declared application dependencies use `docs/fixtures/service-dependencies.json`.
-PUT `/api/v1/services/graph` with backend Basic credentials replaces the cluster's
-previous declared edges; POST `/services/observations` requires the analysis service
-token. GET `/services/graph?incident_id=...` and `/services/{node-id}` require Basic
-authentication. Nodes explicitly have unknown health. Payloads are at most 32 KiB,
-200 nodes and 400 edges. Indexed lookups expose truncation and stale omissions.
-Metadata edges expire for correlation after 15 minutes; declarations after seven
-days. Stored records/provenance expire after 30 days. A configured
-`SERVICE_GRAPH_FILE=/etc/incidentgpt/topology/dependencies.json` is refreshed every
-ten minutes. Set `incidentgpt-backend.serviceGraph.existingConfigMap` in umbrella values to mount that file;
-set the environment path separately. Invalid/unavailable configuration produces no
-fresh graph, so investigate file/sanitizer availability when the view is empty.
-No tracing or graph database is required.
+## Включение и доступ
 
-`DEPENDENCY_CORRELATION_ENABLED=true` requires durable correlation. With known
-cluster/workload, one fresh declared dependency produces the group key and wording
-“shared dependency suspected.” Two workloads can therefore share a group across
-namespaces. Multiple distinct dependencies fall back to workload grouping. Only
-one outgoing hop, at most 16 candidates, and a 500 ms lookup budget are used.
-Cycles are not traversed; no causal or healthy state is inferred. Missing workload
-uses pod/fingerprint; missing cluster isolates source observations. Node-only alerts can group by the same reported cluster/node; workload or pod alerts are never merged with them solely by placement. Placement alone does not merge applications. The existing settle deadline defines the time window;
-Redis buffers cap batches at 50 alerts. Backend durable ingestion also refuses incident growth beyond 50 alerts; it returns a visible 503 and leaves the batch recoverable for bounded retries/dead-letter inspection. Separate or close a full group before retrying. Closed firing fingerprints can recur as a new incident episode. Standalone alert bindings are persisted before accepting that episode. Limit/lookup failures explicitly degrade.
-The deployment shares administrator visibility; this is not tenant isolation.
+Все новые возможности выключены по умолчанию. На backend граф включает
+`SERVICE_GRAPH_ENABLED=true`, заданный `SERVICE_GRAPH_FILE` либо ручная
+перегруппировка. Без opt-in GET `/api/v1/services/graph` возвращает `enabled:false`
+и пустой граф без запроса новых credentials; GET `/services/{id}` возвращает 404.
+UI скрывает карточку и не показывает неработающие контролы переноса.
 
-POST `/incidents/{id}/regroup` with `{ "alert_id": "...",
-"target_incident_id": "..." }` moves one alert to an active same-cluster incident.
-Omit the target to split into a new stable incident. There is no bulk merge command;
-repeat bounded moves when consolidation is appropriate. IDs and old incident URLs
-remain valid. `history_sources` references both records; original immutable evidence
-and analyses retain their original incident identity and are read on that page.
-Audit records retain trusted Basic actor, UTC time and compositions. Durable ingestion partitions moved fingerprints before scheduling, with idempotent child batches, so a later automatic batch cannot undo human separation. Current summaries
-and latest/requested pointers are cleared, fencing late results; history returns the
-current composition hash for comparison. Current labels/namespace/context are rebuilt
-from the remaining alerts; old enrichment and chain pointers are cleared, so refresh
-cannot target a removed workload. Refresh uses one representative current workload,
-not every namespace in a cross-namespace group; the collector namespace allowlist
-still applies. Original evidence remains available through analysis history.
-Request refresh to interpret the new group.
+При включённом графе GET `/services/graph?incident_id=...` и `/services/{node-id}`
+требуют backend Basic-auth `TIMELINE_READ_USER`/`TIMELINE_READ_PASSWORD`. Эта пара
+исторически называется reader, но даёт **общую administrator-роль**, включая PUT
+графа, диагностику и regroup. Отдельной read-only роли и разделения команд нет.
+Имя в audit — проверенный Basic principal; произвольный `X-Auth-User` не подменяет
+автора. Приватные backend/Redis и NetworkPolicy остаются обязательной границей.
 
-Ручная перегруппировка требует `MANUAL_REGROUP_ENABLED=true` на backend и durable Redis.
-По умолчанию флаг выключен, POST отвечает 503, UI блокирует перенос; ingest сохраняет
-прежний lock по cluster/group/namespace. Только при включении ручной перегруппировки
-ingest и regroup разделяют общий composition lock (lease 30 секунд), что снижает
-пиковую пропускную способность. Сам флаг корреляции на enricher общего lock не требует.
-Запросы ограничены 15/10 секундами; все записи ingest проверяют владельца lease
-через WATCH/MULTI, а атомарный CAS переноса проверяет владельца и исходные записи.
-Запись от истёкшего или заменённого владельца отклоняется.
-Legacy concurrent writers are protected against lost updates during the move by CAS,
-but legacy grouping must be drained before enabling manual correction. Single-primary
-Redis/AOF/backup assumptions from evidence-and-delivery.md apply. Audit and incident
-records have no automatic expiry; include them in backup/retention policies.
+Мутации графа и regroup принимают `application/json` и проверяют browser Origin.
+По умолчанию разрешён текущий Host. Для ingress/SSH-прокси с заменой Host задайте
+точные полные адреса в `ALLOWED_ORIGINS`, например `http://127.0.0.1:8088`.
+Wildcard и forwarded-заголовки не дают доступа. UI/nginx и Vite сохраняют Host с
+портом. Клиенты CLI без Origin по-прежнему должны передавать реальные credentials.
 
-Rollout: load and inspect topology first, drain legacy batches, enable durable mode,
-then opt into correlation for a limited environment. Enable `MANUAL_REGROUP_ENABLED`
-only after draining older writers and observing the global serialization cost.
-Drain ingest before disabling manual regrouping or rolling back; retain manual bindings. No topology backfill is invented.
-Disable new correlation/observations before rollback; drain durable batches before
-reverting their consumer. Human moves and historical source links remain additive.
+## Источники графа
 
-Durable correlation waits up to two minutes for Redis before serving HTTP or starting
-its queue; a startup probe covers the wait. Failed clients are closed and retried.
-Legacy optional Redis behavior is unchanged. Late Redis startup does not require
-a manual enricher restart.
+Пример декларации: `docs/fixtures/service-dependencies.json`. PUT
+`/api/v1/services/graph` заменяет объявленные связи кластера. Декларация ограничена
+32 КиБ входного JSON, 200 узлами и 400 рёбрами; старые declared-рёбра удаляются сразу.
+Наблюдения POST `/services/observations` используют отдельный сервисный Bearer
+`ANALYSIS_SERVICE_TOKEN`. До записи оба пути проходят sanitizer fail-closed;
+маскирование не может изменить routing-идентичности ресурсов.
+
+Для файла задайте `incidentgpt-backend.serviceGraph.existingConfigMap` и при
+необходимости `serviceGraph.key` (по умолчанию `dependencies.json`). Чарт сам
+монтирует выбранный ключ и задаёт `SERVICE_GRAPH_FILE`. Файл перечитывается при
+старте и каждые 10 минут, ошибки чтения/валидации/sanitizer/Redis видны в логах без
+содержимого файла. В этом режиме PUT отвечает 409: файл является единственным
+источником декларации, поэтому фоновые загрузки не откатывают правки API.
+
+На enricher включите `TOPOLOGY_OBSERVATIONS_ENABLED=true` и
+`TOPOLOGY_BACKEND_URL=http://incidentgpt-backend:8080/api/v1/services/observations`.
+Наблюдения используют фактические GET Kubernetes и отправляются вне критического
+пути обогащения: не более четырёх запросов, без очереди горутин, таймаут 3 секунды.
+Переполнение и ошибки учитываются в `/status` (`topology_observations`); сообщения
+об ошибках ограничены по частоте и не содержат payload, URL или token.
+
+Граф хранится в `igpt:graph:*` 30 дней. Observed-рёбра свежие 15 минут, declared —
+7 дней. Evidence-ref стабилен для одного состава связей: повторное наблюдение
+обновляет last_seen/TTL, а не создаёт ключ на каждую доставку. Provenance содержит
+первое сохранённое наблюдение этого состава, edge.last_seen — последнее наблюдение.
+Отображение графа ограничено и сообщает о пропущенных старых рёбрах.
+
+## Корреляция и resolve
+
+`DEPENDENCY_CORRELATION_ENABLED=true` требует durable-корреляцию. Решение читает
+**сохранённую декларацию** `igpt:graph:declared:{cluster-digest}`, совместимую и с
+предыдущим backend. Наблюдаемые ownership/placement не могут вытеснить зависимости
+из ограниченного outgoing-индекса и молча выключить корреляцию. Обход ограничен
+одним шагом, 16 исходящими declared-кандидатами и 500 мс; учитываются свежесть,
+принадлежность кластеру и неоднозначность. Циклы не обходятся. При неизвестных
+данных происходит явная деградация до workload/pod/fingerprint, неизвестный кластер
+изолирован; node-only события не склеивают приложения только по placement.
+
+Буфер хранит `igpt:corr:fpgroup:{digest(cluster,fp,starts_at)}` с TTL окна. Resolve
+удаляет fingerprint из реально сохранённой pending-группы, даже если граф изменился
+или недоступен. Старый resolve не удаляет более новый эпизод того же fingerprint.
+При повторной доставке с новым решением pending-запись переносится атомарно.
+Уже захваченные immutable delivery batches этой отменой не переписываются.
+
+На backend resolve обновляет только доставленные fingerprints, во всех затронутых
+инцидентах. Инцидент закрывается, когда в нём не осталось firing-участников: общая
+пачка `[A,B]` закрывает оба отдельных инцидента, частичная пачка не закрывает чужой
+активный алерт. Новое firing-событие закрытого fingerprint создаёт новый эпизод;
+при пропавшем incident создаётся непустая запись. Анализ планируется один раз на
+фактический итоговый инцидент и получает только принадлежащие ему наблюдения.
+Повторная доставка batch остаётся идемпотентной.
+
+## Ручная перегруппировка и хранение
+
+POST `/incidents/{id}/regroup` принимает один `alert_id` и необязательный
+`target_incident_id`. Цель должна быть открытой и того же кластера; без цели создаётся
+новый `INC-YYYY-NNNN`. Массового автоматического merge и remediation нет. При переносе
+последнего участника пустой source закрывается. Старые URL, immutable evidence и
+анализы сохраняются, `history_sources` связывает записи. Текущие enrichment/chain
+очищаются; координаты диагностики и labels восстанавливаются из одного текущего
+участника без смешивания namespace/pod/node. Исходные данные доступны в истории.
+
+Regroup требует `MANUAL_REGROUP_ENABLED=true`, durable Redis и дренированных старых
+writers. Только в этом режиме ingest и regroup используют общий composition lock
+с lease 30 секунд и bounded запросами 15/10 секунд. WATCH/MULTI и CAS проверяют
+владельца lease, поздние результаты прежнего состава не становятся текущими.
+
+До приёма regroup-трафика backend достраивает `igpt:alertfp:{digest(fp)}` — HASH с
+ID и временем последнего firing-алерта. SCAN/MGET идут ограниченными порциями **до**
+общего lock; затем lookup не сканирует всю историю на каждый алерт. Ready-marker
+`igpt:alertfp:ready:v1` не заменяет проверку после рестарта: индекс перестраивается,
+чтобы учесть записи старого binary после rollback. Установки без opt-in сохраняют
+старый режим и не создают новые индексные ключи. Индекс восстанавливаемый и имеет
+срок жизни alert-записей; audit/incident/alert без TTL требуют политики архивирования.
+
+`igpt:regroup:binding:{fp}` ограничивает ручную привязку текущим инцидентом: TTL
+7 дней, снятие при закрытии target и очистка недействительной привязки при чтении.
+Старые бессрочные binding получают TTL при первом использовании. При выключенном
+regroup они не участвуют в группировке. Audit не удаляется вместе с binding.
+
+## Обновление и откат
+
+Сначала обновите readers/consumers и проверьте декларацию, затем дренируйте старые
+batches/writers, включите durable и только после этого новые флаги. Чарт требует
+существующий Secret с `analysis-service-token` для durable/observations; подготовьте
+ключ заранее. Токены backend/worker/enricher и sanitizer должны совпадать.
+
+Ожидание Redis на enricher настраивается `redisStartup.timeoutSeconds` (120 по
+умолчанию): из одного значения формируются `REDIS_STARTUP_TIMEOUT` и startupProbe
+с запасом 30 секунд. Проба существует только в durable-режиме; legacy остаётся
+с readiness без нового цикла перезапусков. Ошибочные бюджеты отклоняются.
+
+Перед откатом выключите новые producers и дренируйте очереди, сохраните Redis/PVC
+backup. Перед выключением regroup дренируйте ingest. Старые binary игнорируют
+additive индекс/историю; повторное включение проверяет и достраивает индекс. Файловые
+декларации не имеют выдуманного backfill. Используется один Redis primary, не Redis
+Cluster/HA; AOF и backup имеют ограничения из `evidence-and-delivery.md`.

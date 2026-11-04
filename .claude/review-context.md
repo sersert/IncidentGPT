@@ -150,3 +150,23 @@ RBAC: только enricher — ClusterRole `<fullname>-read` (`enricher/chart/�
   Старый JSON-флаг совместим; Lua больше не переписывает incident при публикации.
 - Старые analytics/dashboard работают без Redis с `persistent:false`; новые отчёты
   по-прежнему требуют durable Redis. Ошибки Redis не выдают здоровый пустой результат.
+
+## Обновление PR #20 после повторного ревью 2026-11-03
+
+- Граф: opt-in `SERVICE_GRAPH_ENABLED` либо файл/regroup. Выключенный GET даёт
+  enabled:false без auth; detail — 404. Включённый граф требует Basic.
+- TIMELINE_READ_* — shared-admin, не read-only; actor остаётся verified Basic,
+  подмена X-Auth-User запрещена. Мутации graph/regroup требуют JSON/Origin,
+  ALLOWED_ORIGINS настраивает прокси с другим Host.
+- Файл графа — единственный writer в этом режиме (PUT 409). ConfigMap/key
+  автоматически задают SERVICE_GRAPH_FILE; ошибки загрузки логируются.
+- Корреляция читает bounded igpt:graph:declared:{digest(cluster)}, совместимый
+  со старым backend. Observed-индексы не вытесняют declared-кандидатов.
+- Opt-in индекс igpt:alertfp:{digest(fp)} HASH(id,time) + ready:v1 без TTL;
+  SCAN/MGET backfill до lock/трафика и проверка после рестарта/старого rollback.
+- Manual binding TTL 7d, очистка closed target, игнорирование при flag off.
+- igpt:corr:fpgroup:{digest(cluster,fp,starts_at)} с TTL окна хранит адрес pending
+  для resolve при изменении графа. Старый эпизод не удаляет более новый.
+- Enricher startupProbe только durable, timeout и probe из redisStartup.timeoutSeconds.
+- Resolve закрывает все затронутые инциденты только без firing-участников;
+  analyses планируются по фактическому owner, один job на итоговый инцидент.
