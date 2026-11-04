@@ -1,3 +1,6 @@
+{{- if and (eq (toString .Values.env.MANUAL_REGROUP_ENABLED) "true") (ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true") }}
+{{- fail "MANUAL_REGROUP_ENABLED requires DURABLE_ANALYSIS_ENABLED" }}
+{{- end }}
 {{- if eq (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true" }}
 {{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
 {{- fail "GUIDED_DIAGNOSTICS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
@@ -40,8 +43,14 @@ spec:
               protocol: TCP
           env:
             {{- range $key, $value := .Values.env }}
+            {{- if not (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.serviceGraph.existingConfigMap }}
+            - name: SERVICE_GRAPH_FILE
+              value: /etc/incidentgpt/topology/dependencies.json
             {{- end }}
             {{- if .Values.logsStore.existingSecret }}
             # Пароль к хранилищу логов — из секрета: конфиг интеграций живёт в памяти
@@ -75,11 +84,18 @@ spec:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.sanitizerSecretKey }}
             {{- end }}
-          {{- if .Values.runbooks.existingConfigMap }}
+          {{- if or .Values.runbooks.existingConfigMap .Values.serviceGraph.existingConfigMap }}
           volumeMounts:
+            {{- if .Values.serviceGraph.existingConfigMap }}
+            - name: service-graph
+              mountPath: /etc/incidentgpt/topology
+              readOnly: true
+            {{- end }}
+            {{- if .Values.runbooks.existingConfigMap }}
             - name: runbooks
               mountPath: /etc/incidentgpt/runbooks
               readOnly: true
+            {{- end }}
           {{- end }}
           startupProbe:
             httpGet:
@@ -107,9 +123,19 @@ spec:
               cpu: 200m
               memory: 128Mi
 
-      {{- if .Values.runbooks.existingConfigMap }}
+      {{- if or .Values.runbooks.existingConfigMap .Values.serviceGraph.existingConfigMap }}
       volumes:
+        {{- if .Values.serviceGraph.existingConfigMap }}
+        - name: service-graph
+          configMap:
+            name: {{ .Values.serviceGraph.existingConfigMap }}
+            items:
+              - key: {{ .Values.serviceGraph.key | default "dependencies.json" | quote }}
+                path: dependencies.json
+        {{- end }}
+        {{- if .Values.runbooks.existingConfigMap }}
         - name: runbooks
           configMap:
             name: {{ .Values.runbooks.existingConfigMap }}
+        {{- end }}
       {{- end }}

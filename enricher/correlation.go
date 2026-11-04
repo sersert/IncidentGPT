@@ -37,15 +37,21 @@ type groupBatch struct {
 
 // initRedis подключается к Redis. При ошибке redisClient остаётся nil (корреляция отключена).
 func initRedis() error {
+	return connectCorrelationRedis(context.Background())
+}
+
+func connectCorrelationRedis(parent context.Context) error {
 	client := redis.NewClient(&redis.Options{
-		Addr:     appCfg.RedisAddr,
-		Password: appCfg.RedisPassword,
+		Addr:                  appCfg.RedisAddr,
+		ContextTimeoutEnabled: true,
+		Password:              appCfg.RedisPassword,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
+		client.Close()
 		return fmt.Errorf("redis ping: %w", err)
 	}
 	redisClient = client
@@ -54,6 +60,10 @@ func initRedis() error {
 
 // groupKeyFor возвращает namespace для группировки ("_nolabel" если пусто).
 func groupKeyFor(e EnrichedAlert) string {
+	if dependencyCorrelation() {
+		key, _ := dependencyDecision(e)
+		return key
+	}
 	ns := e.Labels["namespace"]
 	if ns == "" {
 		ns = "_nolabel"
@@ -72,6 +82,7 @@ func groupKeyFor(e EnrichedAlert) string {
 var errSkipResolved = fmt.Errorf("resolved alert, not buffered")
 
 func bufferAlert(e EnrichedAlert) error {
+	e.CorrelationReason = "same cluster/namespace within legacy correlation window; relationship not established"
 	if redisClient == nil {
 		return fmt.Errorf("redis not configured")
 	}
@@ -288,4 +299,29 @@ func sendDurableGroup(ctx context.Context, groupKey, batchID string, alerts []js
 	)
 	appMetrics.inc("incidentgpt_groups_sent_total")
 	return nil
+}
+
+// Durable correlation must not serve with a permanently nil Redis client.
+func awaitCorrelationRedis(ctx context.Context) error {
+	if redisClient != nil {
+		return nil
+	}
+	if appCfg.RedisAddr == "" {
+		return fmt.Errorf("durable correlation requires REDIS_ADDR")
+	}
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := connectCorrelationRedis(ctx); err == nil {
+			return nil
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }

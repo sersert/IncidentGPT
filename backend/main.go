@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -39,19 +41,20 @@ func env(key, fallback string) string {
 // они НЕ соответствуют: у инцидента может быть 8 алертов, часть из которых
 // разбор отбросил как не относящиеся к делу.
 type Alert struct {
-	ID          string            `json:"id"`
-	Fingerprint string            `json:"fingerprint"`
-	AlertName   string            `json:"alertname"`
-	Severity    string            `json:"severity"`
-	Status      string            `json:"status"`
-	Namespace   string            `json:"namespace"`
-	Source      string            `json:"source"`
-	StartsAt    string            `json:"starts_at"`
-	EndsAt      string            `json:"ends_at"`
-	Summary     string            `json:"summary"`
-	Description string            `json:"description"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	ReceivedAt  time.Time         `json:"received_at"`
+	CorrelationReason string            `json:"correlation_reason,omitempty"`
+	ID                string            `json:"id"`
+	Fingerprint       string            `json:"fingerprint"`
+	AlertName         string            `json:"alertname"`
+	Severity          string            `json:"severity"`
+	Status            string            `json:"status"`
+	Namespace         string            `json:"namespace"`
+	Source            string            `json:"source"`
+	StartsAt          string            `json:"starts_at"`
+	EndsAt            string            `json:"ends_at"`
+	Summary           string            `json:"summary"`
+	Description       string            `json:"description"`
+	Labels            map[string]string `json:"labels,omitempty"`
+	ReceivedAt        time.Time         `json:"received_at"`
 
 	// Привязка к инциденту. Пусто — алерт пришёл, но в группу ещё не попал.
 	IncidentID *string `json:"incident_id"`
@@ -62,6 +65,7 @@ type Alert struct {
 }
 
 type Incident struct {
+	HistorySources    []string          `json:"history_sources,omitempty"`
 	ID                string            `json:"id"`
 	ClusterID         string            `json:"cluster_id,omitempty"`
 	AnalysisRequestID string            `json:"analysis_request_id,omitempty"`
@@ -198,26 +202,27 @@ type Feedback struct {
 
 // Enriched alert from enricher
 type EnrichedAlert struct {
-	Source         string            `json:"source"`
-	Status         string            `json:"status"`
-	Labels         map[string]string `json:"labels"`
-	Annotations    map[string]string `json:"annotations"`
-	StartsAt       string            `json:"starts_at"`
-	EndsAt         string            `json:"ends_at"`
-	Severity       string            `json:"severity"`
-	Fingerprint    string            `json:"fingerprint"`
-	PromSample     map[string]any    `json:"prom_sample"`
-	K8sContext     map[string]any    `json:"k8s_context"`
-	GrafanaLinks   []string          `json:"grafana_links"`
-	ExtraNotes     []string          `json:"extra_notes"`
-	IncidentHints  []string          `json:"incident_hints"`
-	RecentLogs     []string          `json:"recent_logs"`
-	Enriched       bool              `json:"enriched"`
-	EnrichedAt     string            `json:"enriched_at"`
-	ClusterName    string            `json:"cluster_name"`
-	Environment    string            `json:"environment"`
-	PrimaryMetric  string            `json:"primary_metric"`
-	PrimarySummary string            `json:"primary_summary"`
+	CorrelationReason string            `json:"correlation_reason,omitempty"`
+	Source            string            `json:"source"`
+	Status            string            `json:"status"`
+	Labels            map[string]string `json:"labels"`
+	Annotations       map[string]string `json:"annotations"`
+	StartsAt          string            `json:"starts_at"`
+	EndsAt            string            `json:"ends_at"`
+	Severity          string            `json:"severity"`
+	Fingerprint       string            `json:"fingerprint"`
+	PromSample        map[string]any    `json:"prom_sample"`
+	K8sContext        map[string]any    `json:"k8s_context"`
+	GrafanaLinks      []string          `json:"grafana_links"`
+	ExtraNotes        []string          `json:"extra_notes"`
+	IncidentHints     []string          `json:"incident_hints"`
+	RecentLogs        []string          `json:"recent_logs"`
+	Enriched          bool              `json:"enriched"`
+	EnrichedAt        string            `json:"enriched_at"`
+	ClusterName       string            `json:"cluster_name"`
+	Environment       string            `json:"environment"`
+	PrimaryMetric     string            `json:"primary_metric"`
+	PrimarySummary    string            `json:"primary_summary"`
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -380,6 +385,9 @@ func (s *Store) FindAlertByFingerprint(fp string) *Alert {
 	if s.persistent() {
 		a, err := s.disk.FindAlertByFingerprint(fp)
 		if err != nil {
+			if err != redis.Nil && s.disk.lockKey != "" {
+				s.disk.writeErr = err
+			}
 			return nil
 		}
 		return a
@@ -409,12 +417,9 @@ func (s *Store) FindIncidentForGroup(fingerprints []string) *Incident {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, inc := range s.incidents {
-		if inc.Status == "resolved" {
-			continue
-		}
-		for _, fp := range fingerprints {
-			if inc.Fingerprints[fp] {
+	for _, fp := range fingerprints {
+		for _, inc := range s.incidents {
+			if inc.Status != "resolved" && inc.Fingerprints[fp] {
 				return inc
 			}
 		}
@@ -447,6 +452,10 @@ var store = NewStore()
 
 // toAlert разбирает обогащённый алерт в сущность потока.
 func toAlert(ea EnrichedAlert) *Alert {
+	return store.toAlert(ea)
+}
+
+func (s *Store) toAlert(ea EnrichedAlert) *Alert {
 	alertname := ea.Labels["alertname"]
 	if alertname == "" {
 		alertname = "Unknown Alert"
@@ -460,19 +469,20 @@ func toAlert(ea EnrichedAlert) *Alert {
 		status = "firing"
 	}
 	return &Alert{
-		ID:          store.NextAlertID(),
-		Fingerprint: ea.Fingerprint,
-		AlertName:   alertname,
-		Severity:    normalizeSeverity(ea.Severity, ea.Labels["severity"]),
-		Status:      status,
-		Namespace:   ns,
-		Source:      ea.Source,
-		StartsAt:    ea.StartsAt,
-		EndsAt:      ea.EndsAt,
-		Summary:     ea.Annotations["summary"],
-		Description: ea.Annotations["description"],
-		Labels:      ea.Labels,
-		ReceivedAt:  time.Now(),
+		ID:                s.NextAlertID(),
+		CorrelationReason: ea.CorrelationReason,
+		Fingerprint:       ea.Fingerprint,
+		AlertName:         alertname,
+		Severity:          normalizeSeverity(ea.Severity, ea.Labels["severity"]),
+		Status:            status,
+		Namespace:         ns,
+		Source:            ea.Source,
+		StartsAt:          ea.StartsAt,
+		EndsAt:            ea.EndsAt,
+		Summary:           ea.Annotations["summary"],
+		Description:       ea.Annotations["description"],
+		Labels:            ea.Labels,
+		ReceivedAt:        time.Now(),
 	}
 }
 
@@ -480,6 +490,10 @@ func toAlert(ea EnrichedAlert) *Alert {
 // ОДИН инцидент. Раньше здесь был цикл по алертам, и группа из 8 связанных
 // алертов превращалась в 8 инцидентов — веб показывал не то, что Telegram.
 func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
+	return store.ingestGroup(enriched, groupKey)
+}
+
+func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 	if len(enriched) == 0 {
 		return nil
 	}
@@ -504,36 +518,49 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 		}
 	}
 
-	existing := store.FindIncidentForGroup(fingerprints)
-
-	// Вся группа погасла — закрываем инцидент.
+	resolved := s.resolveDeliveredAlerts(enriched)
 	if len(firing) == 0 {
-		if existing != nil {
-			existing.Status = "resolved"
-			now := time.Now()
-			existing.UpdatedAt = now
-			dur := int(now.Sub(existing.CreatedAt).Seconds())
-			existing.DurationSec = &dur
-			for _, a := range existing.Alerts {
-				a.Status = "resolved"
-				store.PutAlert(a)
-			}
-			// В памяти хватило бы мутации по указателю, в Redis нужно записать.
-			store.Put(existing)
-			log.Printf("Resolved incident %s", existing.ID)
-		}
-		return existing
+		return resolved
 	}
+	fingerprints = fingerprints[:0]
+	for _, alert := range firing {
+		fingerprints = append(fingerprints, alert.Fingerprint)
+	}
+	existing := s.FindIncidentForGroup(fingerprints)
 
 	// Собираем алерты потока; повторные по fingerprint не дублируем.
 	newAlerts := make([]*Alert, 0, len(firing))
 	for _, ea := range firing {
-		if prev := store.FindAlertByFingerprint(ea.Fingerprint); prev != nil {
-			prev.ReceivedAt = time.Now()
-			continue
+		if prev := s.FindAlertByFingerprint(ea.Fingerprint); prev != nil {
+			if prev.IncidentID == nil {
+				newAlerts = append(newAlerts, prev)
+				continue
+			}
+			if existing != nil && *prev.IncidentID == existing.ID {
+				prev.ReceivedAt = time.Now()
+				s.PutAlert(prev)
+				for _, member := range existing.Alerts {
+					if member.ID == prev.ID {
+						member.ReceivedAt = prev.ReceivedAt
+					}
+				}
+				continue
+			}
+			if previous := s.Get(*prev.IncidentID); previous != nil && previous.Status != "resolved" {
+				prev.ReceivedAt = time.Now()
+				s.PutAlert(prev)
+				for _, member := range previous.Alerts {
+					if member.ID == prev.ID {
+						member.ReceivedAt = prev.ReceivedAt
+					}
+				}
+				s.Put(previous)
+				continue
+			}
+			// Only a closed incident's firing alert may recur as a new episode.
 		}
-		a := toAlert(ea)
-		store.PutAlert(a)
+		a := s.toAlert(ea)
+		s.PutAlert(a)
 		newAlerts = append(newAlerts, a)
 	}
 
@@ -546,20 +573,24 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 			a.IncidentID = &existing.ID
 			existing.Alerts = append(existing.Alerts, a)
 			existing.Fingerprints[a.Fingerprint] = true
-			store.PutAlert(a)
+			s.PutAlert(a)
 		}
 		existing.AlertCount = len(existing.Alerts)
 		existing.UpdatedAt = time.Now()
-		store.Put(existing)
+		s.Put(existing)
 		if len(newAlerts) > 0 {
 			log.Printf("Incident %s: +%d alerts (total %d)", existing.ID, len(newAlerts), existing.AlertCount)
 		}
 		return existing
 	}
 
+	if len(newAlerts) == 0 {
+		return nil
+	}
+
 	// Новая группа — новый инцидент.
 	lead := firing[0]
-	id := store.NextID()
+	id := s.NextID()
 	now := time.Now()
 
 	ns := strVal(lead.K8sContext, "namespace")
@@ -640,10 +671,11 @@ func ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident {
 	}
 	for _, a := range newAlerts {
 		a.IncidentID = &id
+		s.PutAlert(a)
 		inc.Fingerprints[a.Fingerprint] = true
 	}
 
-	store.Put(inc)
+	s.Put(inc)
 	log.Printf("Created incident %s from %d alerts: %s [%s]", id, len(newAlerts), title, severity)
 	return inc
 }
@@ -754,7 +786,13 @@ func strVal(m map[string]any, key string) string {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodGet && r.Header.Get("Authorization") == "" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if trustedBrowserOrigin(r) {
+			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Add("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == "OPTIONS" {
@@ -1774,12 +1812,8 @@ func handleKnowledgeSearch(w http.ResponseWriter, r *http.Request)   { knowledge
 func handleKnowledgePatterns(w http.ResponseWriter, r *http.Request) { knowledgePatterns(w, r) }
 
 // GET /api/v1/services/graph, /api/v1/services/{id}
-func handleServiceGraph(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"nodes": []any{}, "edges": []any{}})
-}
-func handleServiceDetail(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "not found", 404)
-}
+func handleServiceGraph(w http.ResponseWriter, r *http.Request)  { serviceGraph(w, r) }
+func handleServiceDetail(w http.ResponseWriter, r *http.Request) { serviceDetail(w, r) }
 
 // GET /healthz
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -1813,13 +1847,35 @@ func intQuery(r *http.Request, key string, def int) int {
 // ── Router ──────────────────────────────────────────────────────────────────
 
 func main() {
+	if _, err := allowedBrowserOrigins(); err != nil {
+		log.Fatal(err)
+	}
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	if err := awaitDurableStorage(startupCtx); err != nil {
 		startupCancel()
 		log.Fatalf("durable storage startup failed: %v", err)
 	}
+	if store.disk != nil {
+		indexed, err := store.disk.rdb.Exists(startupCtx, alertIndexReady).Result()
+		if err != nil && regroupEnabled() {
+			startupCancel()
+			log.Fatalf("alert lookup startup check failed: %v", err)
+		}
+		if err != nil {
+			log.Printf("optional alert lookup startup check unavailable")
+		}
+		if regroupEnabled() || indexed != 0 {
+			// Rebuild at startup to include records written during an older-binary
+			// rollback; an old persistent ready marker cannot prove completeness.
+			if err := store.disk.rebuildAlertIndex(startupCtx); err != nil {
+				startupCancel()
+				log.Fatalf("alert fingerprint index migration failed: %v", err)
+			}
+		}
+	}
 	startupCancel()
 	startAnalysisJobs()
+	startGraphConfiguration()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /readyz", handleReady)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
@@ -1877,6 +1933,9 @@ func main() {
 	mux.HandleFunc("GET /api/v1/knowledge/search", handleKnowledgeSearch)
 	mux.HandleFunc("GET /api/v1/knowledge/patterns", handleKnowledgePatterns)
 
+	mux.HandleFunc("POST /api/v1/incidents/{id}/regroup", handleRegroup)
+	mux.HandleFunc("PUT /api/v1/services/graph", handleGraphWrite)
+	mux.HandleFunc("POST /api/v1/services/observations", handleGraphWrite)
 	// Service Map
 	mux.HandleFunc("GET /api/v1/services/graph", handleServiceGraph)
 	mux.HandleFunc("GET /api/v1/services/", handleServiceDetail)

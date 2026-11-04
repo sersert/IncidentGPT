@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -368,7 +369,7 @@ func handleAnalysisVersions(w http.ResponseWriter, r *http.Request) {
 			operations = append(operations, *e.Input.Operation)
 		}
 	}
-	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "enabled": durableEnabled(), "diagnostics_enabled": diagnosticsEnabled()})
+	writeJSON(w, 200, map[string]any{"items": versions, "latest_analysis_id": latest, "jobs": jobs, "operations": operations, "composition_hash": incidentComposition(inc), "history_sources": inc.HistorySources, "enabled": durableEnabled(), "diagnostics_enabled": diagnosticsEnabled()})
 }
 func handleEvidence(w http.ResponseWriter, r *http.Request) {
 	if !changeReadAuth(w, r) {
@@ -448,15 +449,27 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 		cluster = alerts[0].Labels["cluster"]
 	}
 	lockKey := "igpt:ingest:lock:" + digest(cluster, gk, alerts[0].Labels["namespace"])
+	if regroupEnabled() {
+		lockKey = "igpt:composition:lock"
+	}
+	if regroupEnabled() {
+		if err := store.disk.ensureAlertIndex(ctx); err != nil {
+			http.Error(w, "alert lookup migration unavailable", 503)
+			return
+		}
+	}
 	owner := newStableID("ingest-owner")
 	claimed, err := store.disk.rdb.SetNX(ctx, lockKey, owner, 30*time.Second).Result()
 	if err != nil || !claimed {
 		http.Error(w, "ingest busy; retry same batch", 503)
 		return
 	}
-	defer func() {
-		_ = redis.NewScript("if redis.call('GET',KEYS[1]) == ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0").Run(context.Background(), store.disk.rdb, []string{lockKey}, owner).Err()
-	}()
+	defer releaseOwnedLock(store.disk.rdb, lockKey, owner)
+	// Scope every ingest read/write to the request budget and fence composition
+	// writes with the lock owner. A stalled owner cannot overwrite a later move.
+	disk := &Storage{rdb: store.disk.rdb, ctx: ctx, lockKey: lockKey, lockOwner: owner}
+	disk.alertIndexEnabled.Store(store.disk.alertIndexEnabled.Load())
+	ingestStore := &Store{disk: disk}
 	prior, err := store.disk.rdb.Get(ctx, "igpt:ingest:batch:"+digest(cluster, batchID)).Result()
 	if err == nil {
 		writeJSON(w, 202, map[string]any{"job_id": prior, "scheduled": true, "duplicate": true})
@@ -466,17 +479,139 @@ func handleDurableIngest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "batch lookup unavailable", 503)
 		return
 	}
-	inc := ingestGroup(alerts, gk)
-	if inc == nil || inc.Status == "resolved" {
+	// Keep a human-moved fingerprint apart from its former automatic batch.
+	partitions := map[string][]EnrichedAlert{}
+	for _, alert := range alerts {
+		fp := alert.Fingerprint
+		if cluster != "" && cluster != "unknown" {
+			fp = "cluster-" + digest(cluster, fp)
+		}
+		target, lookupErr := ingestStore.disk.manualBinding(ctx, fp)
+		if lookupErr != nil {
+			http.Error(w, "manual binding unavailable", 503)
+			return
+		}
+		partitions[target] = append(partitions[target], alert)
+	}
+	targets := make([]string, 0, len(partitions))
+	for target := range partitions {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	jobIDs := []string{}
+	incidentIDs := []string{}
+	work := map[string]map[string]EnrichedAlert{}
+	for _, target := range targets {
+		part := partitions[target]
+		fps := []string{}
+		for _, alert := range part {
+			fp := alert.Fingerprint
+			if cluster != "" && cluster != "unknown" {
+				fp = "cluster-" + digest(cluster, fp)
+			}
+			fps = append(fps, fp)
+		}
+		if existing := ingestStore.FindIncidentForGroup(fps); existing != nil {
+			count := len(existing.Alerts)
+			known := map[string]bool{}
+			for _, a := range existing.Alerts {
+				known[a.Fingerprint] = true
+			}
+			for i, a := range part {
+				if a.Status != "resolved" && !known[fps[i]] {
+					if prev := ingestStore.FindAlertByFingerprint(fps[i]); prev != nil && prev.IncidentID != nil && *prev.IncidentID != existing.ID {
+						if previous := ingestStore.Get(*prev.IncidentID); previous != nil && previous.Status != "resolved" {
+							known[fps[i]] = true
+							continue
+						}
+					}
+					count++
+					known[fps[i]] = true
+				}
+			}
+			if count > 50 {
+				http.Error(w, "incident composition limit reached; manually separate or close the group", 503)
+				return
+			}
+		}
+		inc := ingestStore.ingestGroup(part, gk)
+		if disk.writeErr != nil || ctx.Err() != nil {
+			http.Error(w, "composition persistence unavailable; retry same batch", 503)
+			return
+		}
+		if inc == nil || inc.Status == "resolved" {
+			continue
+		}
+		for _, alert := range part {
+			if alert.Status == "resolved" {
+				continue
+			}
+			fp := alert.Fingerprint
+			if cluster != "" && cluster != "unknown" {
+				fp = "cluster-" + digest(cluster, fp)
+			}
+			owner, err := disk.FindIncidentByFingerprint(fp)
+			if err != nil {
+				http.Error(w, "alert owner unavailable", 503)
+				return
+			}
+			if owner.Status == "resolved" {
+				continue
+			}
+			if work[owner.ID] == nil {
+				work[owner.ID] = map[string]EnrichedAlert{}
+			}
+			work[owner.ID][fp] = alert
+		}
+	}
+	ids := make([]string, 0, len(work))
+	for id := range work {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		// Refresh after every partition has been applied, and enqueue once per
+		// final incident, even when a manual and automatic partition converge.
+		inc := ingestStore.Get(id)
+		if inc == nil || disk.writeErr != nil {
+			http.Error(w, "incident composition unavailable", 503)
+			return
+		}
+		if inc.Status == "resolved" {
+			continue
+		}
+		childBatch := batchID
+		if len(ids) > 1 {
+			childBatch = batchID + "/incident/" + id
+		}
+		fps := make([]string, 0, len(work[id]))
+		for fp := range work[id] {
+			fps = append(fps, fp)
+		}
+		sort.Strings(fps)
+		owned := make([]EnrichedAlert, 0, len(fps))
+		for _, fp := range fps {
+			owned = append(owned, work[id][fp])
+		}
+		jid, err := enqueueAnalysis(ctx, inc, owned, childBatch)
+		if err != nil {
+			http.Error(w, "durable persistence or scheduling unavailable; retry same batch", 503)
+			return
+		}
+		jobIDs = append(jobIDs, jid)
+		incidentIDs = append(incidentIDs, id)
+	}
+	if len(jobIDs) == 0 {
 		writeJSON(w, 200, map[string]any{"status": "resolved", "scheduled": false})
 		return
 	}
-	jid, err := enqueueAnalysis(ctx, inc, alerts, batchID)
-	if err != nil {
-		http.Error(w, "durable persistence or scheduling unavailable; retry same batch", 503)
-		return
+	if len(ids) > 1 {
+		if err := store.disk.rdb.Set(ctx, "igpt:ingest:batch:"+digest(cluster, batchID), jobIDs[0], 0).Err(); err != nil {
+			http.Error(w, "batch acknowledgement unavailable; retry", 503)
+			return
+		}
 	}
-	writeJSON(w, 202, map[string]any{"incident_id": inc.ID, "job_id": jid, "scheduled": true})
+	writeJSON(w, 202, map[string]any{"incident_id": incidentIDs[0], "incident_ids": incidentIDs, "job_id": jobIDs[0], "job_ids": jobIDs, "scheduled": true})
 }
 func trustedBearer(r *http.Request, token string) bool {
 	return token != "" && constantToken(r.Header.Get("Authorization"), "Bearer "+token)

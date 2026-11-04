@@ -31,3 +31,12 @@ grep -F 'optional: false' "$scratch/enricher" >/dev/null
 grep -F 'optional: false' "$scratch/backend" >/dev/null
 grep -F 'http://incidentgpt-enricher:9099/v1/diagnostics' "$scratch/backend" >/dev/null
 echo 'Diagnostics chart configuration checks passed.'
+
+reject changes.existingSecret "$enricher" --set topology.observationsEnabled=true
+reject changes.durableCorrelation "$enricher" --set topology.correlationEnabled=true --set changes.existingSecret=fixture
+reject topology.backendUrl "$enricher" --set topology.observationsEnabled=true --set changes.existingSecret=fixture --set topology.backendUrl=
+reject DURABLE_ANALYSIS_ENABLED "$backend" --set-string env.MANUAL_REGROUP_ENABLED=true
+helm template topology "$enricher" --set topology.observationsEnabled=true --set topology.correlationEnabled=true --set changes.durableCorrelation=true --set changes.existingSecret=fixture >"$scratch/topology"
+grep -F 'optional: false' "$scratch/topology" >/dev/null
+helm template composition "$backend" --set-string env.MANUAL_REGROUP_ENABLED=true --set-string env.DURABLE_ANALYSIS_ENABLED=true >"$scratch/composition"
+echo 'Topology and composition chart configuration checks passed.'

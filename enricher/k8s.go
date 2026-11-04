@@ -127,9 +127,12 @@ func collectPodContext(ctx context.Context, a AMAlert) (map[string]string, []str
 
 	data := make(map[string]string)
 	data["pod_phase"] = string(pod.Status.Phase)
+	data["observed_pod"] = pod.Name
+	data["observed_node"] = pod.Spec.NodeName
 	// Resolve real ownership; do not infer workload names by trimming pod names.
 	for _, owner := range pod.OwnerReferences {
 		if owner.Kind == "ReplicaSet" && owner.Controller != nil && *owner.Controller {
+			data["observed_replicaset"] = owner.Name
 			rs, err := k8sClient.AppsV1().ReplicaSets(ns).Get(ctx, owner.Name, metav1.GetOptions{})
 			if err == nil {
 				for _, parent := range rs.OwnerReferences {

@@ -71,3 +71,19 @@ Track Go modules, npm dependencies in `website/`, Docker base images and GitHub 
 ## Responsible Disclosure
 
 If you discover a security issue, avoid posting exploit details publicly. Contact the repository owner privately and include a minimal reproduction, affected versions and suggested mitigation.
+
+
+## Граф и ручное изменение состава
+
+`TIMELINE_READ_*` — историческое имя общей administrator-пары, а не отдельная
+read-only роль. Она авторизует новые graph/regroup/diagnostics API; разделения
+операторов и tenancy пока нет. Нельзя выдавать эти credentials как read-only.
+Имя в audit берётся из проверенного Basic principal. `X-Auth-User` от прямого
+клиента не является доказательством другой личности и не может подменять actor.
+
+Graph/regroup требуют JSON и проверяют browser Origin; произвольный сторонний
+`text/plain` POST отклоняется до мутации. При замене Host доверенные адреса задаются
+явно в `ALLOWED_ORIGINS`. Для authenticated browser-запросов нет wildcard CORS.
+Чтение выключенного графа возвращает только `enabled:false` и пустые списки,
+без новых credentials/metadata; включённый граф требует backend Basic-auth.
+Подробные флаги, сроки хранения и rollout: [руководство](roadmap/dependency-correlation.md).
