@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false     # упавший ui не должен отменять уже идущую сборку go-сервисов
       matrix:
-        service: [ai-worker, enricher, sanitizer, backend, ui]
+        service: [ai-worker, enricher, sanitizer, backend, ui, knowledge-mcp]
     steps:
       - uses: actions/checkout@v4
 

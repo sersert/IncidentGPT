@@ -170,3 +170,20 @@ func TestUnknownDestinationAndMaxDepth(t *testing.T) {
 		t.Fatalf("max depth must be enforced")
 	}
 }
+
+func TestKnowledgeGitVersionSurvivesSanitization(t *testing.T) {
+	engine := testEngine(t, config.Config{})
+	sha := "abc1234567890123456789012345678901234567"
+	id := "kb-" + strings.Repeat("a", 64)
+	raw, _ := json.Marshal(map[string]any{"reference_id": id, "version": sha, "excerpt": "Bearer credential1234567890; call +7 999 123-45-67", "password": sha, "numeric": strings.Repeat("1", 40)})
+	for _, destination := range []string{"llm", "webhook", "telegram"} {
+		output, _, err := engine.SanitizePayload(destination, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := output.(map[string]any)
+		if data["version"] != sha || data["reference_id"] != id || data["password"] == sha || data["numeric"] == strings.Repeat("1", 40) || strings.Contains(data["excerpt"].(string), "credential1234567890") || strings.Contains(data["excerpt"].(string), "999 123") {
+			t.Fatalf("%s: provenance or secret masking failed: %v", destination, data)
+		}
+	}
+}

@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+- Добавлен отдельный MCP-сервер для read-only поиска по разрешённым Confluence spaces и каталогам GitHub/GitLab. При явной настройке AI worker сам вызывает поиск по необходимости (не более двух обращений), сохраняя default-поведение без MCP. Запросы и документы проходят fail-closed санитизацию. Sanitizer сохраняет непрозрачные 40-символьные Git SHA, продолжая маскировать credentials и телефоны. Версии structured-анализа получают additive metadata `knowledge` и `knowledge_reference_ids`; старые записи совместимы, новых Redis keys и миграций нет. Подробнее: [mcp-knowledge.md](docs/mcp-knowledge.md).
+
 - Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`
   (без TTL, удалять вместе с incident) исключает порчу JSON через Lua cjson;
   reader поддерживает старый флаг и известные пустые массивы, записанные как `{}`.
