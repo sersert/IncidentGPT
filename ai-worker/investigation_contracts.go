@@ -52,6 +52,7 @@ type AnalysisVersion struct {
 	Notification      string         `json:"notification_status,omitempty"`
 }
 type AnalysisInput struct {
+	Report      *ReportSource        `json:"report_source,omitempty"`
 	JobKind     string               `json:"job_kind,omitempty"`
 	Operation   *DiagnosticOperation `json:"operation,omitempty"`
 	IngestKey   string               `json:"ingest_key,omitempty"`
@@ -78,6 +79,9 @@ type DurableJob struct {
 }
 
 func validateAnalysis(a AnalysisVersion, input AnalysisInput) error {
+	if a.StartedAt.IsZero() || a.CompletedAt.IsZero() || a.CompletedAt.Before(a.StartedAt) {
+		return fmt.Errorf("invalid analysis timestamps")
+	}
 	if a.Version != 1 || a.IncidentID != input.IncidentID || a.ID != input.AnalysisID || a.Status != "complete" || len(a.Summary) == 0 || len(a.Summary) > 4000 || len(a.Hypotheses) > 8 || len(a.Missing) > 20 || len(a.NextChecks) > 20 {
 		return fmt.Errorf("invalid analysis contract")
 	}
@@ -158,4 +162,20 @@ type DiagnosticResult struct {
 	Evidence    []Evidence `json:"evidence"`
 	Status      string     `json:"status"`
 	CollectedAt time.Time  `json:"collected_at"`
+}
+
+type ReportSource struct {
+	Version            int       `json:"schema_version"`
+	ReportID           string    `json:"report_id"`
+	Kind               string    `json:"kind"`
+	IncidentID         string    `json:"incident_id"`
+	Composition        string    `json:"composition_hash"`
+	CapturedAt         time.Time `json:"captured_at"`
+	Actor              string    `json:"actor"`
+	Markdown           string    `json:"source_markdown"`
+	AnalysisID         string    `json:"analysis_id,omitempty"`
+	EvidenceIDs        []string  `json:"evidence_ids,omitempty"`
+	ChangeIDs          []string  `json:"change_event_ids,omitempty"`
+	ResolutionRevision int       `json:"resolution_revision"`
+	LifecycleRevision  int       `json:"lifecycle_revision"`
 }

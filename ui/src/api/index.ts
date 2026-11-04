@@ -227,9 +227,9 @@ export const api = {
     return post(`/incidents/${incidentId}/postmortem`)
   },
 
-  savePostMortem(incidentId: string, markdown: string): Promise<void> {
+  savePostMortem(incidentId: string, markdown: string, reportId: string, revision: number, reviewStatus: 'draft' | 'reviewed' = 'draft'): Promise<void> {
     if (USE_MOCKS) return mock(undefined as never)
-    return put(`/incidents/${incidentId}/postmortem`, { markdown })
+    return put(`/incidents/${incidentId}/postmortem`, { markdown, report_id: reportId, revision, review_status: reviewStatus })
   },
 }
 

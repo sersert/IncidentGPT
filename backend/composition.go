@@ -91,6 +91,7 @@ func (s *Store) resolveDeliveredAlerts(alerts []EnrichedAlert) *Incident {
 			inc.DurationSec = &duration
 		}
 		s.Put(inc)
+		recordIngestLifecycle(inc)
 		if allResolved && s.disk != nil && s.disk.writeErr == nil {
 			ctx, cancel := context.WithTimeout(s.disk.ctx, time.Second)
 			for _, a := range inc.Alerts {

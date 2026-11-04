@@ -137,6 +137,19 @@ RBAC: только enricher — ClusterRole `<fullname>-read` (`enricher/chart/�
 - WebSocket-сервера в backend (nginx `/ws/` ведёт в никуда); персистентности для `settings/llm` и `settings/integrations`; egress-NetworkPolicy; RBAC у backend/ai-worker/sanitizer/ui; шаблонов в umbrella кроме `grafana-dashboard.yaml`; `.claude/` кроме этого файла.
 - `CHANGELOG.md` и `RELEASE_NOTES.md` есть (0.2.0, `Unreleased` пуст). `website/` — отдельный сайт (vitest), в чарт не входит. `backend/incidentgpt-backend` — собранный бинарник, лежит в git.
 
+## Обновление PR #21 после проверки кандидата
+
+- Старые PATCH/dashboard/analytics: `LEGACY_API_AUTH_REQUIRED=false` сохраняет UI/NP
+  границу; true включает `changeReadAuth`. Новые отчёты/lifecycle всегда Basic-auth.
+- `ALLOWED_ORIGINS` — явный список полных browser Origin для прокси с другим Host.
+- Reader Secret автоматически не создаётся; `readerAuth.existingSecret` (обязательные
+  username/password) либо `changes.existingSecret`, одновременно задавать нельзя.
+- Lifecycle пишет при durable/reports/`LIFECYCLE_ENABLED`; одинаковые факты не создают
+  ревизии. TTL новых history-ключей — `LIFECYCLE_HISTORY_RETENTION_DAYS`, 0 без TTL.
+- `igpt:incident:postmortem:{id}` string=1 без TTL, атомарно с завершением report job.
+  Старый JSON-флаг совместим; Lua больше не переписывает incident при публикации.
+- Старые analytics/dashboard работают без Redis с `persistent:false`; новые отчёты
+  по-прежнему требуют durable Redis. Ошибки Redis не выдают здоровый пустой результат.
 
 ## Обновление PR #20 после повторного ревью 2026-11-03
 

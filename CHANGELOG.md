@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+- Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`
+  (без TTL, удалять вместе с incident) исключает порчу JSON через Lua cjson;
+  reader поддерживает старый флаг и известные пустые массивы, записанные как `{}`.
+- Lifecycle пишет только изменения при opt-in durable/reports/`LIFECYCLE_ENABLED`.
+  `LIFECYCLE_HISTORY_RETENTION_DAYS` задаёт TTL новых audit-ревизий (0 — политика
+  оператора), текущие записи и прежняя история автоматически не удаляются.
+- Старые PATCH и dashboard/analytics сохраняют доступ через доверенный UI-прокси;
+  `LEGACY_API_AUTH_REQUIRED=true` явно включает fail-closed проверку backend Basic.
+  Новые API всегда требуют credentials. Убрано автоматическое копирование admin/admin;
+  reader Secret обязателен при его выборе. Прокси с заменой Host поддержан через
+  явный `ALLOWED_ORIGINS`, без доверия к произвольным forwarded-заголовкам.
+- Dashboard/analytics восстановлены в memory fallback (`persistent:false`), без
+  выдуманных времён восстановления/анализа; устранено повторное чтение списка.
 - Исправлен resolve общей пачки: обновляются все затронутые инциденты, закрытие
   возможно только без оставшихся firing-участников. Повторный эпизод после закрытия
   и восстановление orphan не создают пустые инциденты. Диагностика после regroup

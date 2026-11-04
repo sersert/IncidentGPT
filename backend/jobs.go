@@ -71,16 +71,15 @@ if redis.call('EXISTS',KEYS[#KEYS]) == 1 then return -2 end
 if redis.call('EXISTS',KEYS[1]) == 1 then return 0 end
 local inc=redis.call('GET',KEYS[3]); if not inc then return -1 end
 local candidate=cjson.decode(ARGV[1])
-if candidate.job.kind=='diagnostics' then
-local activeKey='igpt:diagnostics:active:'..candidate.job.incident_id
+if candidate.job.kind=='diagnostics' or candidate.job.kind=='report' then
+local activeKey='igpt:'..(candidate.job.kind=='diagnostics' and 'diagnostics' or 'report')..':active:'..candidate.job.incident_id
 local active=redis.call('GET',activeKey)
 if active then local oldraw=redis.call('GET','igpt:job:'..active);if oldraw then local old=cjson.decode(oldraw);if old.job.status=='queued' or old.job.status=='running' then return -3 end end end
 redis.call('SET',activeKey,candidate.job.job_id)
 end
-local data=cjson.decode(inc); data.analysis_request_id=ARGV[3]
-redis.call('SET',KEYS[3],cjson.encode(data))
+if candidate.job.kind~='report' then local data=cjson.decode(inc); data.analysis_request_id=ARGV[3];redis.call('SET',KEYS[3],cjson.encode(data)) end
 redis.call('SET',KEYS[1],ARGV[1]); redis.call('ZADD',KEYS[2],ARGV[2],ARGV[4]);redis.call('ZADD','igpt:jobs:pending:created',ARGV[2],ARGV[4])
-redis.call('SET',KEYS[4],ARGV[3]); redis.call('ZADD',KEYS[5],ARGV[2],ARGV[4])
+if candidate.job.kind~='report' then redis.call('SET',KEYS[4],ARGV[3]) end;redis.call('ZADD',KEYS[5],ARGV[2],ARGV[4])
 for i=6,#KEYS-1 do redis.call('SET',KEYS[i],ARGV[i-1],'NX') end
 redis.call('SET',KEYS[#KEYS],ARGV[4])
 return 1`)
@@ -162,7 +161,7 @@ local key='igpt:job:'..ids[1];local raw=redis.call('GET',key)
 if not raw then redis.call('ZREM',KEYS[1],ids[1]);return nil end
 local e=cjson.decode(raw)
 if e.job.status == 'canceled' or e.job.status == 'complete' or e.job.status == 'failed' then redis.call('ZREM',KEYS[1],ids[1]);return nil end
-if e.job.attempts >= 4 then if e.job.kind=='diagnostics' and redis.call('GET','igpt:diagnostics:active:'..e.job.incident_id)==e.job.job_id then redis.call('DEL','igpt:diagnostics:active:'..e.job.incident_id) end;e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
+if e.job.attempts >= 4 then if e.job.kind=='diagnostics' or e.job.kind=='report' then local activeKey='igpt:'..e.job.kind..':active:'..e.job.incident_id;if redis.call('GET',activeKey)==e.job.job_id then redis.call('DEL',activeKey) end end;e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
 e.owner=ARGV[2];e.lease_until=tonumber(ARGV[3]);e.job.status='running';e.job.attempts=e.job.attempts+1; if e.job.attempts>1 then redis.call('INCR','igpt:jobs:retries') end
 raw=cjson.encode(e);redis.call('SET',key,raw);redis.call('ZADD',KEYS[1],ARGV[3],ids[1]);return raw`)
 
@@ -254,6 +253,8 @@ func executeAnalysis(ctx context.Context, e *jobEnvelope) (*AnalysisVersion, err
 	if err = validateAnalysis(a, e.Input); err != nil {
 		return nil, err
 	}
+	a.StartedAt = a.StartedAt.UTC()
+	a.CompletedAt = a.CompletedAt.UTC()
 	a.HumanConfirmation = "unconfirmed"
 	a.PreviousID = e.Input.PreviousID
 	a.Composition = e.Input.Composition
@@ -271,7 +272,11 @@ func startAnalysisJobs() {
 				ctx, cancel := context.WithTimeout(context.Background(), 85*time.Second)
 				e, err := claimJob(ctx)
 				if err == nil && e != nil {
-					_ = runAnalysisJob(ctx, e)
+					if e.Job.Kind == "report" {
+						runReportJob(ctx, e)
+					} else {
+						_ = runAnalysisJob(ctx, e)
+					}
 				}
 				cancel()
 			}

@@ -72,6 +72,48 @@ Track Go modules, npm dependencies in `website/`, Docker base images and GitHub 
 
 If you discover a security issue, avoid posting exploit details publicly. Contact the repository owner privately and include a minimal reproduction, affected versions and suggested mitigation.
 
+## Investigation, knowledge and report boundaries
+
+Новые API используют сервисные Bearer-токены или собственную проверку Basic-auth
+backend (`TIMELINE_READ_*`), независимо от nginx и `X-Auth-User`. Старые PATCH
+status/assignee и dashboard/analytics сохраняют защиту UI Basic-auth и NetworkPolicy.
+Для дополнительной проверки этих старых API включите `LEGACY_API_AUTH_REQUIRED=true`
+и задайте `changes.existingSecret` либо `readerAuth.existingSecret`. Отсутствие
+credentials в этом режиме даёт 401, автоматического ослабления защиты нет.
+Новые reports/lifecycle/analysis API всегда требуют backend credentials.
+
+Учётная запись backend должна совпадать с UI. При внешнем htpasswd нужен отдельный
+Secret с исходными username/password; хеш htpasswd не подходит. Чарт не копирует
+admin/admin в backend и не создаёт reader Secret автоматически. Выбранный Secret
+обязателен: ошибка имени/ключа блокирует запуск, вместо скрытого 401 после установки.
+Браузерные изменения проверяют Origin. Для прокси, меняющего Host, задайте полные
+доверенные адреса в `ALLOWED_ORIGINS` через запятую, например
+`http://127.0.0.1:8088,https://incident.example`. Wildcard, path и произвольные
+forwarded-заголовки не дают доступа; Basic-auth остаётся обязательным для новых API.
+Общая administrator-роль не обеспечивает разделение команд. Backend/Redis/diagnostics
+должны оставаться приватными под NetworkPolicy.
+
+Change collectors read allowlisted deployment/ReplicaSet metadata, not Secret or
+ConfigMap values. Graph observations use actual ownership/placement metadata and
+cannot declare application dependencies. Routing/resource identities must survive
+sanitization unchanged; incompatible pseudonymization policies fail closed rather
+than causing cross-resource associations. Diagnostic operations are typed reads
+with backend-bound resources, explicit namespace/cluster authorization, timeout,
+call/concurrency/output budgets and no Kubernetes writes, exec, arbitrary queries
+or URL destinations. Untrusted logs/runbooks/questions cannot choose tools.
+
+Reports snapshot only incident-owned evidence, stored analysis/changes and trusted
+human facts. Snapshot, generation and edits pass sanitizer before persistence.
+Exports share incident authentication, contain sanitized Markdown and use attachment,
+no-store/nosniff headers. Preview skips raw HTML/images and rejects unsafe links.
+Unknown impact/cause/recovery is not invented. Human edits retain actor/revision and
+regeneration cannot overwrite prior edits. Handoff never sends Slack/email/Telegram
+or opens external tickets. Download/copy is the explicit user workflow.
+
+Redis incidents, jobs, resolution/composition/lifecycle audits require backup and an
+operator retention policy. Graph/change data defaults to 30 days; report records to
+90 days, while captured report job input follows non-expiring durable job history.
+Deletion/archival must consider both. Read the [workflow-specific limits and rollback](roadmap/postmortem-and-handoff.md).
 
 ## Граф и ручное изменение состава
 

@@ -1,3 +1,17 @@
+{{- if eq (toString .Values.env.REPORTS_ENABLED) "true" }}
+{{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
+{{- fail "REPORTS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
+{{- end }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "REPORTS_ENABLED requires changes.existingSecret with reader, analysis and sanitizer credentials" }}
+{{- end }}
+{{- end }}
+{{- if and (eq (toString .Values.env.LEGACY_API_AUTH_REQUIRED) "true") (not .Values.changes.existingSecret) (not .Values.readerAuth.existingSecret) }}
+{{- fail "LEGACY_API_AUTH_REQUIRED requires readerAuth.existingSecret or changes.existingSecret" }}
+{{- end }}
+{{- if and .Values.readerAuth.existingSecret .Values.changes.existingSecret }}
+{{- fail "choose readerAuth.existingSecret or changes.existingSecret for backend reader credentials, not both" }}
+{{- end }}
 {{- if and (eq (toString .Values.env.MANUAL_REGROUP_ENABLED) "true") (ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true") }}
 {{- fail "MANUAL_REGROUP_ENABLED requires DURABLE_ANALYSIS_ENABLED" }}
 {{- end }}
@@ -43,10 +57,24 @@ spec:
               protocol: TCP
           env:
             {{- range $key, $value := .Values.env }}
-            {{- if not (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap) }}
+            {{- if not (or (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- end }}
+            {{- if and .Values.readerAuth.existingSecret (not .Values.changes.existingSecret) }}
+            - name: TIMELINE_READ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.readerAuth.existingSecret }}
+                  key: {{ .Values.readerAuth.usernameKey }}
+                  optional: false
+            - name: TIMELINE_READ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.readerAuth.existingSecret }}
+                  key: {{ .Values.readerAuth.passwordKey }}
+                  optional: false
             {{- end }}
             {{- if .Values.serviceGraph.existingConfigMap }}
             - name: SERVICE_GRAPH_FILE

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"sort"
@@ -417,6 +416,7 @@ func (s *Store) FindIncidentForGroup(fingerprints []string) *Incident {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	// Match the persistent path's fingerprint order rather than Go map order.
 	for _, fp := range fingerprints {
 		for _, inc := range s.incidents {
 			if inc.Status != "resolved" && inc.Fingerprints[fp] {
@@ -581,6 +581,7 @@ func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident
 		if len(newAlerts) > 0 {
 			log.Printf("Incident %s: +%d alerts (total %d)", existing.ID, len(newAlerts), existing.AlertCount)
 		}
+		recordIngestLifecycle(existing)
 		return existing
 	}
 
@@ -677,6 +678,7 @@ func (s *Store) ingestGroup(enriched []EnrichedAlert, groupKey string) *Incident
 
 	s.Put(inc)
 	log.Printf("Created incident %s from %d alerts: %s [%s]", id, len(newAlerts), title, severity)
+	recordIngestLifecycle(inc)
 	return inc
 }
 
@@ -1048,6 +1050,9 @@ func handleGetIncident(w http.ResponseWriter, r *http.Request) {
 // нарисованы, но ничего не делали. Каждое действие пишется в журнал вместе с
 // именем пользователя — его отдаёт nginx после basic-авторизации.
 func handleIncidentPatch(w http.ResponseWriter, r *http.Request) {
+	if !legacyAPIAuth(w, r) {
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/incidents/")
 	if i := strings.Index(id, "/"); i >= 0 {
 		id = id[:i]
@@ -1068,7 +1073,10 @@ func handleIncidentPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := requestUser(r)
+	user, _, authenticated := r.BasicAuth()
+	if !authenticated {
+		user = requestUser(r)
+	}
 	now := time.Now()
 	changed := false
 
@@ -1101,6 +1109,12 @@ func handleIncidentPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if store.disk != nil && body.Status != nil {
+		if err := recordHumanLifecycle(r.Context(), inc, *body.Status, user); err != nil {
+			http.Error(w, "lifecycle persistence unavailable", 503)
+			return
+		}
+	}
 	inc.UpdatedAt = now
 	inc.History = append(inc.History, StatusChange{
 		Status:   inc.Status,
@@ -1358,66 +1372,6 @@ func handleFeedback(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/v1/dashboard/stats
-func handleDashboardStats(w http.ResponseWriter, _ *http.Request) {
-	all := store.List()
-	active := 0
-	activeCritical := 0
-	var resolvedDurations []float64
-
-	for _, inc := range all {
-		if inc.Status == "active" {
-			active++
-			if inc.Severity == "critical" {
-				activeCritical++
-			}
-		}
-		if inc.Status == "resolved" && inc.DurationSec != nil {
-			resolvedDurations = append(resolvedDurations, float64(*inc.DurationSec))
-		}
-	}
-
-	// MTTR Reduction: compare first half vs second half of resolved incidents
-	// If not enough data, show 0%
-	mttrReduction := 0
-	if len(resolvedDurations) >= 4 {
-		mid := len(resolvedDurations) / 2
-		oldAvg := avg(resolvedDurations[:mid])
-		newAvg := avg(resolvedDurations[mid:])
-		if oldAvg > 0 {
-			mttrReduction = int(math.Round((oldAvg - newAvg) / oldAvg * 100))
-			if mttrReduction < 0 {
-				mttrReduction = 0
-			}
-		}
-	}
-
-	// Noise Reduction: total alerts received vs unique incidents created
-	totalAlerts, alertsToday := store.AlertStats()
-	noiseReduction := 0
-	if totalAlerts > 0 && len(all) > 0 {
-		noiseReduction = int(math.Round((1 - float64(len(all))/float64(totalAlerts)) * 100))
-		if noiseReduction < 0 {
-			noiseReduction = 0
-		}
-	}
-
-	// Avg analysis time: avg duration of resolved incidents (seconds)
-	avgAnalysis := 0.0
-	if len(resolvedDurations) > 0 {
-		avgAnalysis = avg(resolvedDurations)
-	}
-
-	writeJSON(w, 200, map[string]any{
-		"active_incidents":      active,
-		"active_critical":       activeCritical,
-		"mttr_reduction_pct":    mttrReduction,
-		"noise_reduction_pct":   noiseReduction,
-		"avg_analysis_time_sec": int(avgAnalysis),
-		"alerts_today":          alertsToday,
-		"alerts_sparkline":      []int{},
-	})
-}
-
 func avg(vals []float64) float64 {
 	if len(vals) == 0 {
 		return 0
@@ -1432,7 +1386,18 @@ func avg(vals []float64) float64 {
 // GET /api/v1/dashboard/active
 func handleDashboardActive(w http.ResponseWriter, r *http.Request) {
 	limit := intQuery(r, "limit", 10)
-	all := store.List()
+	var all []*Incident
+	if store.disk != nil {
+		var err error
+		all, err = store.disk.ListIncidents()
+		if err != nil {
+			http.Error(w, "active incidents unavailable", 503)
+			return
+		}
+	}
+	if store.disk == nil {
+		all = store.List()
+	}
 	active := []*Incident{}
 	for _, inc := range all {
 		if inc.Status == "active" {
@@ -1475,162 +1440,6 @@ func handleAlertVolume(w http.ResponseWriter, _ *http.Request) {
 }
 
 // GET /api/v1/analytics/summary
-func handleAnalyticsSummary(w http.ResponseWriter, _ *http.Request) {
-	all := store.List()
-	totalIncidents := len(all)
-	var resolved int
-	var totalDur float64
-	var resolvedDurations []float64
-	for _, inc := range all {
-		if inc.Status == "resolved" && inc.DurationSec != nil {
-			resolved++
-			d := float64(*inc.DurationSec)
-			totalDur += d
-			resolvedDurations = append(resolvedDurations, d)
-		}
-	}
-
-	avgMTTR := 0.0
-	if resolved > 0 {
-		avgMTTR = totalDur / float64(resolved) / 60 // minutes
-	}
-
-	// MTTR reduction: compare first half vs second half
-	mttrReduction := 0
-	mttrBefore := avgMTTR
-	mttrAfter := avgMTTR
-	if len(resolvedDurations) >= 4 {
-		mid := len(resolvedDurations) / 2
-		mttrBefore = avg(resolvedDurations[:mid]) / 60
-		mttrAfter = avg(resolvedDurations[mid:]) / 60
-		if mttrBefore > 0 {
-			mttrReduction = int(math.Round((mttrBefore - mttrAfter) / mttrBefore * 100))
-			if mttrReduction < 0 {
-				mttrReduction = 0
-			}
-		}
-	}
-
-	// Noise reduction from real data
-	totalAlerts, _ := store.AlertStats()
-	noiseBefore := totalAlerts
-	noiseAfter := totalIncidents
-	noiseReduction := 0
-	if noiseBefore > 0 && noiseAfter > 0 {
-		noiseReduction = int(math.Round((1 - float64(noiseAfter)/float64(noiseBefore)) * 100))
-		if noiseReduction < 0 {
-			noiseReduction = 0
-		}
-	}
-
-	// Time saved: assume each incident saves ~30min vs manual triage
-	timeSavedMin := totalIncidents * 30
-
-	writeJSON(w, 200, map[string]any{
-		"mttr_before_min":     math.Round(mttrBefore),
-		"mttr_after_min":      math.Round(mttrAfter),
-		"mttr_reduction_pct":  mttrReduction,
-		"mtta_before_min":     0,
-		"mtta_after_min":      0,
-		"mtta_reduction_pct":  0,
-		"noise_before":        noiseBefore,
-		"noise_after":         noiseAfter,
-		"noise_reduction_pct": noiseReduction,
-		"time_saved_hours":    timeSavedMin / 60,
-	})
-}
-
-// GET /api/v1/analytics/mttr
-// Динамика по дням: сколько проходит от алерта до разбора и до закрытия.
-// Раньше эндпоинт отдавал пустой массив, и график с линиями не рисовался вовсе.
-func handleMTTRTrend(w http.ResponseWriter, _ *http.Request) {
-	type bucket struct {
-		analysisSum, analysisCount float64
-		closeSum, closeCount       float64
-	}
-	byDay := map[string]*bucket{}
-
-	get := func(day string) *bucket {
-		if _, ok := byDay[day]; !ok {
-			byDay[day] = &bucket{}
-		}
-		return byDay[day]
-	}
-
-	for _, inc := range store.List() {
-		day := inc.CreatedAt.Format("2006-01-02")
-
-		// Время до разбора: от появления инцидента до ответа модели.
-		if inc.Analysis != nil && inc.Analysis.GeneratedAt != "" {
-			if at, err := time.Parse(time.RFC3339, inc.Analysis.GeneratedAt); err == nil {
-				if d := at.Sub(inc.CreatedAt).Minutes(); d >= 0 {
-					b := get(day)
-					b.analysisSum += d
-					b.analysisCount++
-				}
-			}
-		}
-
-		// Время до закрытия — только для закрытых, иначе среднее поедет.
-		if inc.DurationSec != nil {
-			b := get(day)
-			b.closeSum += float64(*inc.DurationSec) / 60
-			b.closeCount++
-		}
-	}
-
-	days := make([]string, 0, len(byDay))
-	for d := range byDay {
-		days = append(days, d)
-	}
-	sort.Strings(days)
-
-	data := make([]map[string]any, 0, len(days))
-	for _, d := range days {
-		b := byDay[d]
-		point := map[string]any{"date": d}
-		// Разные единицы: разбор занимает секунды, закрытие — минуты и часы.
-		// На одной оси их мешать нельзя, поэтому отдаём раздельно.
-		if b.analysisCount > 0 {
-			point["analysis_sec"] = math.Round(b.analysisSum/b.analysisCount*600) / 10
-		}
-		if b.closeCount > 0 {
-			point["close_min"] = math.Round(b.closeSum/b.closeCount*10) / 10
-		}
-		data = append(data, point)
-	}
-
-	writeJSON(w, 200, map[string]any{"data": data})
-}
-
-// GET /api/v1/analytics/quality
-func handleAnalyticsQuality(w http.ResponseWriter, _ *http.Request) {
-	all := store.List()
-	total := 0
-	helpful := 0
-	for _, inc := range all {
-		if inc.Feedback != nil {
-			total++
-			if inc.Feedback.Helpful {
-				helpful++
-			}
-		}
-	}
-	helpfulPct := 0
-	if total > 0 {
-		helpfulPct = helpful * 100 / total
-	}
-	writeJSON(w, 200, map[string]any{
-		"total_analyses":        len(all),
-		"helpful_pct":           helpfulPct,
-		"not_helpful_pct":       100 - helpfulPct,
-		"edited_pct":            0,
-		"avg_confidence":        85,
-		"avg_response_time_sec": 8.0,
-	})
-}
-
-// GET /api/v1/analytics/top-sources
 func handleTopSources(w http.ResponseWriter, _ *http.Request) {
 	all := store.List()
 	counts := make(map[string]int)
@@ -1667,7 +1476,7 @@ func handleLicense(w http.ResponseWriter, _ *http.Request) {
 		"plan": "professional", "key": "CCII-PRO-2026-XXXX", "expires_at": "2027-02-18",
 		"status":        "active",
 		"usage":         map[string]any{"alerts_used": len(store.List()), "alerts_limit": 10000, "clusters_used": 1, "clusters_limit": 3, "servers_used": 10, "servers_limit": 100},
-		"features":      map[string]bool{"enrichment": true, "correlation": true, "logs": true, "predictions": false, "postmortem": false},
+		"features":      map[string]bool{"enrichment": true, "correlation": true, "logs": true, "predictions": false, "postmortem": env("REPORTS_ENABLED", "false") == "true"},
 		"support_level": "8x5_chat",
 	})
 }
@@ -1846,36 +1655,7 @@ func intQuery(r *http.Request, key string, def int) int {
 
 // ── Router ──────────────────────────────────────────────────────────────────
 
-func main() {
-	if _, err := allowedBrowserOrigins(); err != nil {
-		log.Fatal(err)
-	}
-	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	if err := awaitDurableStorage(startupCtx); err != nil {
-		startupCancel()
-		log.Fatalf("durable storage startup failed: %v", err)
-	}
-	if store.disk != nil {
-		indexed, err := store.disk.rdb.Exists(startupCtx, alertIndexReady).Result()
-		if err != nil && regroupEnabled() {
-			startupCancel()
-			log.Fatalf("alert lookup startup check failed: %v", err)
-		}
-		if err != nil {
-			log.Printf("optional alert lookup startup check unavailable")
-		}
-		if regroupEnabled() || indexed != 0 {
-			// Rebuild at startup to include records written during an older-binary
-			// rollback; an old persistent ready marker cannot prove completeness.
-			if err := store.disk.rebuildAlertIndex(startupCtx); err != nil {
-				startupCancel()
-				log.Fatalf("alert fingerprint index migration failed: %v", err)
-			}
-		}
-	}
-	startupCancel()
-	startAnalysisJobs()
-	startGraphConfiguration()
+func backendHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /readyz", handleReady)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
@@ -1933,6 +1713,16 @@ func main() {
 	mux.HandleFunc("GET /api/v1/knowledge/search", handleKnowledgeSearch)
 	mux.HandleFunc("GET /api/v1/knowledge/patterns", handleKnowledgePatterns)
 
+	mux.HandleFunc("GET /api/v1/incidents/{id}/postmortem", handleReports)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/postmortem", handleReports)
+	mux.HandleFunc("PUT /api/v1/incidents/{id}/postmortem", handleReports)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/postmortem/export", handleReports)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/handoff", handleReports)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/handoff", handleReports)
+	mux.HandleFunc("PUT /api/v1/incidents/{id}/handoff", handleReports)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/handoff/export", handleReports)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/lifecycle", handleLifecycle)
+	mux.HandleFunc("PUT /api/v1/incidents/{id}/lifecycle", handleLifecycle)
 	mux.HandleFunc("POST /api/v1/incidents/{id}/regroup", handleRegroup)
 	mux.HandleFunc("PUT /api/v1/services/graph", handleGraphWrite)
 	mux.HandleFunc("POST /api/v1/services/observations", handleGraphWrite)
@@ -1943,7 +1733,43 @@ func main() {
 	// Health
 	mux.HandleFunc("GET /healthz", handleHealth)
 
+	return corsMiddleware(mux)
+}
+
+func main() {
+	if _, err := allowedBrowserOrigins(); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := lifecycleHistoryRetention(); err != nil {
+		log.Fatal(err)
+	}
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	if err := awaitDurableStorage(startupCtx); err != nil {
+		startupCancel()
+		log.Fatalf("durable storage startup failed: %v", err)
+	}
+	if store.disk != nil {
+		indexed, err := store.disk.rdb.Exists(startupCtx, alertIndexReady).Result()
+		if err != nil && regroupEnabled() {
+			startupCancel()
+			log.Fatalf("alert lookup startup check failed: %v", err)
+		}
+		if err != nil {
+			log.Printf("optional alert lookup startup check unavailable")
+		}
+		if regroupEnabled() || indexed != 0 {
+			// Rebuild at startup to include records written during an older-binary
+			// rollback; an old persistent ready marker cannot prove completeness.
+			if err := store.disk.rebuildAlertIndex(startupCtx); err != nil {
+				startupCancel()
+				log.Fatalf("alert fingerprint index migration failed: %v", err)
+			}
+		}
+	}
+	startupCancel()
+	startAnalysisJobs()
+	startGraphConfiguration()
 	log.Printf("incidentgpt-backend listening on %s", listenAddr)
 	log.Printf("AI Worker forward: %s (enabled=%s)", aiWorkerURL, forwardToAI)
-	log.Fatal(http.ListenAndServe(listenAddr, corsMiddleware(mux)))
+	log.Fatal(http.ListenAndServe(listenAddr, backendHandler()))
 }

@@ -16,6 +16,7 @@ import (
 )
 
 type Resolution struct {
+	Composition    string    `json:"composition_hash,omitempty"`
 	Schema         int       `json:"schema_version"`
 	IncidentID     string    `json:"incident_id"`
 	Revision       int       `json:"revision"`
@@ -147,6 +148,7 @@ func handleResolution(w http.ResponseWriter, r *http.Request) {
 	record.Actor, _, _ = r.BasicAuth()
 	record.At = time.Now().UTC()
 	record.ClusterID = incidentCluster(inc)
+	record.Composition = incidentComposition(inc)
 	record.Service = incidentWorkload(inc)
 	if record.Service == "" {
 		record.Service = inc.Labels["service"]
@@ -222,7 +224,7 @@ func rankResolution(r Resolution, inc *Incident, query string) (int, []string, [
 		}
 	}
 	normalized := strings.ToLower(strings.TrimSpace(query))
-	if normalized != "" && strings.Contains(strings.ToLower(r.Cause+" "+r.Action+" "+r.ErrorSignature), normalized) {
+	if normalized != "" && strings.Contains(strings.ToLower(r.Cause+" "+r.Action+" "+r.ErrorSignature+" "+r.FailureMode), normalized) {
 		score += 50
 		matches = append(matches, "matching text/error signature")
 	}

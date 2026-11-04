@@ -363,6 +363,17 @@ func TestLegacyRepeatedBatchKeepsActiveIncidentBindings(t *testing.T) {
 			b := EnrichedAlert{ClusterName: cluster, Fingerprint: "b", Status: "firing", Labels: map[string]string{"namespace": "apps", "alertname": "B"}}
 			first := ingestGroup([]EnrichedAlert{a}, "group-a")
 			second := ingestGroup([]EnrichedAlert{b}, "group-b")
+			for _, pair := range []struct {
+				fingerprints []string
+				expected     string
+			}{
+				{[]string{"cluster-" + digest(cluster, "a"), "cluster-" + digest(cluster, "b")}, first.ID},
+				{[]string{"cluster-" + digest(cluster, "b"), "cluster-" + digest(cluster, "a")}, second.ID},
+			} {
+				if got := store.FindIncidentForGroup(pair.fingerprints); got == nil || got.ID != pair.expected {
+					t.Fatal("fingerprint order differs between memory and Redis", got)
+				}
+			}
 			before := store.GetAlert(second.Alerts[0].ID).ReceivedAt
 			ingestGroup([]EnrichedAlert{a, b}, "combined")
 			if len(store.Get(first.ID).Alerts) != 1 || len(store.Get(second.ID).Alerts) != 1 {

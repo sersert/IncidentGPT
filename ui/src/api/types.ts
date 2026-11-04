@@ -165,9 +165,9 @@ export interface Feedback {
 export interface DashboardStats {
   active_incidents: number
   active_critical: number
-  mttr_reduction_pct: number
-  noise_reduction_pct: number
-  avg_analysis_time_sec: number
+  mttr_reduction_pct: number | null
+  noise_reduction_pct: number | null
+  avg_analysis_time_sec: number | null
   alerts_today: number
   alerts_sparkline: number[]
 }
@@ -307,7 +307,11 @@ export interface LLMStatus {
 export interface PostMortem {
   markdown: string
   generated_at: string
-  status: 'draft' | 'ready' | 'generating'
+  status: 'draft' | 'ready' | 'generating' | 'empty'
+ report_id: string
+ revision: number
+ review_status: 'draft' | 'reviewed'
+ action_items?: {text: string; owner: string; status: string; due_date?: string}[]
   last_edited_by: string | null
   last_edited_at: string | null
 }
@@ -352,17 +356,26 @@ export interface ServiceDetail {
   outbound: string[]
 }
 
+export interface LifecycleMetric {mean_seconds: number | null; median_seconds: number | null; p90_seconds: number | null; samples: number; missing: number}
+
 export interface AnalyticsSummary {
-  mttr_before_min: number
-  mttr_after_min: number
-  mttr_reduction_pct: number
-  mtta_before_min: number
-  mtta_after_min: number
-  mtta_reduction_pct: number
+ analysis?: LifecycleMetric
+ acknowledgement?: LifecycleMetric
+ verified_recovery?: LifecycleMetric
+ administrative_closure?: LifecycleMetric
+ metrics_note?: string
+ count_note?: string
+ bounded?: boolean
+  mttr_before_min: number | null
+  mttr_after_min: number | null
+  mttr_reduction_pct: number | null
+  mtta_before_min: number | null
+  mtta_after_min: number | null
+  mtta_reduction_pct: number | null
   noise_before: number
   noise_after: number
-  noise_reduction_pct: number
-  time_saved_hours: number
+  noise_reduction_pct: number | null
+  time_saved_hours: number | null
 }
 
 export interface MTTRDataPoint {
@@ -374,12 +387,13 @@ export interface MTTRDataPoint {
 }
 
 export interface AnalyticsQuality {
+ feedback_samples?: number
   total_analyses: number
-  helpful_pct: number
-  not_helpful_pct: number
-  edited_pct: number
-  avg_confidence: number
-  avg_response_time_sec: number
+  helpful_pct: number | null
+  not_helpful_pct: number | null | null
+  edited_pct: number | null
+  avg_confidence: number | null
+  avg_response_time_sec: number | null
 }
 
 export interface PaginatedResponse<T> {
