@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -24,6 +26,18 @@ type Lifecycle struct {
 	RecoveryActor     string     `json:"recovery_actor,omitempty"`
 	LastActor         string     `json:"last_actor,omitempty"`
 	RecordedAt        *time.Time `json:"recorded_at,omitempty"`
+}
+
+func lifecycleEnabled() bool {
+	return durableEnabled() || env("REPORTS_ENABLED", "false") == "true" || env("LIFECYCLE_ENABLED", "false") == "true"
+}
+
+func lifecycleHistoryRetention() (time.Duration, error) {
+	days, err := strconv.Atoi(env("LIFECYCLE_HISTORY_RETENTION_DAYS", "0"))
+	if err != nil || days < 0 || days > 36500 {
+		return 0, fmt.Errorf("invalid LIFECYCLE_HISTORY_RETENTION_DAYS")
+	}
+	return time.Duration(days) * 24 * time.Hour, nil
 }
 
 func deriveLifecycle(inc *Incident) Lifecycle {
@@ -52,6 +66,10 @@ func readLifecycle(ctx context.Context, inc *Incident) (Lifecycle, error) {
 	return l, nil
 }
 func mutateLifecycle(ctx context.Context, inc *Incident, update func(*Lifecycle) error) error {
+	retention, err := lifecycleHistoryRetention()
+	if err != nil {
+		return err
+	}
 	key := "igpt:lifecycle:" + inc.ID
 	for attempt := 0; attempt < 3; attempt++ {
 		err := store.disk.rdb.Watch(ctx, func(tx *redis.Tx) error {
@@ -64,14 +82,20 @@ func mutateLifecycle(ctx context.Context, inc *Incident, update func(*Lifecycle)
 			} else if json.Unmarshal(raw, &l) != nil {
 				return fmt.Errorf("invalid lifecycle")
 			}
+			existed := err != redis.Nil
+			before, _ := json.Marshal(l)
 			if err := update(&l); err != nil {
 				return err
+			}
+			after, _ := json.Marshal(l)
+			if existed && bytes.Equal(before, after) {
+				return nil
 			}
 			l.Revision++
 			data, _ := json.Marshal(l)
 			_, err = tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
 				p.Set(ctx, key, data, 0)
-				p.Set(ctx, fmt.Sprintf("igpt:lifecycle:history:%s:%d", inc.ID, l.Revision), data, 0)
+				p.Set(ctx, fmt.Sprintf("igpt:lifecycle:history:%s:%d", inc.ID, l.Revision), data, retention)
 				return nil
 			})
 			return err
@@ -83,7 +107,7 @@ func mutateLifecycle(ctx context.Context, inc *Incident, update func(*Lifecycle)
 	return fmt.Errorf("lifecycle changed; retry")
 }
 func recordIngestLifecycle(inc *Incident) {
-	if inc == nil || store.disk == nil {
+	if !lifecycleEnabled() || inc == nil || store.disk == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -100,6 +124,9 @@ func recordIngestLifecycle(inc *Incident) {
 	})
 }
 func recordHumanLifecycle(ctx context.Context, inc *Incident, status, actor string) error {
+	if !lifecycleEnabled() {
+		return nil
+	}
 	now := time.Now().UTC()
 	return mutateLifecycle(ctx, inc, func(l *Lifecycle) error {
 		if status == "acknowledged" && l.Acknowledged == nil {
@@ -154,6 +181,10 @@ func handleLifecycle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		writeJSON(w, 200, l)
+		return
+	}
+	if !lifecycleEnabled() {
+		http.Error(w, "lifecycle writes disabled", 503)
 		return
 	}
 	var req struct {

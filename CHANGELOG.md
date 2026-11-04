@@ -7,6 +7,107 @@
 
 ## [Unreleased]
 
+- Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`
+  (без TTL, удалять вместе с incident) исключает порчу JSON через Lua cjson;
+  reader поддерживает старый флаг и известные пустые массивы, записанные как `{}`.
+- Lifecycle пишет только изменения при opt-in durable/reports/`LIFECYCLE_ENABLED`.
+  `LIFECYCLE_HISTORY_RETENTION_DAYS` задаёт TTL новых audit-ревизий (0 — политика
+  оператора), текущие записи и прежняя история автоматически не удаляются.
+- Старые PATCH и dashboard/analytics сохраняют доступ через доверенный UI-прокси;
+  `LEGACY_API_AUTH_REQUIRED=true` явно включает fail-closed проверку backend Basic.
+  Новые API всегда требуют credentials. Убрано автоматическое копирование admin/admin;
+  reader Secret обязателен при его выборе. Прокси с заменой Host поддержан через
+  явный `ALLOWED_ORIGINS`, без доверия к произвольным forwarded-заголовкам.
+- Dashboard/analytics восстановлены в memory fallback (`persistent:false`), без
+  выдуманных времён восстановления/анализа; устранено повторное чтение списка.
+- Исправлен resolve общей пачки: обновляются все затронутые инциденты, закрытие
+  возможно только без оставшихся firing-участников. Повторный эпизод после закрытия
+  и восстановление orphan не создают пустые инциденты. Диагностика после regroup
+  использует один согласованный namespace/workload/pod/node; labels копируются.
+- Корреляция читает bounded declared-документ, а не общий outgoing-индекс: поток
+  observed ownership/placement не вытесняет зависимости. Файловый граф блокирует
+  PUT (409), логирует ошибки загрузки; ConfigMap автоматически задаёт путь и ключ.
+- `SERVICE_GRAPH_ENABLED` — opt-in графа; без новых флагов GET graph возвращает
+  `enabled:false` без Basic challenge, detail — 404, карточка/контролы UI скрыты.
+  При opt-in чтение графа требует `TIMELINE_READ_*`: это общая administrator-роль,
+  не read-only. Мутации graph/regroup требуют JSON и доверенный Origin; прокси с
+  другим Host поддержан явным `ALLOWED_ORIGINS`. Actor — проверенный Basic user.
+- `igpt:alertfp:{digest(fp)}` (HASH) и `igpt:alertfp:ready:v1` — additive,
+  восстанавливаемый индекс активного алерта; при opt-in достраивается перед трафиком
+  вне composition lock, включая restart после rollback старых writers. Legacy без
+  opt-in новые ключи не пишет. TTL как у alert, удалять при архивировании alerts.
+- Ручные `igpt:regroup:binding:{fp}` имеют TTL 7 дней и снимаются при закрытом target;
+  прежние ключи получают TTL при чтении, при выключенном regroup игнорируются.
+  Audit сохраняется отдельно. Пачка ставит один анализ на каждого фактического
+  владельца алертов без чужих evidence и дублей при схождении partitions.
+- `igpt:corr:fpgroup:{digest(cluster,fp,starts_at)}` живёт в течение окна корреляции:
+  resolve очищает правильный pending даже при изменившемся/недоступном графе.
+  Наблюдения topology отправляются асинхронно, ограничены четырьмя слотами,
+  ошибки/переполнение видны в status и логах; provenance не растёт на каждый повтор.
+- startupProbe enricher включён только для durable. `redisStartup.timeoutSeconds`
+  задаёт согласованные runtime timeout и probe budget. Для durable/observations
+  ключ `analysis-service-token` в existingSecret обязателен: подготовить до upgrade.
+
+- Dependency graph API и additive Redis-ключи `igpt:graph:*`: идентичности
+  cluster/namespace/kind/name, provenance и TTL 30 дней. Declared edges заменяются
+  сразу; metadata не создаёт application dependencies. Новые флаги enricher
+  `topology.observationsEnabled` / `topology.correlationEnabled` выключены по умолчанию.
+- Ручной `POST /incidents/{id}/regroup` требует opt-in `MANUAL_REGROUP_ENABLED=true`
+  и durable Redis. История/audit/bindings `igpt:regroup:*` сохраняются без TTL;
+  analysis history получает composition/hash и source links. Без флага ingest
+  сохраняет прежний lock по группе; с флагом использует общий fenced composition lock.
+  Перед переключением флага дренировать ingest, перед rollback сохранить Redis backup.
+
+
+### Added
+- Управляемые проверки чтения по инциденту: `POST/GET
+  /api/v1/incidents/{id}/investigations` и `POST
+  /api/v1/incidents/{id}/investigations/{job}/cancel`. Действия `refresh`,
+  `hypothesis`, `compare` ограничены ресурсами инцидента; вопрос — до 500
+  Unicode-символов. Доступ использует существующую единую admin-учётку
+  `TIMELINE_READ_*`, включая запуск и отмену; отдельной роли reader пока нет.
+- Внутренний `POST /v1/diagnostics` у enricher: фиксированные проверки
+  Kubernetes, метрик и логов; обязательные сервисный токен и список namespace.
+  По умолчанию выключен вместе с `GUIDED_DIAGNOSTICS_ENABLED` у backend.
+- GET истории анализа дополнен `operations` и `diagnostics_enabled`.
+  Вход анализа дополнен необязательными `job_kind` и `operation`; очередь
+  использует `job.kind=diagnostics` и ключ `igpt:diagnostics:active:{id}`
+  для одной активной проверки на инцидент. Собранные evidence сохраняются
+  перед анализом и повторно используются при отказе провайдера.
+
+### Fixed
+- Повторная пачка алертов не дублирует fingerprint из другого активного
+  инцидента и не перезаписывает его binding. Новый эпизод создаётся только
+  после закрытия прежнего инцидента; received_at обновляется при повторе.
+- Enricher в durable correlation ожидает Redis перед запуском HTTP/очереди,
+  закрывает неудачные клиенты и использует startupProbe; legacy fallback сохранён.
+- После ручного regroup текущие namespace/labels/context пересчитываются по
+  оставшимся алертам; удалённый ресурс не используется при следующем refresh.
+  Старые enrichment/chain pointers очищаются, immutable history сохраняется.
+- Телефонный детектор sanitizer не маскирует цифровые фрагменты внутри
+  смешанных hex-ID длиной 32/64 символа: они связывают observations и citations.
+  Телефоны рядом с ID, числовые строки и секреты в чувствительных полях
+  продолжают маскироваться; custom/credential правила не обходятся.
+- В durable-режиме backend ожидает Redis до приёма трафика и запуска очереди,
+  поэтому свежая установка не зависит от порядка старта подов. `/readyz`
+  проверяет доступность Redis; Helm использует его для readiness. Legacy-режим
+  сохраняет прежний fallback в память. Без `REDIS_ADDR` durable-запуск отклоняется.
+- Пустые типизированные массивы входа очереди сохраняются как `null`, чтобы
+  Lua cjson не превращал их в `{}` при claim, retry, cancel и finish.
+  Существующие корректные записи сохраняют формат; backfill не требуется.
+- Отказ обработки по таймауту записывает повторную попытку отдельным коротким
+  контекстом, сохраняя проверки владельца, lease и отмены.
+- UI блокирует запуск выключенных проверок, сохраняя историю и отмену.
+  Helm отклоняет включение без обязательных секретов/namespace; адрес
+  collector по умолчанию разрешается в namespace релиза.
+
+Порядок обновления: сначала совместимые ai-worker и enricher, затем backend
+и UI; флаги включать только после настройки общих analysis/sanitizer секретов,
+admin-доступа и явного списка namespace. Старый ai-worker игнорирует новые
+JSON-поля, но не предоставляет всю семантику диагностических операций.
+Перед откатом выключить новые запросы, отменить или дождаться завершения
+очереди и сохранить evidence/историю и резервную копию Redis.
+
 ## [0.2.0] - 2026-08-09
 
 Веб-интерфейс, логи в обогащении и разбор, который не отправляет инженера за данными.

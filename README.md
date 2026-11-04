@@ -373,6 +373,4 @@ backend Basic admin credentials and explicit service tokens via Secrets, configu
 fail-closed sanitizer clients, persist/back up Redis, then enable compatible producers.
 Missing source/collection/recovery data remains unknown; model confidence and
 temporal correlation do not establish cause. Lifecycle analytics do not estimate
-MTTR reduction or saved hours. See [architecture](docs/architecture.md),
-[security](docs/security.md), [web workflows](docs/web-ui.md) and the
-[описания подготовленных изменений](pr-descriptions/PR-06-postmortem-and-handoff.md).
+MTTR reduction or saved hours. See [architecture](docs/architecture.md), [security](docs/security.md), [web workflows](docs/web-ui.md) and [reports and handoffs](docs/roadmap/postmortem-and-handoff.md).

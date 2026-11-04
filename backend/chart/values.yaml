@@ -18,9 +18,24 @@ service:
 env:
   LISTEN_ADDR: ":8080"
   REPORTS_ENABLED: "false"
+  # Старые API по умолчанию защищает UI Basic-auth / NetworkPolicy.
+  # true требует также backend reader Secret; отсутствие credentials даёт 401.
+  LEGACY_API_AUTH_REQUIRED: "false"
+  # Полные Origin через запятую для прокси, меняющего Host; без wildcard.
+  ALLOWED_ORIGINS: ""
+  # Дополнительный opt-in; durable/reports также включают запись lifecycle.
+  LIFECYCLE_ENABLED: "false"
+  # 0 — история хранится до архивирования оператором; >0 — TTL новых ревизий.
+  LIFECYCLE_HISTORY_RETENTION_DAYS: "0"
   GUIDED_DIAGNOSTICS_ENABLED: "false"
-  DIAGNOSTIC_COLLECTOR_URL: "http://incidentgpt-enricher.incidentgpt.svc:9099/v1/diagnostics"
+  DIAGNOSTIC_COLLECTOR_URL: "http://incidentgpt-enricher:9099/v1/diagnostics"
   RUNBOOK_DIRECTORY: ""
+  # Ручной перенос алертов включает общий composition lock; по умолчанию выключен.
+  MANUAL_REGROUP_ENABLED: "false"
+  # Без opt-in граф/карточка не требуют новой backend-авторизации.
+  SERVICE_GRAPH_ENABLED: "false"
+  # Полные доверенные Origin через запятую для прокси с заменой Host.
+  ALLOWED_ORIGINS: ""
   DURABLE_ANALYSIS_ENABLED: "false"
   STRUCTURED_WORKER_URL: "http://ai-worker.incidentgpt.svc:8080/v1/analyze"
   CHANGES_ENABLED: "false"
@@ -55,7 +70,8 @@ logsStore:
   existingSecret: ""
   passwordKey: password
 
-# Same reader password as the UI Basic-auth account; separate service token.
+# Общая administrator-учётка UI/backend; отдельной read-only роли пока нет.
+# Учётная запись должна совпадать с UI; сервисный token отдельный.
 changes:
   existingSecret: ""
   ingestTokenKey: change-ingest-token
@@ -67,9 +83,12 @@ runbooks:
   existingConfigMap: ""
 
 serviceGraph:
+  # ConfigMap с декларацией; при выборе чарт сам задаёт SERVICE_GRAPH_FILE.
+  # В режиме файла PUT графа запрещён, чтобы фоновое чтение не откатывало правки API.
   existingConfigMap: ""
+  key: dependencies.json
 
-# Independent backend identity check; match the UI account.
+# Независимая проверка backend: Secret с username/password учётной записи UI.
 readerAuth:
   existingSecret: ""
   usernameKey: username

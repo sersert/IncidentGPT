@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/redis/go-redis/v9"
+	"io"
+	"net"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -42,6 +45,12 @@ func TestDependencyCorrelationBoundaries(t *testing.T) {
 		redisClient.Set(ctx, "igpt:graph:edge:"+edge.ID, raw, time.Minute)
 		redisClient.ZAdd(ctx, "igpt:graph:out:"+from, redis.Z{Score: 1, Member: edge.ID})
 	}
+	declaration := GraphDocument{Version: 1, ClusterID: cluster, Nodes: []GraphNode{node}, Edges: edges}
+	writeDeclaration := func() {
+		raw, _ := json.Marshal(declaration)
+		redisClient.Set(ctx, "igpt:graph:declared:"+topologyDigest(cluster), raw, time.Minute)
+	}
+	writeDeclaration()
 	ka, reason := dependencyDecision(a)
 	kb, _ = dependencyDecision(b)
 	if ka != kb || !strings.Contains(reason, "suspected") {
@@ -54,6 +63,8 @@ func TestDependencyCorrelationBoundaries(t *testing.T) {
 	}
 	edge := edges[0]
 	edge.LastSeen = time.Now().Add(-time.Hour)
+	declaration.Edges[0] = edge
+	writeDeclaration()
 	raw, _ = json.Marshal(edge)
 	redisClient.Set(ctx, "igpt:graph:edge:"+edge.ID, raw, time.Minute)
 	stale, _ := dependencyDecision(a)
@@ -62,6 +73,8 @@ func TestDependencyCorrelationBoundaries(t *testing.T) {
 	}
 	edge.LastSeen = time.Now()
 	edge.Kind = "placement"
+	declaration.Edges[0] = edge
+	writeDeclaration()
 	raw, _ = json.Marshal(edge)
 	redisClient.Set(ctx, "igpt:graph:edge:"+edge.ID, raw, time.Minute)
 	placement, _ := dependencyDecision(a)
@@ -94,5 +107,92 @@ func TestNodeScopedGroupingDoesNotMergePlacedApplications(t *testing.T) {
 	second, _ = dependencyDecision(b)
 	if first == second {
 		t.Fatal("placement inferred application dependency")
+	}
+}
+
+func TestDurableCorrelationWaitsForLateRedis(t *testing.T) {
+	addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
+	if addr == "" {
+		t.Skip("requires dedicated Redis")
+	}
+	oldClient, oldCfg := redisClient, appCfg
+	redisClient = nil
+	defer func() {
+		if redisClient != nil {
+			redisClient.Close()
+		}
+		redisClient = oldClient
+		appCfg = oldCfg
+	}()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	listener.Close()
+	appCfg.RedisAddr = address
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- awaitCorrelationRedis(ctx) }()
+	select {
+	case err := <-done:
+		t.Fatalf("returned before Redis started: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	proxy, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+	var wg sync.WaitGroup
+	go func() {
+		for {
+			conn, e := proxy.Accept()
+			if e != nil {
+				return
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer conn.Close()
+				up, e := net.Dial("tcp", addr)
+				if e != nil {
+					return
+				}
+				defer up.Close()
+				go func() {
+					io.Copy(up, conn)
+					up.Close()
+					conn.Close()
+				}()
+				io.Copy(conn, up)
+			}()
+		}
+	}()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if redisClient == nil || redisClient.Ping(ctx).Err() != nil {
+		t.Fatal("late Redis not connected")
+	}
+	redisClient.Close()
+	redisClient = nil
+	proxy.Close()
+	wg.Wait()
+}
+func TestDurableCorrelationRedisConfigurationAndCancellation(t *testing.T) {
+	oldClient, oldCfg := redisClient, appCfg
+	redisClient = nil
+	defer func() { redisClient = oldClient; appCfg = oldCfg }()
+	appCfg.RedisAddr = ""
+	if awaitCorrelationRedis(context.Background()) == nil {
+		t.Fatal("missing Redis accepted")
+	}
+	appCfg.RedisAddr = "127.0.0.1:1"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if awaitCorrelationRedis(ctx) != context.Canceled {
+		t.Fatal("cancellation ignored")
 	}
 }

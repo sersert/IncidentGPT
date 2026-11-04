@@ -43,7 +43,7 @@
 Выбранная вкладка хранится в `?view=investigate`, `?view=knowledge` или
 `?view=reports`; без параметра открывается обзор. Стрелки влево/вправо, Home/End
 переключают вкладки и фокус. Вкладки сохраняют открытые редакторы при переключении
-внутри карточки. Это не автосохранение: перед уходом на другой экран или
+внутри карточки. Данные раздела загружаются при первом посещении; открытый раздел остаётся смонтированным при последующих переключениях. Это не автосохранение: перед уходом на другой экран или
 перезагрузкой страницы сохраните черновик. Ошибка назначения не закрывает форму
 и не выдаётся за успешное сохранение.
 
@@ -157,17 +157,9 @@ Nginx получает bcrypt-запись htpasswd. Backend проверяет 
 Проба готовности вынесена на `/healthz` без авторизации — иначе kubelet получал
 бы 401 и под никогда не становился ready.
 
-Nginx передаёт Authorization и имя вошедшего. Backend независимо проверяет
-Basic credentials для новых API и изменений статуса/назначения; заголовок
-`X-Auth-User` сам по себе не подтверждает личность.
+Nginx передаёт Authorization и имя вошедшего. Backend независимо проверяет Basic credentials для новых привилегированных API. Старые API, включая изменение статуса/назначения, по умолчанию сохраняют границу UI Basic-auth/NetworkPolicy; для независимой проверки включите `incidentgpt-backend.env.LEGACY_API_AUTH_REQUIRED: "true"`. Заголовок `X-Auth-User` сам по себе не подтверждает личность.
 
-Umbrella-чарт генерирует согласованную пару reader credentials для стандартной
-UI-конфигурации. Если UI использует внешний Secret с `htpasswd`, настройте
-`incidentgpt-backend.readerAuth.existingSecret`: ключи `username` и `password`
-должны содержать тот же логин и исходный пароль, что и запись в htpasswd.
-При заданном `incidentgpt-backend.changes.existingSecret` reader password берётся
-из него (`timeline-read-password`), а username — из TIMELINE_READ_USER;
-согласуйте этот путь отдельно. Не публикуйте значения Secret или rendered YAML.
+Umbrella-чарт не создаёт backend reader Secret автоматически. Настройте `incidentgpt-backend.readerAuth.existingSecret`: ключи `username` и `password` должны содержать тот же логин и исходный пароль, что и `incidentgpt-ui.auth.username/password` либо запись во внешнем htpasswd Secret. При заданном `incidentgpt-backend.changes.existingSecret` reader password берётся из него (`timeline-read-password`), а username — из `TIMELINE_READ_USER`; согласуйте этот путь отдельно и не задавайте оба варианта Secret одновременно. Не публикуйте значения Secret или rendered YAML. Полный пример — [первый запуск](getting-started.md#3-заполните-настройки-и-отдельный-файл-секретов).
 
 ---
 

@@ -77,7 +77,7 @@ func TestOfflineIncidentWorkflow(t *testing.T) {
 	store = &Store{disk: disk}
 	ctx := context.Background()
 	disk.rdb.Del(ctx, jobsDue)
-	for key, value := range map[string]string{"DURABLE_ANALYSIS_ENABLED": "true", "GUIDED_DIAGNOSTICS_ENABLED": "true", "REPORTS_ENABLED": "true", "CHANGES_ENABLED": "true", "TIMELINE_READ_USER": "admin", "TIMELINE_READ_PASSWORD": "pw", "ANALYSIS_SERVICE_TOKEN": "service", "CHANGE_INGEST_TOKEN": "changes", "SANITIZER_AUTH_SHARED_SECRET": "hmac"} {
+	for key, value := range map[string]string{"MANUAL_REGROUP_ENABLED": "true", "DURABLE_ANALYSIS_ENABLED": "true", "GUIDED_DIAGNOSTICS_ENABLED": "true", "REPORTS_ENABLED": "true", "CHANGES_ENABLED": "true", "TIMELINE_READ_USER": "admin", "TIMELINE_READ_PASSWORD": "pw", "ANALYSIS_SERVICE_TOKEN": "service", "CHANGE_INGEST_TOKEN": "changes", "SANITIZER_AUTH_SHARED_SECRET": "hmac"} {
 		t.Setenv(key, value)
 	}
 	sanitizer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,6 +119,7 @@ func TestOfflineIncidentWorkflow(t *testing.T) {
 		r := httptest.NewRequest(method, path, bytes.NewReader(body))
 		r.SetPathValue("id", id)
 		r.SetBasicAuth("admin", "pw")
+		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("X-Auth-User", "spoofed")
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)

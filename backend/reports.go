@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"io"
+	"log"
 	"net/http"
 	"reflect"
 	"sort"
@@ -343,7 +344,7 @@ else e.job.finished_at=ARGV[6];redis.call('ZREM',KEYS[2],e.job.job_id);redis.cal
 redis.call('SET',KEYS[1],cjson.encode(e))
 if ARGV[3]=='complete' then
 redis.call('SET',KEYS[3],ARGV[7],'EX',ARGV[8],'NX');redis.call('SET',KEYS[3]..':revision:1',ARGV[7],'EX',ARGV[8],'NX');redis.call('ZADD',KEYS[4],ARGV[2],e.input.report_source.report_id);redis.call('ZREMRANGEBYRANK',KEYS[4],0,-51);redis.call('EXPIRE',KEYS[4],ARGV[8]);redis.call('INCR','igpt:jobs:completed')
-local incRaw=redis.call('GET','igpt:incident:'..e.job.incident_id);if incRaw and e.input.report_source.kind=='postmortem' then local inc=cjson.decode(incRaw);inc.has_postmortem=true;redis.call('SET','igpt:incident:'..e.job.incident_id,cjson.encode(inc)) end
+if e.input.report_source.kind=='postmortem' and redis.call('EXISTS','igpt:incident:'..e.job.incident_id)==1 then redis.call('SET','igpt:incident:postmortem:'..e.job.incident_id,'1') end
 elseif ARGV[3]=='failed' then redis.call('INCR','igpt:jobs:failures') end
 return 1`)
 
@@ -367,11 +368,15 @@ func runReportJob(ctx context.Context, e *jobEnvelope) {
 		}
 	}
 	if source == nil {
-		return
+		source = &ReportSource{}
 	}
 	raw, _ := json.Marshal(report)
 	now := time.Now().UTC()
-	_ = finishReportScript.Run(ctx, store.disk.rdb, []string{"igpt:job:" + e.Job.ID, jobsDue, "igpt:report:" + source.ReportID, reportIndex(e.Job.IncidentID, source.Kind)}, e.Owner, now.UnixMilli(), status, code, now.Add(time.Duration(1<<e.Job.Attempts)*time.Second).UnixMilli(), now.Format(time.RFC3339Nano), raw, int(reportRetention.Seconds())).Err()
+	finishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := finishReportScript.Run(finishCtx, store.disk.rdb, []string{"igpt:job:" + e.Job.ID, jobsDue, "igpt:report:" + source.ReportID, reportIndex(e.Job.IncidentID, source.Kind)}, e.Owner, now.UnixMilli(), status, code, now.Add(time.Duration(1<<e.Job.Attempts)*time.Second).UnixMilli(), now.Format(time.RFC3339Nano), raw, int(reportRetention.Seconds())).Err(); err != nil {
+		log.Printf("report completion failed for job %s: %v", e.Job.ID, err)
+	}
 }
 
 var editReportScript = redis.NewScript(`

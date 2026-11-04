@@ -1,5 +1,5 @@
-# Isolated namespace: incidentgpt. Build images from the candidate commit first.
-# Replace registry/tag and credentials before use; never reuse production Redis.
+# Отдельный namespace: incidentgpt. Сначала соберите образы кандидата.
+# Замените registry/tag и credentials; не используйте production Redis.
 incidentgpt-enricher:
   image:
     repository: registry.example.com/incidentgpt-enricher
@@ -19,6 +19,10 @@ incidentgpt-sanitizer:
     repository: registry.example.com/incidentgpt-sanitizer
     tag: REPLACE_WITH_CANDIDATE_TAG
 incidentgpt-backend:
+  readerAuth:
+    existingSecret: incidentgpt-preview-reader
+  env:
+    LEGACY_API_AUTH_REQUIRED: "true"
   image:
     repository: registry.example.com/incidentgpt-backend
     tag: REPLACE_WITH_CANDIDATE_TAG

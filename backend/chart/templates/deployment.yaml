@@ -1,3 +1,31 @@
+{{- if eq (toString .Values.env.REPORTS_ENABLED) "true" }}
+{{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
+{{- fail "REPORTS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
+{{- end }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "REPORTS_ENABLED requires changes.existingSecret with reader, analysis and sanitizer credentials" }}
+{{- end }}
+{{- end }}
+{{- if and (eq (toString .Values.env.LEGACY_API_AUTH_REQUIRED) "true") (not .Values.changes.existingSecret) (not .Values.readerAuth.existingSecret) }}
+{{- fail "LEGACY_API_AUTH_REQUIRED requires readerAuth.existingSecret or changes.existingSecret" }}
+{{- end }}
+{{- if and .Values.readerAuth.existingSecret .Values.changes.existingSecret }}
+{{- fail "choose readerAuth.existingSecret or changes.existingSecret for backend reader credentials, not both" }}
+{{- end }}
+{{- if and (eq (toString .Values.env.MANUAL_REGROUP_ENABLED) "true") (ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true") }}
+{{- fail "MANUAL_REGROUP_ENABLED requires DURABLE_ANALYSIS_ENABLED" }}
+{{- end }}
+{{- if eq (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true" }}
+{{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
+{{- fail "GUIDED_DIAGNOSTICS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
+{{- end }}
+{{- if not .Values.changes.existingSecret }}
+{{- fail "GUIDED_DIAGNOSTICS_ENABLED requires changes.existingSecret with reader, analysis and sanitizer credentials" }}
+{{- end }}
+{{- if not (.Values.env.DIAGNOSTIC_COLLECTOR_URL | default "" | trim) }}
+{{- fail "GUIDED_DIAGNOSTICS_ENABLED requires env.DIAGNOSTIC_COLLECTOR_URL" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,7 +57,7 @@ spec:
               protocol: TCP
           env:
             {{- range $key, $value := .Values.env }}
-            {{- if not (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) }}
+            {{- if not (or (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
@@ -40,13 +68,17 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.readerAuth.existingSecret }}
                   key: {{ .Values.readerAuth.usernameKey }}
-                  optional: true
+                  optional: false
             - name: TIMELINE_READ_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.readerAuth.existingSecret }}
                   key: {{ .Values.readerAuth.passwordKey }}
-                  optional: true
+                  optional: false
+            {{- end }}
+            {{- if .Values.serviceGraph.existingConfigMap }}
+            - name: SERVICE_GRAPH_FILE
+              value: /etc/incidentgpt/topology/dependencies.json
             {{- end }}
             {{- if .Values.logsStore.existingSecret }}
             # Пароль к хранилищу логов — из секрета: конфиг интеграций живёт в памяти
@@ -63,7 +95,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.analysisServiceTokenKey }}
-                  optional: true
+                  optional: {{ ne (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true" }}
             - name: CHANGE_INGEST_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -93,9 +125,15 @@ spec:
               readOnly: true
             {{- end }}
           {{- end }}
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 75
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: http
             initialDelaySeconds: 2
             periodSeconds: 5
@@ -119,6 +157,9 @@ spec:
         - name: service-graph
           configMap:
             name: {{ .Values.serviceGraph.existingConfigMap }}
+            items:
+              - key: {{ .Values.serviceGraph.key | default "dependencies.json" | quote }}
+                path: dependencies.json
         {{- end }}
         {{- if .Values.runbooks.existingConfigMap }}
         - name: runbooks

@@ -184,10 +184,20 @@ changes:
   analysisServiceTokenKey: analysis-service-token
 
 diagnostics:
+  # Проверки чтения выключены по умолчанию. Нужен changes.existingSecret
+  # с ключом changes.analysisServiceTokenKey, общим с backend и ai-worker.
   enabled: false
+  # Обязательный список разрешённых namespace через запятую, без wildcard.
   namespaces: ""
+  # Метка app подов backend для входящего трафика в том же namespace.
+  backendAppLabel: incidentgpt-backend
 
+# Наблюдения метаданных и корреляция по объявленным зависимостям — отдельные opt-in.
 topology:
   observationsEnabled: false
   correlationEnabled: false
   backendUrl: "http://incidentgpt-backend:8080/api/v1/services/observations"
+
+# Единый бюджет ожидания Redis и startupProbe только для durable-режима.
+redisStartup:
+  timeoutSeconds: 120

@@ -17,12 +17,35 @@ const batchesDue = "igpt:corr:batches"
 func durableCorrelation() bool { return os.Getenv("DURABLE_CORRELATION_ENABLED") == "true" }
 
 var bufferDurableScript = redis.NewScript(`
-if redis.call('HLEN',KEYS[1]) >= 50 and redis.call('HEXISTS',KEYS[1],ARGV[1]) == 0 then return 0 end
-redis.call('HSET',KEYS[1],ARGV[1],ARGV[2]);redis.call('ZADD',KEYS[2],'NX',ARGV[3],ARGV[4]);return 1`)
+local gk=ARGV[4]
+local pending='igpt:corr:pending:'..gk
+if redis.call('HLEN',pending)>=50 and redis.call('HEXISTS',pending,ARGV[1])==0 then return 0 end
+local old=redis.call('GET',KEYS[3])
+if old and old~=gk then
+ local previous='igpt:corr:pending:'..old
+ redis.call('HDEL',previous,ARGV[1])
+ if redis.call('HLEN',previous)==0 then redis.call('ZREM',KEYS[2],old) end
+end
+redis.call('HSET',pending,ARGV[1],ARGV[2]);redis.call('ZADD',KEYS[2],'NX',ARGV[3],gk)
+redis.call('SET',KEYS[3],gk,'PX',ARGV[5]);return 1`)
+
+var resolvePendingScript = redis.NewScript(`
+local gk=redis.call('GET',KEYS[1]) or ARGV[2]
+local pending='igpt:corr:pending:'..gk
+local raw=redis.call('HGET',pending,ARGV[1])
+if raw then local item=cjson.decode(raw);if item.starts_at==ARGV[3] then redis.call('HDEL',pending,ARGV[1]) end end
+redis.call('DEL',KEYS[1])
+if redis.call('HLEN',pending)==0 then redis.call('ZREM',KEYS[2],gk) end
+return 1`)
+
+func pendingFingerprintGroup(e EnrichedAlert) string {
+	return "igpt:corr:fpgroup:" + topologyDigest(e.ClusterName, e.Fingerprint, e.StartsAt.UTC().Format(time.RFC3339Nano))
+}
 
 func bufferDurable(e EnrichedAlert) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	e.StartsAt = e.StartsAt.UTC()
 	var gk string
 	if dependencyCorrelation() {
 		gk, e.CorrelationReason = dependencyDecision(e)
@@ -32,7 +55,7 @@ func bufferDurable(e EnrichedAlert) error {
 	}
 	key := "igpt:corr:pending:" + gk
 	if e.Status == "resolved" {
-		if err := redisClient.HDel(ctx, key, e.Fingerprint).Err(); err != nil {
+		if err := resolvePendingScript.Run(ctx, redisClient, []string{pendingFingerprintGroup(e), correlationDue}, e.Fingerprint, gk, e.StartsAt.Format(time.RFC3339Nano)).Err(); err != nil {
 			return err
 		}
 		return errSkipResolved
@@ -41,7 +64,11 @@ func bufferDurable(e EnrichedAlert) error {
 	if err != nil {
 		return err
 	}
-	n, err := bufferDurableScript.Run(ctx, redisClient, []string{key, correlationDue}, e.Fingerprint, raw, time.Now().Add(appCfg.CorrSettle).UnixMilli(), gk).Int()
+	window := appCfg.CorrWindow
+	if window <= 0 {
+		window = 10 * time.Minute
+	}
+	n, err := bufferDurableScript.Run(ctx, redisClient, []string{key, correlationDue, pendingFingerprintGroup(e)}, e.Fingerprint, raw, time.Now().Add(appCfg.CorrSettle).UnixMilli(), gk, window.Milliseconds()).Int()
 	if err != nil {
 		return err
 	}
@@ -130,4 +157,13 @@ func startDurableCorrelation() {
 			cancel()
 		}
 	}()
+}
+
+func correlationStartupTimeout() (time.Duration, error) {
+	value := envOr("REDIS_STARTUP_TIMEOUT", "2m")
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 || duration > 10*time.Minute {
+		return 0, fmt.Errorf("invalid REDIS_STARTUP_TIMEOUT")
+	}
+	return duration, nil
 }

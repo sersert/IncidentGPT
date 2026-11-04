@@ -80,12 +80,20 @@ incidentgpt-sanitizer:
 отрендеренных Secret. Sanitizer должен работать в fail-closed режиме; не отключайте
 его ради прохождения теста. Подробнее: [граница санитизации](security/data-sanitizer-ru.md).
 
-Для production используйте управляемые Secrets. При внешнем htpasswd Secret UI
-нужен отдельный backend reader Secret с тем же логином и паролем. Генерируемая
-umbrella-пара по умолчанию подходит для этого проверочного стенда; подробности —
-[доступ к веб-интерфейсу](web-ui.md#доступ).
+Backend читает исходные credentials из отдельного Secret, который umbrella-чарт автоматически не создаёт. Пример values включает `LEGACY_API_AUTH_REQUIRED=true` и ссылается на `incidentgpt-preview-reader`. Создайте его в namespace стенда; логин и пароль должны совпадать с `incidentgpt-ui.auth.username/password` в `values-local.yaml`:
+
+```bash
+kubectl create namespace incidentgpt --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n incidentgpt create secret generic incidentgpt-preview-reader \
+  --from-literal=username=admin \
+  --from-literal=password='<тот-же-пароль-что-в-values-local.yaml>'
+```
+
+Для production используйте управляемые Secrets. Даже при внешнем htpasswd Secret UI backend нужен Secret с исходными username/password. Подробности — [доступ к веб-интерфейсу](web-ui.md#доступ).
 
 ## 4. Разверните и проверьте готовность
+
+В текущем образе UI DNS-резолвер nginx зафиксирован как `10.96.0.10`. До запуска проверьте ClusterIP DNS: `kubectl -n kube-system get service kube-dns`. На k3s (обычно `10.43.0.10`) и кластерах с другим адресом DNS прокси `/api/` и `/ws/` не сможет разрешить имя backend. Пока резолвер не вынесен в настройки, для такого стенда нужен собственный образ UI с адресом DNS кластера в обоих блоках `resolver` файла `ui/nginx.conf`. Успешный port-forward или `/healthz` эту проблему не выявляет.
 
 ```bash
 helm dependency build --skip-refresh deploy/incidentgpt
@@ -182,6 +190,7 @@ Redis, очередями и smoke-сценарием, запишите digests/
 | Симптом | Что проверить |
 | --- | --- |
 | UI открывается, API отвечает 401/403 | Совпадают ли Basic credentials UI/backend; передаётся ли Authorization. X-Auth-User не заменяет проверку пароля. |
+| UI открывается, `/api/` висит до таймаута или отвечает 502 | В образе UI зашит DNS-резолвер `10.96.0.10`. На k3s/managed сравните его с `kubectl -n kube-system get service kube-dns`; при несовпадении нужен собственный образ UI с корректным адресом в обоих блоках `resolver` в `ui/nginx.conf`. |
 | Алерты есть, инцидентов нет | `incidentgpt-enricher.env.groupBackendUrl` должен вести на `/api/v1/ingest` backend; проверьте Redis и логи enricher. |
 | Инцидент есть, разбора нет | В legacy режиме нужны callback worker → backend и доступ к модели/sanitizer. В durable режиме проверьте задания и service token; старый callback там не используется. |
 | После перезапуска пропала история | Проверьте `REDIS_ADDR` backend, `redisAddr` enricher, PVC и persistence. In-memory режим не хранит историю между рестартами. |

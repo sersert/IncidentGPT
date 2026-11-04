@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -19,21 +20,23 @@ func diagnosticsEnabled() bool {
 func incidentDiagnosticScope(inc *Incident) DiagnosticScope {
 	now := time.Now().UTC()
 	scope := DiagnosticScope{ClusterID: incidentCluster(inc), Namespace: inc.Namespace, Workload: incidentWorkload(inc), From: now.Add(-15 * time.Minute), To: now}
-	for _, a := range inc.Alerts {
-		if scope.Pod == "" {
-			scope.Pod = a.Labels["pod"]
+	if lead := representativeAlert(inc); lead != nil {
+		if namespace := alertNamespace(lead); namespace != "" {
+			scope.Namespace = namespace
+			scope.Workload = lead.Labels["deployment"]
+			if scope.Workload == "" {
+				scope.Workload = lead.Labels["service"]
+			}
+		} else if len(inc.Alerts) > 1 {
+			// Only a single legacy member can safely inherit the incident's scope.
+			scope.Namespace, scope.Workload = "", ""
 		}
-		if scope.Node == "" {
-			scope.Node = a.Labels["node"]
+		scope.Pod, scope.Node = lead.Labels["pod"], lead.Labels["node"]
+		if scope.Workload == "" && inc.Context != nil && inc.Context.Namespace == scope.Namespace && inc.Context.Pod == scope.Pod && scope.Pod != "" {
+			scope.Workload = incidentWorkload(inc)
 		}
-	}
-	if inc.Context != nil {
-		if scope.Pod == "" {
-			scope.Pod = inc.Context.Pod
-		}
-		if scope.Node == "" {
-			scope.Node = inc.Context.Node
-		}
+	} else if inc.Context != nil && (inc.Context.Namespace == "" || inc.Context.Namespace == scope.Namespace) {
+		scope.Pod, scope.Node = inc.Context.Pod, inc.Context.Node
 	}
 	return scope
 }
@@ -64,7 +67,7 @@ func handleInvestigations(w http.ResponseWriter, r *http.Request) {
 		Question string `json:"question"`
 		EventID  string `json:"change_event_id"`
 	}
-	if decodeChange(r, &request) != nil || len(request.Question) > 500 || (request.Action != "refresh" && request.Action != "hypothesis" && request.Action != "compare") {
+	if decodeChange(r, &request) != nil || utf8.RuneCountInString(request.Question) > 500 || (request.Action != "refresh" && request.Action != "hypothesis" && request.Action != "compare") {
 		http.Error(w, "unsupported investigation", 400)
 		return
 	}
@@ -198,7 +201,7 @@ func collectDiagnosticEvidence(ctx context.Context, e *jobEnvelope) error {
 	at := time.Now().UTC()
 	for _, input := range requests {
 		raw, _ := json.Marshal(input)
-		req, err := http.NewRequestWithContext(ctx, "POST", env("DIAGNOSTIC_COLLECTOR_URL", "http://incidentgpt-enricher.incidentgpt.svc:9099/v1/diagnostics"), bytes.NewReader(raw))
+		req, err := http.NewRequestWithContext(ctx, "POST", env("DIAGNOSTIC_COLLECTOR_URL", "http://incidentgpt-enricher:9099/v1/diagnostics"), bytes.NewReader(raw))
 		if err != nil {
 			return fmt.Errorf("diagnostic_configuration_invalid")
 		}
@@ -241,6 +244,7 @@ func collectDiagnosticEvidence(ctx context.Context, e *jobEnvelope) error {
 	}
 	e.Input.Evidence = evidence
 	e.Input.Context = append(e.Input.Context, "Human question (untrusted text): "+op.Question, "Compare the new evidence with the previous analysis; describe changes, contradictions and missing data. Do not execute historical solutions.")
+	normalizeJobInput(&e.Input)
 	input, _ := json.Marshal(e.Input)
 	keys := []string{"igpt:job:" + e.Job.ID}
 	args := []any{e.Owner, time.Now().UnixMilli(), input}
@@ -297,7 +301,7 @@ func handleDiagnosticCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func confirmedMemoryEvidence(ctx context.Context, inc *Incident) ([]Evidence, error) {
-	result := []Evidence{}
+	var result []Evidence
 	service := incidentWorkload(inc)
 	if service == "" {
 		service = inc.Labels["service"]

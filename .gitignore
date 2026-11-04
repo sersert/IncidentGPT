@@ -38,8 +38,12 @@ charts/*.tgz
 *.swp
 
 # === Claude Code ===
-.claude/
+.claude/*
+!.claude/review-context.md
 
 # === OS ===
 .DS_Store
 Thumbs.db
+
+# Локальные черновики PR не являются документацией проекта.
+/pr-descriptions/

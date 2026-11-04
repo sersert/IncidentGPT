@@ -2,6 +2,7 @@ import { IncidentReports } from '@/components/IncidentReports'
 import { IncidentLifecycle } from '@/components/IncidentLifecycle'
 import { DependencyContext } from '@/components/DependencyContext'
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { GuidedDiagnostics } from '@/components/GuidedDiagnostics'
 import { IncidentMemory } from '@/components/IncidentMemory'
 import { AnalysisHistory } from '@/components/AnalysisHistory'
@@ -364,6 +365,19 @@ const recLabel: Record<string, string> = {
   prevent: 'предотвратить',
 }
 
+function IncidentPanel({ view, active, children }: { view: string; active: boolean; children: ReactNode }) {
+  const [visited, setVisited] = useState(active)
+  useEffect(() => {
+    if (active) setVisited(true)
+  }, [active])
+
+  return (
+    <section id={`incident-panel-${view}`} role="tabpanel" aria-labelledby={`incident-workspace-${view}`} hidden={!active} tabIndex={0}>
+      {(active || visited) && children}
+    </section>
+  )
+}
+
 export function IncidentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -451,6 +465,7 @@ export function IncidentDetail() {
             size="sm"
             disabled={update.isPending}
             onClick={() => {
+              update.reset()
               setAssignee(incident.assignee ?? '')
               setAssignOpen(true)
             }}
@@ -499,11 +514,11 @@ export function IncidentDetail() {
         <h1 className="basis-full break-words text-[23px] leading-snug font-semibold tracking-[-0.025em] sm:text-[27px]">{incident.title}</h1>
       </div>
 
-      {update.isError && <p role="alert" className="mb-4 rounded-lg border border-severity-critical/30 bg-severity-critical/5 p-4 text-sm">Изменения не сохранены. {update.error.message}</p>}
+      {update.isError && !assignOpen && <p role="alert" className="mb-4 rounded-lg border border-severity-critical/30 bg-severity-critical/5 p-4 text-sm">Изменения не сохранены. {update.error.message}</p>}
       <div className="mb-6">
         <Tabs idPrefix="incident-workspace" panelIdPrefix="incident-panel" label="Рабочие разделы инцидента" tabs={views} active={view} onChange={changeView} />
       </div>
-      <section id="incident-panel-overview" role="tabpanel" aria-labelledby="incident-workspace-overview" hidden={view !== 'overview'} tabIndex={0}>
+      <IncidentPanel key={`${incident.id}-overview`} view="overview" active={view === 'overview'}>
       <div className="grid items-start gap-5 xl:grid-cols-2">
         <Card
           title="Состав инцидента"
@@ -526,6 +541,7 @@ export function IncidentDetail() {
           {tab === 'logs' && <LogsViewer logs={logs} loading={logsQuery.isLoading} reason={logsQuery.data?.reason} />}
           {tab === 'raw' && (
             <>
+              {!!incident.history_sources?.length && !incident.raw_alert && !incident.enriched_data && <p className="mb-3 text-sm text-text-muted">Состав инцидента изменён. Исходные данные сохранены в истории разборов; обновите контекст для текущего состава.</p>}
               <EnrichmentLogs data={incident.enriched_data} />
               <RawViewer data={incident.raw_alert} title="Исходный алерт" />
               <RawViewer data={incident.enriched_data} title="Обогащённые данные" />
@@ -645,21 +661,21 @@ export function IncidentDetail() {
 
       <AnalysisHistory key={`analysis-${incident.id}`} incidentId={incident.id} />
       <IncidentLifecycle key={`lifecycle-${incident.id}`} incidentId={incident.id} />
-      </section>
-      <section id="incident-panel-investigate" role="tabpanel" aria-labelledby="incident-workspace-investigate" hidden={view !== 'investigate'} tabIndex={0}>
+      </IncidentPanel>
+      <IncidentPanel key={`${incident.id}-investigate`} view="investigate" active={view === 'investigate'}>
         <p className="mb-4 text-sm leading-relaxed text-text-secondary">Сопоставьте изменения с симптомами, соберите недостающие данные и проверьте состав группы. Проверки читают только разрешённые ресурсы инцидента.</p>
         <RecentChanges key={incident.id} incidentId={incident.id} />
         <GuidedDiagnostics key={`diagnostics-${incident.id}`} incidentId={incident.id} />
         <DependencyContext key={`dependencies-${incident.id}`} incidentId={incident.id} alerts={incident.alerts || []} />
-      </section>
-      <section id="incident-panel-knowledge" role="tabpanel" aria-labelledby="incident-workspace-knowledge" hidden={view !== 'knowledge'} tabIndex={0}>
+      </IncidentPanel>
+      <IncidentPanel key={`${incident.id}-knowledge`} view="knowledge" active={view === 'knowledge'}>
         <p className="mb-4 text-sm leading-relaxed text-text-secondary">Сверьте версии и окружение перед применением прошлого решения. Запишите причину только после проверки.</p>
         <IncidentMemory key={`memory-${incident.id}`} incidentId={incident.id} />
-      </section>
-      <section id="incident-panel-reports" role="tabpanel" aria-labelledby="incident-workspace-reports" hidden={view !== 'reports'} tabIndex={0}>
+      </IncidentPanel>
+      <IncidentPanel key={`${incident.id}-reports`} view="reports" active={view === 'reports'}>
         <p className="mb-4 text-sm leading-relaxed text-text-secondary">Подготовьте постмортем или передачу смены, проверьте источники и дополните черновик. Генерация сохраняет предыдущие версии.</p>
         <IncidentReports key={`reports-${incident.id}`} incidentId={incident.id} />
-      </section>
+      </IncidentPanel>
 
       <Modal
         open={assignOpen}

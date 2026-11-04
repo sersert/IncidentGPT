@@ -119,10 +119,10 @@ export function Dashboard() {
             Требуют внимания
           </h2>
           <Link
-            to="/incidents?status=active"
+            to="/incidents"
             className="inline-flex min-h-9 items-center gap-2 text-xs text-text-secondary hover:text-accent"
           >
-            Все активные
+            Вся очередь
             <ArrowRight size={14} />
           </Link>
         </div>

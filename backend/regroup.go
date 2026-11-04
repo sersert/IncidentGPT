@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/redis/go-redis/v9"
+	"maps"
 	"net/http"
 	"time"
 )
@@ -11,13 +12,18 @@ import (
 // Move one alert, or split it into a new incident. Source records and their
 // immutable evidence/analysis remain accessible through history_sources.
 var regroupScript = redis.NewScript(`
+if redis.call('GET',KEYS[7])~=ARGV[12] then return 0 end
 if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end
 local target=redis.call('GET',KEYS[2]);if ARGV[2]=='' then if target then return 0 end else if target~=ARGV[2] then return 0 end end
 if redis.call('GET',KEYS[3])~=ARGV[3] then return 0 end
-redis.call('DEL','igpt:analysis:requested:'..ARGV[10],'igpt:analysis:requested:'..ARGV[7],'igpt:analysis:latest:'..ARGV[10],'igpt:analysis:latest:'..ARGV[7]);redis.call('SET',KEYS[1],ARGV[4]);redis.call('SET',KEYS[2],ARGV[5]);redis.call('SET',KEYS[3],ARGV[6]);redis.call('SET',KEYS[4],ARGV[7]);redis.call('SET','igpt:regroup:binding:'..ARGV[11],ARGV[7]);redis.call('ZADD',KEYS[5],ARGV[8],ARGV[7]);redis.call('SET',KEYS[6],ARGV[9]);return 1`)
+redis.call('DEL','igpt:analysis:requested:'..ARGV[10],'igpt:analysis:requested:'..ARGV[7],'igpt:analysis:latest:'..ARGV[10],'igpt:analysis:latest:'..ARGV[7]);redis.call('SET',KEYS[1],ARGV[4]);redis.call('SET',KEYS[2],ARGV[5]);redis.call('SET',KEYS[3],ARGV[6]);redis.call('SET',KEYS[4],ARGV[7]);redis.call('SET','igpt:regroup:binding:'..ARGV[11],ARGV[7],'EX',ARGV[13]);redis.call('ZADD',KEYS[5],ARGV[8],ARGV[7]);redis.call('SET',KEYS[6],ARGV[9]);return 1`)
 
 func handleRegroup(w http.ResponseWriter, r *http.Request) {
-	if !changeReadAuth(w, r) {
+	if !sharedAdminMutationAuth(w, r) {
+		return
+	}
+	if !regroupEnabled() {
+		http.Error(w, "manual regrouping disabled", 503)
 		return
 	}
 	if store.disk == nil || !durableEnabled() {
@@ -40,7 +46,7 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "composition busy; retry", 409)
 		return
 	}
-	defer redis.NewScript(`if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0`).Run(context.Background(), store.disk.rdb, []string{"igpt:composition:lock"}, owner)
+	defer releaseOwnedLock(store.disk.rdb, "igpt:composition:lock", owner)
 	sourceID := r.PathValue("id")
 	sourceRaw, err := store.disk.rdb.Get(ctx, keyIncident+sourceID).Bytes()
 	var source Incident
@@ -79,7 +85,7 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 	var targetRaw []byte
 	now := time.Now().UTC()
 	if body.Target == "" {
-		target = Incident{ID: newStableID("incident"), ClusterID: source.ClusterID, Title: moved.AlertName, Namespace: moved.Namespace, Source: moved.Source, Status: "active", Severity: moved.Severity, CreatedAt: now, UpdatedAt: now, Labels: moved.Labels, AnalysisMode: "structured"}
+		target = Incident{ID: store.NextID(), ClusterID: source.ClusterID, Title: moved.AlertName, Namespace: moved.Namespace, Source: moved.Source, Status: "active", Severity: moved.Severity, CreatedAt: now, UpdatedAt: now, Labels: moved.Labels, AnalysisMode: "structured"}
 	} else {
 		targetRaw, err = store.disk.rdb.Get(ctx, keyIncident+body.Target).Bytes()
 		if err != nil || json.Unmarshal(targetRaw, &target) != nil {
@@ -98,12 +104,18 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 	source.Alerts = remaining
 	source.AlertCount = len(remaining)
 	source.UpdatedAt = now
+	if len(source.Alerts) == 0 {
+		source.Status = "resolved"
+		duration := int(now.Sub(source.CreatedAt).Seconds())
+		source.DurationSec = &duration
+	}
 	target.Alerts = append(target.Alerts, moved)
 	target.AlertCount = len(target.Alerts)
 	target.UpdatedAt = now
 	target.HistorySources = appendUnique(target.HistorySources, source.ID)
 	source.HistorySources = appendUnique(source.HistorySources, target.ID)
 	for _, inc := range []*Incident{&source, &target} {
+		refreshCompositionContext(inc)
 		inc.AnalysisSummary = nil
 		inc.Analysis = nil
 		inc.Confidence = nil
@@ -113,7 +125,7 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 	dst, _ := json.Marshal(target)
 	alert, _ := json.Marshal(moved)
 	audit, _ := json.Marshal(map[string]any{"schema_version": 1, "audit_id": auditID, "actor": actor, "at": now, "alert_id": moved.ID, "source_incident_id": source.ID, "target_incident_id": target.ID, "source_composition": incidentComposition(&source), "target_composition": incidentComposition(&target)})
-	n, err := regroupScript.Run(ctx, store.disk.rdb, []string{keyIncident + source.ID, keyIncident + target.ID, keyAlert + moved.ID, keyFingerprint + moved.Fingerprint, keyIncidentIdx, "igpt:regroup:" + auditID}, sourceRaw, targetRaw, alertRaw, src, dst, alert, target.ID, target.CreatedAt.Unix(), audit, source.ID, moved.Fingerprint).Int()
+	n, err := regroupScript.Run(ctx, store.disk.rdb, []string{keyIncident + source.ID, keyIncident + target.ID, keyAlert + moved.ID, keyFingerprint + moved.Fingerprint, keyIncidentIdx, "igpt:regroup:" + auditID, "igpt:composition:lock"}, sourceRaw, targetRaw, alertRaw, src, dst, alert, target.ID, target.CreatedAt.Unix(), audit, source.ID, moved.Fingerprint, owner, int(manualBindingTTL.Seconds())).Int()
 	if err != nil {
 		http.Error(w, "regroup persistence unavailable", 503)
 		return
@@ -134,4 +146,39 @@ func appendUnique(ids []string, id string) []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func regroupEnabled() bool {
+	return durableEnabled() && env("MANUAL_REGROUP_ENABLED", "false") == "true"
+}
+
+// Current context must describe a member of the new composition. The original
+// enrichment and immutable evidence remain available in stored analysis history.
+func refreshCompositionContext(inc *Incident) {
+	inc.Context = nil
+	inc.EnrichedData = nil
+	inc.RawAlert = nil
+	inc.Chain = nil
+	inc.ChainLength = 0
+	inc.RootCauseID = nil
+	inc.Labels = nil
+	inc.Namespace = ""
+	inc.Source = ""
+	inc.Severity = "unknown"
+	if len(inc.Alerts) > 0 {
+		lead := representativeAlert(inc)
+		inc.Namespace = lead.Namespace
+		if inc.Namespace == "" {
+			inc.Namespace = lead.Labels["namespace"]
+		}
+		inc.Labels = maps.Clone(lead.Labels)
+		inc.Source = lead.Source
+		inc.Context = &IncidentContext{Namespace: inc.Namespace, Pod: lead.Labels["pod"], Node: lead.Labels["node"], PodStatus: "Unknown", Labels: maps.Clone(lead.Labels)}
+		for _, a := range inc.Alerts {
+			if severityRank(a.Severity) < severityRank(inc.Severity) {
+				inc.Severity = a.Severity
+			}
+		}
+	}
+	inc.Title = buildGroupTitle(inc.Alerts, inc.Namespace, "")
 }
