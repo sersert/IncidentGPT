@@ -1,14 +1,16 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime.js'
+import 'dayjs/locale/ru.js'
 
 dayjs.extend(relativeTime)
+dayjs.locale('ru')
 
 export function timeAgo(date: string): string {
   return dayjs(date).fromNow()
 }
 
 export function formatDate(date: string): string {
-  return dayjs(date).format('MMM D, YYYY HH:mm')
+  return dayjs(date).format('D MMM YYYY, HH:mm')
 }
 
 export function formatTime(date: string): string {

@@ -7,16 +7,16 @@
 // getComputedStyle вернёт пусто (стили ещё не применились), Recharts получит
 // пустую заливку и нарисует график без столбцов и линий.
 const fallback: Record<string, string> = {
-  '--color-severity-critical': '#FF5F52',
-  '--color-severity-warning': '#F5A623',
-  '--color-severity-info': '#4C9AFF',
-  '--color-severity-unknown': '#59636F',
-  '--color-accent': '#7C7CFF',
-  '--color-status-resolved': '#3FB950',
-  '--color-border-soft': '#1D2130',
-  '--color-text-muted': '#666C82',
-  '--color-surface-tertiary': '#1B1E2A',
-  '--color-border-default': '#242838',
+  '--color-severity-critical': '#B92F35',
+  '--color-severity-warning': '#8C5B13',
+  '--color-severity-info': '#2C5DB2',
+  '--color-severity-unknown': '#626D7E',
+  '--color-accent': '#3456C5',
+  '--color-status-resolved': '#24734F',
+  '--color-border-soft': '#E9ECF1',
+  '--color-text-muted': '#667388',
+  '--color-surface-tertiary': '#EEF1F5',
+  '--color-border-default': '#DDE2E9',
 }
 
 function token(name: string): string {
@@ -24,7 +24,7 @@ function token(name: string): string {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
     if (v) return v
   }
-  return fallback[name] ?? '#7C7CFF'
+  return fallback[name] ?? '#3456C5'
 }
 
 export const chartColors = {
@@ -47,7 +47,7 @@ export const tooltipStyle = {
   borderRadius: 8,
   fontSize: 12,
   padding: '8px 10px',
-  boxShadow: '0 10px 30px #000a',
+  boxShadow: 'var(--shadow-chart-tooltip)',
 } as const
 
 export const axisTick = { fill: 'var(--color-text-muted)', fontSize: 11 } as const

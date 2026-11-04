@@ -6,7 +6,8 @@ import {
   BarChart3,
   TrendingUp,
   Plug,
-  Settings as SettingsIcon,
+  Settings,
+  BookOpen,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -15,101 +16,90 @@ interface Item {
   label: string
   icon: LucideIcon
   end?: boolean
-  /** Счётчик справа — сколько объектов требует внимания. */
   count?: number
 }
-
-interface Group {
-  title: string
-  items: Item[]
+interface SidebarProps {
+  activeIncidents?: number
+  warnings?: number
+  mobile?: boolean
+  onNavigate?: () => void
 }
 
-export function Sidebar({ activeIncidents, warnings }: { activeIncidents?: number; warnings?: number }) {
-  const groups: Group[] = [
+export function Sidebar({ activeIncidents, warnings, mobile = false, onNavigate }: SidebarProps) {
+  const groups: { title: string; items: Item[] }[] = [
     {
-      title: 'Инциденты',
+      title: 'Мониторинг',
       items: [
+        { to: '/', label: 'Обзор', icon: LayoutDashboard, end: true },
         { to: '/incidents', label: 'Инциденты', icon: AlertTriangle, count: activeIncidents },
         { to: '/alerts', label: 'Алерты', icon: Bell },
-        { to: '/', label: 'Дашборд', icon: LayoutDashboard, end: true },
-      ],
-    },
-    {
-      title: 'Аналитика',
-      items: [
         { to: '/analytics', label: 'Аналитика', icon: BarChart3 },
         { to: '/predictions', label: 'Прогнозы', icon: TrendingUp, count: warnings },
       ],
     },
     {
-      title: 'Система',
+      title: 'Настройки',
       items: [
         { to: '/settings/integrations', label: 'Интеграции', icon: Plug },
-        { to: '/settings/llm', label: 'Модель', icon: SettingsIcon },
+        { to: '/settings/llm', label: 'Модель', icon: Settings },
       ],
     },
   ]
-
   return (
-    <aside className="sticky top-0 flex h-screen w-[216px] shrink-0 flex-col border-r border-border-default bg-surface-secondary px-2.5 py-3.5">
-      <NavLink to="/" className="flex items-center gap-2.5 px-2 pb-4 text-[15px] font-semibold tracking-[-0.015em]">
-        {/* Восьмигранник — план дозорной башни сверху, внутри пульс: смотрим и живы. */}
-        <svg width="19" height="19" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-          <path
-            d="M12 5h8l7 7v8l-7 7h-8l-7-7v-8l7-7z"
-            fill="var(--color-accent)"
-            fillOpacity="0.12"
-            stroke="var(--color-accent)"
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M9.5 16.6h2.4l1.7-4.4 2.7 8.6 1.9-5.2 1.1 1h3.2"
-            stroke="var(--color-accent)"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+    <aside
+      className={
+        mobile
+          ? 'flex min-h-full flex-col bg-surface-secondary p-5'
+          : 'sticky top-0 hidden h-dvh w-[220px] shrink-0 flex-col border-r border-border-default bg-surface-secondary px-4 py-5 lg:flex'
+      }
+    >
+      <NavLink
+        to="/"
+        onClick={onNavigate}
+        className="mb-10 flex items-center gap-2.5 px-2 text-[19px] font-semibold tracking-[-.04em]"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 4h12v16H6z" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M10 8h4m-4 4h4m-4 4h4" stroke="currentColor" strokeWidth="1.6" />
         </svg>
         IncidentGPT
       </NavLink>
-
-      <nav className="flex flex-col gap-0.5 overflow-y-auto">
+      <nav aria-label="Основная навигация" className="min-h-0 space-y-8 overflow-y-auto">
         {groups.map((group) => (
           <div key={group.title}>
-            <p className="px-2 pt-3.5 pb-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-text-muted">
-              {group.title}
-            </p>
-            {group.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  `flex items-center gap-2.5 rounded-[7px] px-2 py-[7px] text-[13px] transition-colors ${
-                    isActive
-                      ? 'bg-accent/12 text-[#B9B9FF]'
-                      : 'text-text-secondary hover:bg-surface-tertiary hover:text-text-primary'
-                  }`
-                }
-              >
-                <item.icon size={15} strokeWidth={1.9} />
-                {item.label}
-                {item.count ? (
-                  <span className="tnum ml-auto font-mono text-[11px] text-text-muted">{item.count}</span>
-                ) : null}
-              </NavLink>
-            ))}
+            <p className="mb-2 px-3 text-[11px] font-medium text-text-muted">{group.title}</p>
+            <div className="space-y-1">
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `flex min-h-10 items-center gap-3 rounded-md px-3 text-[13px] transition-colors ${isActive ? 'bg-surface-tertiary font-semibold text-text-primary' : 'text-text-secondary hover:bg-surface-primary hover:text-text-primary'}`
+                  }
+                >
+                  <item.icon size={16} strokeWidth={1.6} aria-hidden="true" />
+                  {item.label}
+                  {item.count != null && item.count > 0 && (
+                    <span className="tnum ml-auto text-[11px] font-medium text-text-muted">{item.count}</span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           </div>
         ))}
       </nav>
-
-      <div className="mt-auto flex items-center gap-2.5 border-t border-border-soft px-2 pt-3 text-[13px] text-text-secondary">
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-accent text-[11px] font-semibold text-surface-primary">
-          S
-        </span>
-        sersert
-      </div>
+      <NavLink
+        to="/help"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          `mt-auto flex min-h-11 items-center gap-3 rounded-md px-3 text-[13px] ${isActive ? 'bg-surface-tertiary font-medium text-text-primary' : 'text-text-secondary hover:bg-surface-primary'}`
+        }
+      >
+        <BookOpen size={16} strokeWidth={1.6} />
+        Руководство
+      </NavLink>
     </aside>
   )
 }

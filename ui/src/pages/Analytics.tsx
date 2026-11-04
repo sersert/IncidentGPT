@@ -1,3 +1,4 @@
+import { useTheme } from '@/components/ThemeProvider'
 import { useState } from 'react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip,
@@ -79,6 +80,7 @@ function TrendChart({
 }
 
 export function Analytics() {
+  useTheme()
   const [period, setPeriod] = useState('30d')
   const { data: summary, isLoading, isError } = useAnalyticsSummary(period)
   const { data: mttr } = useMTTRTrend(period)
@@ -108,7 +110,7 @@ export function Analytics() {
               onClick={() => setPeriod(p.id)}
               className={`rounded-full border px-[11px] py-[5px] text-xs transition-colors ${
                 period === p.id
-                  ? 'border-accent/30 bg-accent/12 text-[#B9B9FF]'
+                  ? 'border-accent/30 bg-accent/12 text-accent'
                   : 'border-border-default bg-surface-secondary text-text-secondary hover:text-text-primary'
               }`}
             >

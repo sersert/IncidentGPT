@@ -61,9 +61,7 @@ jobs:
       - name: test
         run: go test -race ./...
 
-  # У UI своего тест-раннера нет, поэтому проверяем то, что реально ловит
-  # поломки: типы и сборку бандла. Отдельный typecheck обязателен — `vite build`
-  # типы не проверяет, esbuild их просто стирает, и ошибки копились незамеченными.
+  # Typecheck проверяет типы отдельно от Vite, браузерные тесты — готовый bundle.
   ui:
     name: build & typecheck (ui)
     runs-on: ubuntu-latest
@@ -78,8 +76,10 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: typecheck
         run: npx tsc --noEmit -p tsconfig.app.json
-      - name: build
-        run: npm run build
+      - name: install browser
+        run: npx playwright install --with-deps chromium
+      - name: build and browser regressions
+        run: npm run test:browser
 
   # Линт Dockerfile'ов по чек-листу антипаттернов.
   hadolint:

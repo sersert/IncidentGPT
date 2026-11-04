@@ -1,251 +1,311 @@
-import { useEffect, useState, useMemo } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Search, X, AlertCircle, Layers } from 'lucide-react'
-import type { Incident, IncidentStatus } from '@/api/types.ts'
-import { SeverityBadge, SeverityDot } from '@/components/ui/Badge.tsx'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Search, X, AlertCircle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import type { Incident } from '@/api/types.ts'
+import { SeverityBadge, StatusBadge } from '@/components/ui/Badge.tsx'
 import { EmptyState } from '@/components/ui/EmptyState.tsx'
 import { Skeleton } from '@/components/ui/Skeleton.tsx'
 import { Button } from '@/components/ui/Button.tsx'
-import { Tooltip } from '@/components/ui/Tooltip.tsx'
 import { useIncidents } from '@/hooks/useIncidents.ts'
-import { timeAgo, formatDate, formatDuration } from '@/lib/time.ts'
+import { formatDate, timeAgo } from '@/lib/time.ts'
 import { countOf, words } from '@/lib/plural.ts'
 
-const STATUS_FACETS: { value: IncidentStatus | ''; label: string }[] = [
-  { value: 'active', label: 'Активные' },
-  { value: 'acknowledged', label: 'Принятые' },
-  { value: 'resolved', label: 'Закрытые' },
+const statuses = [
   { value: '', label: 'Все' },
+  { value: 'active', label: 'Активные' },
+  { value: 'acknowledged', label: 'В работе' },
+  { value: 'resolved', label: 'Закрытые' },
+  { value: 'muted', label: 'Заглушённые' },
 ]
+const PAGE_SIZE = 25
 
-/** Кусок текста, совпавший с запросом, подсвечивается — иначе непонятно, за что нашлось. */
 function Highlight({ text, query }: { text: string; query: string }) {
-  if (!query.trim()) return <>{text}</>
-  const i = text.toLowerCase().indexOf(query.toLowerCase())
-  if (i === -1) return <>{text}</>
+  const index = query.trim() ? text.toLowerCase().indexOf(query.toLowerCase()) : -1
+  if (index < 0) return <>{text}</>
   return (
     <>
-      {text.slice(0, i)}
-      <mark className="rounded-[3px] bg-accent/25 px-0.5 text-text-primary">{text.slice(i, i + query.length)}</mark>
-      {text.slice(i + query.length)}
+      {text.slice(0, index)}
+      <mark className="rounded bg-accent/20 text-text-primary">
+        {text.slice(index, index + query.length)}
+      </mark>
+      {text.slice(index + query.length)}
     </>
   )
 }
 
-function IncidentRow({ incident, query, onOpen }: { incident: Incident; query: string; onOpen: () => void }) {
-  const isOpen = incident.status === 'active'
-  const chips = [
-    incident.namespace,
-    incident.source,
-    incident.log_errors > 0 ? `логи ${incident.log_errors}` : null,
-    incident.duration_sec !== null ? `закрыт за ${formatDuration(incident.duration_sec)}` : null,
-    incident.confidence !== null ? `AI ${incident.confidence}%` : null,
-    incident.has_postmortem ? 'post mortem' : null,
-  ].filter(Boolean) as string[]
-
+function IncidentRow({ incident, query }: { incident: Incident; query: string }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpen()
-        }
-      }}
-      className={`grid cursor-pointer grid-cols-[auto_1fr_auto] items-start gap-3.5 rounded-[10px] border border-border-default bg-surface-secondary px-4 py-3.5 transition-colors hover:border-[#333A52] hover:bg-surface-tertiary ${
-        incident.status === 'resolved' ? 'opacity-60' : ''
-      }`}
+    <Link
+      to={`/incidents/${encodeURIComponent(incident.id)}`}
+      className="group flex min-w-0 flex-col gap-3 border-b border-border-soft px-5 py-4 transition-colors last:border-0 hover:bg-surface-primary md:grid md:grid-cols-[minmax(0,1fr)_110px_90px_100px] md:items-center md:gap-5"
     >
-      <SeverityDot severity={incident.severity} halo={isOpen} className="mt-1.5" />
-
       <div className="min-w-0">
-        <h3 className="text-[14.5px] font-semibold tracking-[-0.01em]">
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
+          <span className="font-mono">{incident.id}</span>
+          <span className="break-all">{incident.namespace || 'namespace неизвестен'}</span>
+          <span>{countOf(incident.alert_count, words.alert)}</span>
+          {incident.has_postmortem && <span>Постмортем</span>}
+        </div>
+        <h2 className="break-words text-[14px] font-medium tracking-[-.01em] group-hover:text-accent">
           <Highlight text={incident.title} query={query} />
-        </h3>
+        </h2>
         {incident.analysis_summary && (
-          <p className="mt-1 truncate text-[13px] text-text-secondary">
+          <p className="mt-1 line-clamp-1 text-xs leading-relaxed text-text-muted">
             <Highlight text={incident.analysis_summary} query={query} />
           </p>
         )}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <SeverityBadge severity={incident.severity} />
-          {/* Сколько алертов склеено — главный признак, что это группа, а не один алерт. */}
-          {incident.alert_count > 1 && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-accent/12 px-[7px] py-0.5 text-[11px] font-medium text-[#B9B9FF]">
-              <Layers size={10} />
-              {countOf(incident.alert_count, words.alert)}
-              {incident.discarded_count > 0 && (
-                <span className="text-text-muted">· {incident.discarded_count} отброшено</span>
-              )}
-            </span>
-          )}
-          {chips.map((c) => (
-            <span key={c} className="rounded-md bg-surface-tertiary px-[7px] py-0.5 text-[11px] text-text-muted">
-              {c}
-            </span>
-          ))}
-        </div>
       </div>
-
-      <Tooltip content={formatDate(incident.created_at)}>
-        <span className="tnum whitespace-nowrap pt-0.5 text-xs text-text-muted">{timeAgo(incident.created_at)}</span>
-      </Tooltip>
-    </div>
+      <div className="flex flex-wrap items-center gap-3 md:contents">
+        <span>
+          <StatusBadge status={incident.status} />
+        </span>
+        <span>
+          <SeverityBadge severity={incident.severity} />
+        </span>
+        <time
+          dateTime={incident.created_at}
+          title={formatDate(incident.created_at)}
+          className="tnum ml-auto text-[11px] text-text-muted md:ml-0"
+        >
+          {timeAgo(incident.created_at)}
+        </time>
+      </div>
+    </Link>
   )
 }
 
 export function IncidentList() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const [search, setSearch] = useState(searchParams.get('q') || '')
-
-  const status = searchParams.get('status') || ''
-  const { data, isLoading, isError, error, refetch } = useIncidents(searchParams.toString())
+  const [params, setParams] = useSearchParams()
+  const query = params.get('q') ?? ''
+  const [search, setSearch] = useState(query)
+  const status = statuses.some((item) => item.value === params.get('status'))
+    ? (params.get('status') ?? '')
+    : ''
+  const severity = ['critical', 'warning', 'info', 'unknown'].includes(params.get('severity') ?? '')
+    ? params.get('severity')!
+    : ''
+  const rawOffset = Number(params.get('offset') ?? 0)
+  const offset = Number.isSafeInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0
+  const apiParams = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+  if (query) apiParams.set('q', query)
+  if (status) apiParams.set('status', status)
+  if (severity) apiParams.set('severity', severity)
+  const { data, isLoading, isError, isFetching, refetch } = useIncidents(apiParams.toString())
   const incidents = useMemo(() => data?.data ?? [], [data])
 
-  // Поиск уезжает в URL с задержкой, чтобы не дёргать бэкенд на каждую букву.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchParams(
-        (prev) => {
-          const p = new URLSearchParams(prev)
-          if (search) p.set('q', search)
-          else p.delete('q')
-          return p
-        },
-        { replace: true },
-      )
-    }, 300)
+    setSearch(query)
+  }, [query])
+  useEffect(() => {
+    if (search === query) return
+    const timer = setTimeout(
+      () =>
+        setParams(
+          (previous) => {
+            const next = new URLSearchParams(previous)
+            if (search.trim()) next.set('q', search.trim())
+            else next.delete('q')
+            next.delete('offset')
+            return next
+          },
+          { replace: true },
+        ),
+      300,
+    )
     return () => clearTimeout(timer)
-  }, [search, setSearchParams])
-
+  }, [search, query, setParams])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = document.activeElement?.tagName
-      if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
-        e.preventDefault()
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key === '/' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !(
+          event.target instanceof HTMLElement &&
+          (event.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName))
+        )
+      ) {
+        event.preventDefault()
         document.getElementById('incident-search')?.focus()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-
-  const setStatus = (value: string) => {
-    setSearchParams(
-      (prev) => {
-        const p = new URLSearchParams(prev)
-        if (value) p.set('status', value)
-        else p.delete('status')
-        p.delete('page')
-        return p
-      },
-      { replace: true },
-    )
+  const change = (key: string, value: string) =>
+    setParams((previous) => {
+      const next = new URLSearchParams(previous)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      if (key !== 'offset') next.delete('offset')
+      return next
+    })
+  const reset = () => {
+    setSearch('')
+    setParams({})
   }
-
-  // Счётчики фасетов считаем по загруженной странице — показываем объём до клика.
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {}
-    for (const i of incidents) c[i.status] = (c[i.status] ?? 0) + 1
-    return c
-  }, [incidents])
-
-  const visible = useMemo(
-    () => (status ? incidents.filter((i) => i.status === status) : incidents),
-    [incidents, status],
-  )
-
-  const activeCount = counts.active ?? 0
-  const criticalCount = incidents.filter((i) => i.severity === 'critical' && i.status === 'active').length
+  const total = data?.total ?? 0
 
   return (
     <div>
-      <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Инциденты</h1>
-      <p className="mt-0.5 mb-5 text-[13px] text-text-muted">
-        {isLoading
-          ? 'Загружаем…'
-          : `${countOf(activeCount, words.active)}${criticalCount > 0 ? `, ${countOf(criticalCount, words.critical)}` : ''} · всего ${data?.total ?? incidents.length}`}
-      </p>
-
-      <div className="mb-2.5 flex flex-wrap items-center gap-2">
-        {STATUS_FACETS.map((f) => (
-          <button
-            key={f.label}
-            onClick={() => setStatus(f.value)}
-            className={`rounded-full border px-[11px] py-[5px] text-xs transition-colors ${
-              status === f.value
-                ? 'border-accent/30 bg-accent/12 text-[#B9B9FF]'
-                : 'border-border-default bg-surface-secondary text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {f.label}
-            {f.value && counts[f.value] ? <span className="tnum ml-1.5 opacity-70">{counts[f.value]}</span> : null}
-          </button>
-        ))}
-
-        <div className="relative ml-auto min-w-[250px]">
-          <Search size={12} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            id="incident-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setSearch('')
-                ;(e.target as HTMLInputElement).blur()
-              }
-            }}
-            placeholder="Поиск по инцидентам…"
-            aria-label="Поиск по инцидентам"
-            className="w-full rounded-full border border-border-default bg-surface-secondary py-1.5 pl-8 pr-8 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              aria-label="Очистить поиск"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+      <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="page-title">Инциденты</h1>
+          <p className="page-description hidden sm:block">Текущая работа и история разборов.</p>
+        </div>
+        <Button variant="secondary" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+          Обновить
+        </Button>
+      </div>
+      <div className="mb-5 border-b border-border-default pb-0">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-0 flex-1 basis-60 md:max-w-md">
+            <Search size={17} className="pointer-events-none absolute top-3 left-3 text-text-muted" />
+            <input
+              id="incident-search"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setSearch('')
+              }}
+              placeholder="Название или текст анализа…"
+              aria-label="Поиск по инцидентам"
+              className="h-11 w-full rounded-md border border-border-default bg-surface-secondary pr-10 pl-10 text-sm placeholder:text-text-muted focus:border-accent"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                aria-label="Очистить поиск"
+                className="absolute top-0 right-0 grid size-11 place-items-center text-text-secondary"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            <span className="sr-only">Критичность</span>
+            <select
+              aria-label="Критичность"
+              value={severity}
+              onChange={(event) => change('severity', event.target.value)}
+              className="h-11 rounded-md border border-border-default bg-surface-secondary px-3 text-xs text-text-secondary"
             >
-              <X size={12} />
+              <option value="">Любая критичность</option>
+              <option value="critical">critical</option>
+              <option value="warning">warning</option>
+              <option value="info">info</option>
+              <option value="unknown">unknown</option>
+            </select>
+          </label>
+        </div>
+        <div
+          className="mt-4 flex items-center gap-3 overflow-x-auto"
+          role="group"
+          aria-label="Статус инцидента"
+        >
+          {statuses.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => change('status', item.value)}
+              aria-pressed={status === item.value}
+              className={`min-h-11 shrink-0 whitespace-nowrap border-b-2 px-2 text-xs font-medium ${status === item.value ? 'border-text-primary text-text-primary' : 'border-transparent text-text-muted hover:text-text-primary'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+          {(query || status || severity) && (
+            <button
+              onClick={reset}
+              className="ml-auto min-h-9 px-2 text-xs text-text-muted hover:text-accent"
+            >
+              Сбросить фильтры
             </button>
           )}
         </div>
       </div>
-
+      <p className="mb-3 text-xs text-text-muted" role="status">
+        {isLoading
+          ? 'Загружаем инциденты…'
+          : isError
+            ? 'Список недоступен'
+            : `${total} по выбранным условиям · показано ${incidents.length ? offset + 1 : 0}–${offset + incidents.length}`}
+      </p>
       {isLoading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-[10px]" />
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-40 rounded-xl" />
           ))}
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center gap-3 rounded-[10px] border border-severity-critical/30 bg-severity-critical/5 py-12">
-          <AlertCircle size={22} className="text-severity-critical" />
-          <p className="text-sm text-text-secondary">
-            Не удалось загрузить инциденты{error instanceof Error ? `: ${error.message}` : ''}
+        <div
+          role="alert"
+          className="rounded-xl border border-severity-critical/30 bg-severity-critical/5 p-8 text-center"
+        >
+          <AlertCircle size={24} className="mx-auto mb-3 text-severity-critical" />
+          <p>Не удалось загрузить инциденты.</p>
+          <p className="mt-2 text-sm text-text-secondary">
+            Проверьте подключение и доступ. Ошибка загрузки не означает, что инцидентов нет.
           </p>
-          <Button variant="secondary" size="sm" onClick={() => refetch()}>
+          <Button className="mt-4" variant="secondary" onClick={() => refetch()}>
             Повторить
           </Button>
         </div>
-      ) : visible.length === 0 ? (
-        <EmptyState
-          title="Инцидентов нет"
-          description={search || status ? 'Под фильтры ничего не подошло' : 'Всё спокойно — активных инцидентов нет'}
-        />
+      ) : incidents.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border-default bg-surface-secondary px-4">
+          <EmptyState
+            title="Инцидентов не найдено"
+            description={
+              query || status || severity
+                ? 'Измените условия поиска или сбросьте фильтры.'
+                : 'Новые группы алертов появятся здесь после получения данных.'
+            }
+          />
+          {(query || status || severity || offset > 0) && (
+            <div className="pb-6 text-center">
+              <Button variant="secondary" onClick={reset}>
+                Показать все инциденты
+              </Button>
+            </div>
+          )}
+        </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {visible.map((inc) => (
-            <IncidentRow
-              key={inc.id}
-              incident={inc}
-              query={search}
-              onOpen={() => navigate(`/incidents/${inc.id}`)}
-            />
+        <div className="overflow-hidden rounded-lg border border-border-default bg-surface-secondary">
+          <div className="hidden grid-cols-[minmax(0,1fr)_110px_90px_100px] gap-5 border-b border-border-soft px-5 py-3 text-[11px] text-text-muted md:grid">
+            <span>Инцидент</span>
+            <span>Статус</span>
+            <span>Критичность</span>
+            <span>Поступил</span>
+          </div>
+          {incidents.map((incident) => (
+            <IncidentRow key={incident.id} incident={incident} query={query} />
           ))}
         </div>
+      )}
+      {!isError && total > PAGE_SIZE && (
+        <nav aria-label="Страницы инцидентов" className="mt-5 flex items-center justify-between gap-3">
+          <Button
+            variant="secondary"
+            disabled={offset === 0 || isFetching}
+            onClick={() => change('offset', String(Math.max(0, offset - PAGE_SIZE)))}
+          >
+            <ChevronLeft size={15} />
+            Назад
+          </Button>
+          <span className="tnum text-xs text-text-muted">
+            {Math.floor(offset / PAGE_SIZE) + 1} / {Math.ceil(total / PAGE_SIZE)}
+          </span>
+          <Button
+            variant="secondary"
+            disabled={offset + PAGE_SIZE >= total || isFetching}
+            onClick={() => change('offset', String(offset + PAGE_SIZE))}
+          >
+            Далее
+            <ChevronRight size={15} />
+          </Button>
+        </nav>
       )}
     </div>
   )

@@ -7,6 +7,7 @@ import { AlertFeed } from '@/pages/AlertFeed.tsx'
 import { Analytics } from '@/pages/Analytics.tsx'
 import { Predictions } from '@/pages/Predictions.tsx'
 import { Settings } from '@/pages/Settings.tsx'
+import { Help } from '@/pages/Help.tsx'
 import { NotFound } from '@/pages/NotFound.tsx'
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/predictions" element={<Predictions />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/settings/:section" element={<Settings />} />
+          <Route path="/help" element={<Help />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
