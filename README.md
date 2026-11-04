@@ -28,6 +28,8 @@
 
 https://sersert.github.io/IncidentGPT/
 
+- [Мониторинг компонентов и выключатель AI](docs/operations.md) — opt-in панель доступности и сохранённая пауза обращений к модели.
+
 ## Telegram setup
 
 - [Настройка Telegram на русском](docs/telegram-setup.ru.md)

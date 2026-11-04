@@ -97,6 +97,10 @@ func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
+	if controlRequired() && aiRuntime.refresh(r.Context()) != nil {
+		http.Error(w, "AI paused or control unavailable", 423)
+		return
+	}
 	select {
 	case llmSemaphore <- struct{}{}:
 		defer func() { <-llmSemaphore }()
@@ -137,6 +141,10 @@ func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 	started := time.Now().UTC()
 	result, usage, err := structuredProvider(ctx, safeInput)
 	if err != nil {
+		if aiRuntime.paused() {
+			http.Error(w, "AI paused or control unavailable", 423)
+			return
+		}
 		http.Error(w, "provider or structured output failure", 502)
 		return
 	}

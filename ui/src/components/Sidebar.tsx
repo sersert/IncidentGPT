@@ -6,6 +6,7 @@ import {
   BarChart3,
   TrendingUp,
   Plug,
+  Activity,
   Settings as SettingsIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -44,6 +45,7 @@ export function Sidebar({ activeIncidents, warnings }: { activeIncidents?: numbe
     {
       title: 'Система',
       items: [
+        { to: '/operations', label: 'Состояние системы', icon: Activity },
         { to: '/settings/integrations', label: 'Интеграции', icon: Plug },
         { to: '/settings/llm', label: 'Модель', icon: SettingsIcon },
       ],

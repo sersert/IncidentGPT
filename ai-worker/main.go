@@ -95,10 +95,19 @@ var (
 	appCfg          Config
 	sanitizerClient *SanitizerClient
 	httpClient      = &http.Client{
-		Transport: &http.Transport{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if controlRequired() && len(via) > 0 && via[0].Method == "POST" && via[0].URL.String() == appCfg.ORBaseURL {
+				return http.ErrUseLastResponse
+			}
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return nil
+		},
+		Transport: controlledProviderTransport{base: &http.Transport{
 			TLSNextProto:      make(map[string]func(string, *tls.Conn) http.RoundTripper),
 			DisableKeepAlives: true,
-		},
+		}},
 	}
 	// llmSemaphore ограничивает конкурентность LLM-вызовов при шторме алертов.
 	llmSemaphore = make(chan struct{}, 8)
@@ -178,6 +187,9 @@ func main() {
 	mux.HandleFunc("/readyz", readyzHandler)
 	mux.HandleFunc("/status", statusHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
+	mux.HandleFunc("GET /internal/operations", workerOperations)
+	mux.HandleFunc("POST /internal/operations/model-probe", workerModelProbe)
+	startAIControlPolling()
 	mux.HandleFunc("/incident", incidentHandler)
 	mux.HandleFunc("/incident-raw", incidentRawHandler)
 	mux.HandleFunc("/incident-group", incidentGroupHandler)
@@ -325,6 +337,10 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 
 		aiText, err := callOpenRouter(aiCtx, prompt)
 		if err != nil {
+			if aiRuntime.paused() {
+				log.Print("INFO: AI analysis skipped while paused or control unavailable")
+				return
+			}
 			log.Printf("ERROR: openrouter call failed for message_id=%d: %v", parentMsgID, err)
 			return
 		}
@@ -529,6 +545,10 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 
 		aiText, err := callOpenRouterWithSystem(aiCtx, sysPrompt, prompt)
 		if err != nil {
+			if aiRuntime.paused() {
+				log.Print("INFO: AI analysis skipped while paused or control unavailable")
+				return
+			}
 			log.Printf("ERROR: openrouter group call failed: %v", err)
 			return
 		}
@@ -750,6 +770,9 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 
 	req, err := http.NewRequestWithContext(ctx2, http.MethodPost, appCfg.ORBaseURL, bytes.NewReader(body))
 	if err != nil {
+		if aiRuntime.paused() {
+			return "", errAIPaused
+		}
 		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}
@@ -766,6 +789,9 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 	resp, err := httpClient.Do(req)
 	appMetrics.observe("incidentgpt_llm_duration_seconds", time.Since(start).Seconds())
 	if err != nil {
+		if aiRuntime.paused() {
+			return "", errAIPaused
+		}
 		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}

@@ -1658,6 +1658,11 @@ func intQuery(r *http.Request, key string, def int) int {
 func backendHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /readyz", handleReady)
+	mux.HandleFunc("GET /api/v1/operations/status", handleOperations)
+	mux.HandleFunc("GET /api/v1/operations/ai-control", handleAIControl)
+	mux.HandleFunc("PUT /api/v1/operations/ai-control", handleAIControl)
+	mux.HandleFunc("POST /api/v1/operations/model-probe", handleModelProbe)
+	mux.HandleFunc("GET /internal/operations/ai-control", handleWorkerAIControl)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/evidence/{evidence}", handleEvidence)
 	mux.HandleFunc("GET /api/v1/jobs/metrics", handleJobMetrics)

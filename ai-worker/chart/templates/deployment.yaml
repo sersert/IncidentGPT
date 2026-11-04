@@ -1,3 +1,9 @@
+{{- if and .Values.operations.enabled (not .Values.operations.existingSecret) }}
+{{- fail "operations requires existingSecret" }}
+{{- end }}
+{{- if and .Values.operations.enabled (not .Values.operations.controlURL) }}
+{{- fail "operations requires controlURL" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,6 +41,15 @@ spec:
             - containerPort: 8080
               name: http
           env:
+            {{- if .Values.operations.enabled }}
+            - name: AI_CONTROL_URL
+              value: {{ .Values.operations.controlURL | quote }}
+            - name: OPERATIONS_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.operations.existingSecret }}
+                  key: {{ .Values.operations.tokenKey }}
+            {{- end }}
             - name: ANALYSIS_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -57,7 +72,7 @@ spec:
                   name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.sanitizerAuthSharedSecretKey | quote }}
             {{- range $name, $value := .Values.env }}
-            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN") (eq $name "SANITIZER_AUTH_SHARED_SECRET")) }}
+            {{- if not (or (eq $name "AI_CONTROL_URL") (eq $name "OPERATIONS_SERVICE_TOKEN") (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN") (eq $name "SANITIZER_AUTH_SHARED_SECRET")) }}
             - name: {{ $name }}
               value: {{ $value | quote }}
             {{- end }}

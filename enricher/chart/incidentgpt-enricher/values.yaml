@@ -8,6 +8,11 @@ imagePullSecret: ""
 
 replicaCount: 1
 
+operations:
+  enabled: false
+  existingSecret: ""
+  tokenKey: operations-service-token
+
 fullnameOverride: incidentgpt-enricher
 
 service:

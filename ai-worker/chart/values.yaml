@@ -33,6 +33,12 @@ secretValues:
   telegramBotToken: ""
   sanitizerAuthSharedSecret: ""
 
+operations:
+  enabled: false
+  existingSecret: ""
+  tokenKey: operations-service-token
+  controlURL: http://incidentgpt-backend:8080/internal/operations/ai-control
+
 secrets:
   # Optional existing Secret with OPENROUTER_API_KEY and TELEGRAM_BOT_TOKEN.
   # Empty value keeps the bundled Secret template and secretValues behavior.

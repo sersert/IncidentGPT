@@ -8,11 +8,13 @@ import { Analytics } from '@/pages/Analytics.tsx'
 import { Predictions } from '@/pages/Predictions.tsx'
 import { Settings } from '@/pages/Settings.tsx'
 import { NotFound } from '@/pages/NotFound.tsx'
+import { Operations } from '@/pages/Operations.tsx'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/operations" element={<Operations />} />
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/incidents" element={<IncidentList />} />

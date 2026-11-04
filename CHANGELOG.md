@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+- Opt-in `/operations`: реальные health checks важных компонентов, свежесть
+  последнего inference, явный ограниченный платный probe; автообновление без LLM.
+- Сохранённая в Redis пауза AI: общий guard всех provider POST, отмена текущих
+  контекстов, fail-closed при отказе control. Raw ingestion/Telegram и report jobs
+  независимы; durable-анализы откладываются без расхода retry budget. Новые ключи
+  `igpt:operations:ai-control` (JSON v1 без TTL), `:audit` (stream MAXLEN ~1000),
+  `igpt:operations:model-probe:limit` (TTL 60s). Совместимость/rollback и Secret
+  opt-in описаны в `docs/operations.md`; первоначальное состояние — пауза.
+
 - Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`
   (без TTL, удалять вместе с incident) исключает порчу JSON через Lua cjson;
   reader поддерживает старый флаг и известные пустые массивы, записанные как `{}`.

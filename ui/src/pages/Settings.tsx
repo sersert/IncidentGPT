@@ -86,7 +86,7 @@ function LLMSection() {
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="secondary" disabled={test.isPending} onClick={() => test.mutate()}>
           {test.isPending && <Loader2 size={13} className="animate-spin" />}
-          Проверить связь
+          Проверить ai-worker
         </Button>
         {result && (
           <span className={`text-xs ${result.success ? 'text-status-resolved' : 'text-severity-critical'}`}>
