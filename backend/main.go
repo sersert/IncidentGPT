@@ -1636,9 +1636,9 @@ func handleReady(w http.ResponseWriter, r *http.Request) {
 	if durableEnabled() || operationsEnabled() {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		store.RLock()
+		store.mu.RLock()
 		disk := store.disk
-		store.RUnlock()
+		store.mu.RUnlock()
 		if disk == nil || disk.rdb.Ping(ctx).Err() != nil {
 			http.Error(w, "persistent storage unavailable", http.StatusServiceUnavailable)
 			return

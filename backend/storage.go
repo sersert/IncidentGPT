@@ -89,9 +89,9 @@ func awaitDurableStorage(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if disk := connectStorage(ctx, addr, env("REDIS_PASSWORD", "")); disk != nil {
-			store.Lock()
+			store.mu.Lock()
 			store.disk = disk
-			store.Unlock()
+			store.mu.Unlock()
 			return nil
 		}
 		timer := time.NewTimer(time.Second)
