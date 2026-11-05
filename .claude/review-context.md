@@ -1,4 +1,12 @@
 # IncidentGPT — карта фактов для ревью (снято с `main` 2026-10-30)
+
+## MCP knowledge retrieval
+
+- `knowledge-mcp`: `/mcp` — Streamable HTTP, Bearer `MCP_SERVER_TOKEN`, Origin отвергается; `/healthz` и `/readyz` без auth. Единственный tool — read-only `search_knowledge`; пути API задаются оператором, исходящие операции только GET, redirects запрещены.
+- Источники из ConfigMap `sources.json`, credentials из read-only Secret volume; Confluence spaces и repository/paths обязательны. Sanitizer HMAC для query и результата; worker повторно санитизирует результат на границе LLM.
+- Worker: `KNOWLEDGE_MCP_URL` включает tool calling для legacy/structured, `KNOWLEDGE_MCP_TOKEN` только из Secret; максимум два поиска/три provider calls. Произвольные MCP tools не вызываются. Полученный текст — untrusted reference, не наблюдение/подтверждение.
+- Helm: server `incidentgpt-knowledge-mcp.enabled`, worker `knowledgeMCP.enabled`; по умолчанию false. NP receiver разрешает worker → MCP и MCP → Sanitizer в namespace релиза. Egress/default-deny и внешние TLS/CA настраивает оператор.
+- Контракт: additive `AnalysisVersion.knowledge`, `Hypothesis.knowledge_reference_ids`, без новых ключей Redis. Metadata живёт внутри immutable analysis versions, не участвует в evidence ownership/подтверждении решения. Инструкции: `docs/mcp-knowledge.md`.
 Дополняет `CLAUDE.md`, не повторяет его. При расхождении верить коду. Обновлять в PR, меняющих маршруты, ключи Redis, флаги, секреты, NetworkPolicy.
 
 ## Мониторинг и AI control (кандидат 2026-11-04)

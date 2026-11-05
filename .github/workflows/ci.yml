@@ -22,6 +22,8 @@ jobs:
         include:
           - service: ai-worker
             image: golang:1.25-bookworm   # == ai-worker/Dockerfile
+          - service: knowledge-mcp
+            image: golang:1.25-bookworm
           - service: enricher
             image: golang:1.24-bookworm   # == enricher/Dockerfile
           - service: sanitizer
@@ -61,7 +63,7 @@ jobs:
       - name: test
         run: go test -race ./...
 
-  # Типы, сборка и браузерные проверки мониторинга без платных вызовов.
+  # Typecheck проверяет типы отдельно от Vite, браузерные тесты — готовый bundle.
   ui:
     name: build & typecheck (ui)
     runs-on: ubuntu-latest
@@ -76,11 +78,9 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: typecheck
         run: npx tsc --noEmit -p tsconfig.app.json
-      - name: build
-        run: npm run build
       - name: install browser
         run: npx playwright install --with-deps chromium
-      - name: operations browser tests
+      - name: build and browser regressions
         run: npm run test:browser
 
   # Линт Dockerfile'ов по чек-листу антипаттернов.
@@ -96,6 +96,7 @@ jobs:
           - sanitizer/Dockerfile
           - backend/Dockerfile
           - ui/Dockerfile
+          - knowledge-mcp/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: hadolint/hadolint-action@v3.1.0
@@ -110,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [ai-worker, enricher, sanitizer, backend, ui]
+        service: [ai-worker, enricher, sanitizer, backend, ui, knowledge-mcp]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -129,6 +130,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
       - run: helm lint ai-worker/chart
+      - run: bash deploy/test-knowledge-mcp-charts.sh
       - run: helm lint enricher/chart/incidentgpt-enricher
       - run: helm lint sanitizer/chart
       - run: helm lint backend/chart
@@ -156,3 +158,27 @@ jobs:
           # Проверяем на нижнюю поддерживаемую версию: что валидно в 1.28,
           # то валидно и дальше, а обратное неверно.
           kubeconform -strict -summary -kubernetes-version 1.28.0 /tmp/render.yaml
+
+  browser-auth:
+    name: verify browser sessions behind nginx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start isolated candidate
+        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml up -d --build
+      - name: Wait for auth proxy
+        run: |
+          for attempt in $(seq 1 45); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8186/api/v1/auth/session || true)
+            if [ "$code" = 401 ]; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Verify session lifecycle and protected routes
+        run: python3 deploy/check-browser-session.py
+      - name: Preview logs
+        if: failure()
+        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml logs --tail=80
+      - name: Stop preview
+        if: always()
+        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml down

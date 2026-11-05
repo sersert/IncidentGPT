@@ -24,10 +24,10 @@ const severityHalo: Record<Severity, string> = {
 }
 
 const statusStyles: Record<IncidentStatus, string> = {
-  active: 'bg-status-active/12 text-status-active',
-  resolved: 'bg-status-resolved/12 text-status-resolved',
-  muted: 'bg-status-muted/20 text-status-muted',
-  acknowledged: 'bg-status-acknowledged/12 text-status-acknowledged',
+  active: 'text-status-active',
+  resolved: 'text-status-resolved',
+  muted: 'text-status-muted',
+  acknowledged: 'text-status-acknowledged',
 }
 
 const statusIcons: Record<IncidentStatus, LucideIcon> = {
@@ -38,10 +38,10 @@ const statusIcons: Record<IncidentStatus, LucideIcon> = {
 }
 
 const statusLabels: Record<IncidentStatus, string> = {
-  active: 'Firing',
-  resolved: 'Resolved',
-  muted: 'Muted',
-  acknowledged: 'Acknowledged',
+  active: 'Активен',
+  resolved: 'Закрыт',
+  muted: 'Заглушён',
+  acknowledged: 'В работе',
 }
 
 export function SeverityBadge({
@@ -53,7 +53,7 @@ export function SeverityBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${severityStyles[severity]} ${className}`}
+      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${severityStyles[severity]} ${className}`}
     >
       {severity}
     </span>
@@ -88,7 +88,7 @@ export function StatusBadge({ status, className = '' }: { status: IncidentStatus
   const Icon = statusIcons[status]
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ${statusStyles[status]} ${className}`}
+      className={`inline-flex items-center gap-1.5 py-0.5 text-xs font-medium ${statusStyles[status]} ${className}`}
     >
       <Icon size={11} strokeWidth={2.4} />
       {statusLabels[status]}

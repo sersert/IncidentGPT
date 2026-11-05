@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
+import { ThemeProvider } from './components/ThemeProvider'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
@@ -12,7 +13,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 40, color: '#FF5F52', fontFamily: 'monospace' }}>
+        <div style={{ padding: 40, color: 'var(--color-severity-critical)', fontFamily: 'monospace' }}>
           <h1>UI Error</h1>
           <pre>{this.state.error.message}</pre>
           <pre>{this.state.error.stack}</pre>
@@ -37,7 +38,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <ThemeProvider><App /></ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>,

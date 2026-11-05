@@ -12,6 +12,11 @@ const snapshot = (enabled = true, revision = 1) => ({
   ],
 })
 
+// Workspace is behind AuthGate (main): answer the session probe so /operations renders.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/v1/auth/session', route => route.fulfill({ json: { username: 'operator' } }))
+})
+
 test('mobile monitoring, persisted toggle and explicit paid probe', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   let state = snapshot()

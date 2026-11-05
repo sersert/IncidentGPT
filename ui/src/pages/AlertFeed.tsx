@@ -54,7 +54,7 @@ export function AlertFeed() {
             onClick={() => setFacet(f.key)}
             className={`rounded-full border px-[11px] py-[5px] text-xs transition-colors ${
               active === f.key
-                ? 'border-accent/30 bg-accent/12 text-[#B9B9FF]'
+                ? 'border-accent/30 bg-accent/12 text-accent'
                 : 'border-border-default bg-surface-secondary text-text-secondary hover:text-text-primary'
             }`}
           >

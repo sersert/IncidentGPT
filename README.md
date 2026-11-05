@@ -22,7 +22,18 @@
 
 ---
 
+## С чего начать
+
+- [Запуск проверочного стенда: образы, настройки, первый алерт и диагностика ошибок](docs/getting-started.md).
+- [Работа в веб-интерфейсе и доступ](docs/web-ui.md); внутри приложения — «Руководство дежурного» (`/help`).
+- [Разработка и проверка интерфейса](ui/README.md).
+
+Первый запуск лучше проверять в отдельном окружении. Новые функции требуют образов
+из соответствующего коммита; опубликованный тег `0.2.0` не заменяет сборку кандидата.
+
 ## Documentation
+
+Автоматический поиск AI-разбора по Confluence, GitHub или GitLab через отдельный устанавливаемый MCP-сервер: [настройка источников и доступа](docs/mcp-knowledge.md).
 
 Полная документация и интерактивное руководство доступны на GitHub Pages:
 
@@ -270,7 +281,7 @@ kubectl logs -f -n incidentgpt deploy/ai-worker              # got incident / ra
 
 ---
 
-## Корреляция: как связываются алерты
+## Корреляция: базовый режим
 
 Связывание — **грубое и детерминированное**: алерты одного `namespace`, пришедшие в
 окно `CORR_SETTLE`, считаются одним инцидентом.
@@ -281,11 +292,11 @@ kubectl logs -f -n incidentgpt deploy/ai-worker              # got incident / ra
 4. Таймер сработал → вся группа уходит пачкой в ai-worker → **один вызов LLM**.
 5. **Корень** внутри группы определяет уже модель (не связывание).
 
-**Чего тут НЕТ:** графа зависимостей. «Связаны» = один namespace + окно. Может ложно
+В базовом режиме граф зависимостей не используется: «связаны» = один namespace + окно. Может ложно
 склеить несвязанное; не ловит кросс-namespace каскады. Зато дёшево и работает для
 каскадов внутри namespace (упала БД → сервисы того же ns посыпались).
 
-Весь модуль корреляции — `enricher/correlation.go` (~200 строк, 6 функций).
+Базовый путь реализован в `enricher/correlation.go`. Опциональная durable-корреляция и явные зависимости описаны в [руководстве по зависимостям](docs/roadmap/dependency-correlation.md); они включаются отдельно.
 
 ---
 
@@ -366,6 +377,4 @@ backend Basic admin credentials and explicit service tokens via Secrets, configu
 fail-closed sanitizer clients, persist/back up Redis, then enable compatible producers.
 Missing source/collection/recovery data remains unknown; model confidence and
 temporal correlation do not establish cause. Lifecycle analytics do not estimate
-MTTR reduction or saved hours. See [architecture](docs/architecture.md),
-[security](docs/security.md), [web workflows](docs/web-ui.md) and the
-[local six-PR stack](pr-descriptions/README.md).
+MTTR reduction or saved hours. See [architecture](docs/architecture.md), [security](docs/security.md), [web workflows](docs/web-ui.md) and [reports and handoffs](docs/roadmap/postmortem-and-handoff.md).

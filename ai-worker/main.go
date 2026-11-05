@@ -742,51 +742,12 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
 	}
 
-	type ORMessage struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-
 	safeUserPrompt := "<incident_data>\n{\n  \"sanitized\": true,\n  \"payload\": " + jsonString(prompt) + "\n}\n</incident_data>"
-
-	payload := map[string]interface{}{
-		"model":      appCfg.ORModel,
-		"max_tokens": appCfg.ORMaxTokens,
-		"messages": []ORMessage{
-			{
-				Role:    "system",
-				Content: sysPrompt,
-			},
-			{
-				Role:    "user",
-				Content: safeUserPrompt,
-			},
-		},
-	}
-
-	body, _ := json.Marshal(payload)
+	payload := map[string]any{"model": appCfg.ORModel, "max_tokens": appCfg.ORMaxTokens, "messages": []map[string]string{{"role": "system", "content": sysPrompt}, {"role": "user", "content": safeUserPrompt}}}
 	ctx2, cancel := context.WithTimeout(ctx, appCfg.ORTimeout)
 	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx2, http.MethodPost, appCfg.ORBaseURL, bytes.NewReader(body))
-	if err != nil {
-		if aiRuntime.paused() {
-			return "", errAIPaused
-		}
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", err
-	}
-
-	if os.Getenv("DEBUG_OR_PAYLOAD") == "1" {
-		log.Printf("DEBUG: OpenRouter request payload prepared bytes=%d", len(body))
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+appCfg.ORAPIKey)
-	req.Header.Set("Connection", "close")
-
 	start := time.Now()
-	resp, err := httpClient.Do(req)
+	message, _, trace, err := knowledgeAwareCompletion(ctx2, payload)
 	appMetrics.observe("incidentgpt_llm_duration_seconds", time.Since(start).Seconds())
 	if err != nil {
 		if aiRuntime.paused() {
@@ -795,29 +756,7 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", fmt.Errorf("openrouter HTTP %d", resp.StatusCode)
-	}
-
-	var orResp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&orResp); err != nil {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", err
-	}
-	if len(orResp.Choices) == 0 {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", fmt.Errorf("openrouter: empty choices")
-	}
-	return orResp.Choices[0].Message.Content, nil
+	return message.Content + knowledgeFooter(trace), nil
 }
 
 //
