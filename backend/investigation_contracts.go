@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/subtle"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,31 +27,94 @@ type Evidence struct {
 	CollectorVersion string     `json:"collector_version"`
 	Availability     string     `json:"availability"` // available, empty, failed, timed_out, disabled, unauthorized, unavailable
 }
+type KnowledgeReference struct {
+	ID          string    `json:"reference_id"`
+	SourceID    string    `json:"source_id"`
+	Provider    string    `json:"provider"`
+	Title       string    `json:"title"`
+	URL         string    `json:"url"`
+	Version     string    `json:"version"`
+	Excerpt     string    `json:"excerpt"`
+	RetrievedAt time.Time `json:"retrieved_at"`
+}
+type KnowledgeTrace struct {
+	Status     string               `json:"status"`
+	Calls      int                  `json:"calls"`
+	References []KnowledgeReference `json:"references"`
+}
+
+func validateKnowledge(trace *KnowledgeTrace) error {
+	if trace == nil {
+		return nil
+	}
+	if trace.Calls < 0 || trace.Calls > 2 || len(trace.References) > 10 {
+		return fmt.Errorf("knowledge budget exceeded")
+	}
+	switch trace.Status {
+	case "not_requested", "available", "partial", "unavailable":
+	default:
+		return fmt.Errorf("invalid knowledge status")
+	}
+	if trace.Status == "not_requested" && (trace.Calls != 0 || len(trace.References) != 0) {
+		return fmt.Errorf("invalid unused knowledge trace")
+	}
+	seen := map[string]bool{}
+	for _, ref := range trace.References {
+		u, err := url.Parse(ref.URL)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || len(ref.URL) > 2048 || len(ref.ID) != 67 || !strings.HasPrefix(ref.ID, "kb-") || seen[ref.ID] || ref.SourceID == "" || len(ref.SourceID) > 63 || ref.Title == "" || len(ref.Title) > 200 || ref.Version == "" || len(ref.Version) > 128 || len(ref.Excerpt) > 4096 || ref.RetrievedAt.IsZero() {
+			return fmt.Errorf("invalid knowledge reference")
+		}
+		if u.RawQuery != "" {
+			q := u.Query()
+			if ref.Provider != "confluence" || len(q) != 1 || len(q["pageId"]) != 1 {
+				return fmt.Errorf("unsafe knowledge URL query")
+			}
+			if _, err := strconv.ParseUint(q.Get("pageId"), 10, 64); err != nil {
+				return fmt.Errorf("invalid knowledge page URL")
+			}
+		}
+		for _, c := range ref.ID[3:] {
+			if !strings.ContainsRune("0123456789abcdef", c) {
+				return fmt.Errorf("invalid knowledge identity")
+			}
+		}
+		switch ref.Provider {
+		case "github", "gitlab", "confluence":
+		default:
+			return fmt.Errorf("invalid knowledge provider")
+		}
+		seen[ref.ID] = true
+	}
+	return nil
+}
+
 type Hypothesis struct {
+	KnowledgeIDs  []string `json:"knowledge_reference_ids,omitempty"`
 	Text          string   `json:"text"`
 	Supporting    []string `json:"supporting_evidence_ids"`
 	Contradicting []string `json:"contradicting_evidence_ids"`
 }
 type AnalysisVersion struct {
-	Version           int            `json:"schema_version"`
-	ID                string         `json:"analysis_id"`
-	IncidentID        string         `json:"incident_id"`
-	EvidenceIDs       []string       `json:"input_evidence_ids"`
-	Model             string         `json:"model"`
-	Provider          string         `json:"provider"`
-	PromptVersion     string         `json:"prompt_version"`
-	StartedAt         time.Time      `json:"started_at"`
-	CompletedAt       time.Time      `json:"completed_at"`
-	Status            string         `json:"status"`
-	Summary           string         `json:"summary"`
-	Hypotheses        []Hypothesis   `json:"hypotheses"`
-	Missing           []string       `json:"missing_information"`
-	NextChecks        []string       `json:"suggested_next_checks"`
-	HumanConfirmation string         `json:"human_confirmation"`
-	PreviousID        string         `json:"previous_analysis_id,omitempty"`
-	Composition       string         `json:"composition_hash"`
-	Usage             map[string]any `json:"usage,omitempty"`
-	Notification      string         `json:"notification_status,omitempty"`
+	Knowledge         *KnowledgeTrace `json:"knowledge,omitempty"`
+	Version           int             `json:"schema_version"`
+	ID                string          `json:"analysis_id"`
+	IncidentID        string          `json:"incident_id"`
+	EvidenceIDs       []string        `json:"input_evidence_ids"`
+	Model             string          `json:"model"`
+	Provider          string          `json:"provider"`
+	PromptVersion     string          `json:"prompt_version"`
+	StartedAt         time.Time       `json:"started_at"`
+	CompletedAt       time.Time       `json:"completed_at"`
+	Status            string          `json:"status"`
+	Summary           string          `json:"summary"`
+	Hypotheses        []Hypothesis    `json:"hypotheses"`
+	Missing           []string        `json:"missing_information"`
+	NextChecks        []string        `json:"suggested_next_checks"`
+	HumanConfirmation string          `json:"human_confirmation"`
+	PreviousID        string          `json:"previous_analysis_id,omitempty"`
+	Composition       string          `json:"composition_hash"`
+	Usage             map[string]any  `json:"usage,omitempty"`
+	Notification      string          `json:"notification_status,omitempty"`
 }
 type AnalysisInput struct {
 	Report      *ReportSource        `json:"report_source,omitempty"`
@@ -79,6 +144,25 @@ type DurableJob struct {
 }
 
 func validateAnalysis(a AnalysisVersion, input AnalysisInput) error {
+	if err := validateKnowledge(a.Knowledge); err != nil {
+		return err
+	}
+	knowledgeIDs := map[string]bool{}
+	if a.Knowledge != nil {
+		for _, ref := range a.Knowledge.References {
+			knowledgeIDs[ref.ID] = true
+		}
+	}
+	for _, h := range a.Hypotheses {
+		if len(h.KnowledgeIDs) > 10 {
+			return fmt.Errorf("knowledge citations exceed budget")
+		}
+		for _, id := range h.KnowledgeIDs {
+			if !knowledgeIDs[id] {
+				return fmt.Errorf("unknown knowledge citation")
+			}
+		}
+	}
 	if a.StartedAt.IsZero() || a.CompletedAt.IsZero() || a.CompletedAt.Before(a.StartedAt) {
 		return fmt.Errorf("invalid analysis timestamps")
 	}

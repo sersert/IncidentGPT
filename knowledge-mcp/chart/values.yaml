@@ -1,0 +1,28 @@
+fullnameOverride: incidentgpt-knowledge-mcp
+replicaCount: 1
+image:
+  repository: ghcr.io/sersert/incidentgpt-knowledge-mcp
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+service:
+  port: 8080
+# Обязателен существующий Secret; chart не создаёт credentials из values.
+secrets:
+  existingSecret: ""
+  serverTokenKey: mcp-server-token
+  sanitizerSecretKey: auth-shared-secret
+sanitizerURL: http://incidentgpt-sanitizer:8080
+# Каждый источник явно ограничен spaces либо repository/paths.
+# Пример заполнения — docs/examples/values-mcp-knowledge.yaml.
+sources: []
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+networkPolicy:
+  enabled: true
+  workerAppLabel: ai-worker

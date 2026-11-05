@@ -22,6 +22,8 @@ jobs:
         include:
           - service: ai-worker
             image: golang:1.25-bookworm   # == ai-worker/Dockerfile
+          - service: knowledge-mcp
+            image: golang:1.25-bookworm
           - service: enricher
             image: golang:1.24-bookworm   # == enricher/Dockerfile
           - service: sanitizer
@@ -94,6 +96,7 @@ jobs:
           - sanitizer/Dockerfile
           - backend/Dockerfile
           - ui/Dockerfile
+          - knowledge-mcp/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: hadolint/hadolint-action@v3.1.0
@@ -108,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [ai-worker, enricher, sanitizer, backend, ui]
+        service: [ai-worker, enricher, sanitizer, backend, ui, knowledge-mcp]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -127,6 +130,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
       - run: helm lint ai-worker/chart
+      - run: bash deploy/test-knowledge-mcp-charts.sh
       - run: helm lint enricher/chart/incidentgpt-enricher
       - run: helm lint sanitizer/chart
       - run: helm lint backend/chart
