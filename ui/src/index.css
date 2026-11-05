@@ -215,6 +215,9 @@ select {
   padding: 24px 32px;
 }
 .login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.04em;
@@ -227,6 +230,10 @@ select {
 }
 .login-panel {
   width: min(100%, 336px);
+}
+.login-mark {
+  display: block;
+  margin-bottom: 24px;
 }
 .login-panel h1 {
   margin: 0 0 32px;

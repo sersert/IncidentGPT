@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ThemeToggle } from './ThemeToggle'
+import { BrandMark } from './BrandMark'
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const client = useQueryClient()
@@ -68,12 +69,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
     <div className="login-shell">
       <header className="login-header">
         <a href="/" className="login-brand">
+          <BrandMark size={25} />
           IncidentGPT
         </a>
         <ThemeToggle />
       </header>
       <main className="login-main">
         <section className="login-panel" aria-labelledby="login-title">
+          <BrandMark size={40} className="login-mark" />
           <h1 id="login-title">Вход в IncidentGPT</h1>
           {state === 'loading' ? (
             <p role="status">Проверяем сессию…</p>

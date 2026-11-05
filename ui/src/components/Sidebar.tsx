@@ -1,3 +1,4 @@
+import { BrandMark } from './BrandMark'
 import { NavLink } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -58,10 +59,7 @@ export function Sidebar({ activeIncidents, warnings, mobile = false, onNavigate 
         onClick={onNavigate}
         className="mb-10 flex items-center gap-2.5 px-2 text-[19px] font-semibold tracking-[-.04em]"
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M6 4h12v16H6z" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M10 8h4m-4 4h4m-4 4h4" stroke="currentColor" strokeWidth="1.6" />
-        </svg>
+        <BrandMark size={26} />
         IncidentGPT
       </NavLink>
       <nav aria-label="Основная навигация" className="min-h-0 space-y-8 overflow-y-auto">
