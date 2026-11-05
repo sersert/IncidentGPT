@@ -94,6 +94,7 @@ incidentgpt-ui:
   # Базовая авторизация на входе: прикрывает и интерфейс, и /api/.
   # Пароль хэшируется bcrypt'ом в шаблоне; для продакшена подложи свой Secret
   # с ключом htpasswd через existingSecret.
+  # Legacy htpasswd settings retained for rollback. New sign-in uses the backend reader Secret.
   auth:
     enabled: true
     username: admin

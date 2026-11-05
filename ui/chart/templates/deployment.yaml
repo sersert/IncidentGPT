@@ -23,6 +23,11 @@ spec:
         - name: ui
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: NGINX_RESOLVER
+              value: {{ .Values.dnsResolver | quote }}
+            - name: BACKEND_URL
+              value: {{ .Values.backendURL | quote }}
           ports:
             - name: http
               containerPort: 80

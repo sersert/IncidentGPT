@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { BookOpen, ChevronRight, Menu, X } from 'lucide-react'
+import { LogoutButton } from './AuthGate'
 import { ThemeToggle } from './ThemeToggle'
 import { Sidebar } from './Sidebar.tsx'
 import { useDashboardStats } from '@/hooks/useDashboard.ts'
@@ -25,7 +26,9 @@ export function Layout() {
 
   useEffect(() => {
     if (hash) {
-      const frame = requestAnimationFrame(() => document.getElementById(hash.slice(1))?.scrollIntoView())
+      const frame = requestAnimationFrame(() =>
+        document.getElementById(hash.slice(1))?.scrollIntoView(),
+      )
       return () => cancelAnimationFrame(frame)
     }
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
@@ -104,6 +107,7 @@ export function Layout() {
           </nav>
           <div className="ml-auto flex items-center gap-1 sm:gap-3">
             <ThemeToggle />
+            <LogoutButton />
             <Link
               to="/help"
               className="flex min-h-10 items-center gap-2 rounded-lg px-2 text-xs text-text-secondary hover:bg-surface-tertiary hover:text-accent"
@@ -116,7 +120,8 @@ export function Layout() {
         </header>
         {import.meta.env.VITE_USE_MOCKS === 'true' && (
           <p className="border-b border-severity-warning/20 bg-severity-warning/10 px-5 py-2 text-center text-xs text-severity-warning">
-            Демонстрационный режим · примеры данных, без подключения к инфраструктуре
+            Демонстрационный режим · примеры данных, без подключения к
+            инфраструктуре
           </p>
         )}
         <main

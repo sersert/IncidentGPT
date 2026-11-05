@@ -307,7 +307,7 @@ export const en = {
     alertmanagerNote:
       "route.receiver and receivers[].name must match exactly. continue: true keeps existing Slack, PagerDuty or other receivers active.",
     verifyIntro:
-      "The UI is published through its own Ingress, and basic authentication on nginx covers both the interface and /api/. The default values ship admin/admin; production should replace them with an existing Secret holding an htpasswd key.",
+      "The UI has its own Ingress. Sign-in uses the backend account from a reader Secret; nginx checks the session before granting access to /api/ and /ws/. Use HTTPS in production.",
   },
   configuration: {
     headings: {
@@ -488,7 +488,7 @@ export const en = {
       body: "The service still runs and keeps state in memory, but any pod restart wipes the history. For anything beyond a demo an archive needs a real database.",
     },
     accessIntro:
-      "Basic authentication on nginx covers both the interface and /api/. The password is bcrypt-hashed in the template, so it does not reach the cluster in clear text; production should supply an existing Secret with an htpasswd key.",
+      "Sign-in uses an eight-hour server session and an HttpOnly/Secure cookie. Configure a backend reader Secret with the original username/password. Legacy htpasswd is unused; upgrade UI and backend together.",
     accessProbe:
       "The readiness probe is served from /healthz without auth — otherwise kubelet would get a 401 and the pod would never become ready. The logged-in name is passed to backend in the X-Auth-User header and lands in the incident action log: who took it and when.",
     screens: [
@@ -571,7 +571,7 @@ export const en = {
     productionItems: [
       "Use non-latest image tags and pinned chart versions; the release tag is 0.2.0.",
       "Use Kubernetes Secrets for OpenRouter, Telegram and the Sanitizer HMAC key.",
-      "Replace the default admin/admin of the web UI with an existing Secret holding an htpasswd key.",
+      "Create a backend reader Secret with a dedicated username and strong password for sign-in.",
       "Enable Redis authentication and persistence; keep maxmemory-policy at noeviction, since incidents are storage rather than cache.",
       "Set resource requests and limits; probes already exist in every chart.",
       "Keep SANITIZER_FAIL_CLOSED=true so an unavailable Sanitizer never leaks raw payloads.",
@@ -668,7 +668,7 @@ export const en = {
       body: "Sanitizer masks secrets, tokens and personal data before anything leaves the cluster, but it is a filter with rules, not a guarantee. Treat the model as an external party: do not widen enrichment to full configuration dumps or Kubernetes Secrets and expect masking to catch everything.",
     },
     security: {
-      behavior: "the web UI is protected by basic authentication on nginx, covering both the interface and /api/. The logged-in name reaches the action log through the X-Auth-User header.",
+      behavior: "sign-in creates a server session. Nginx checks access to /api/ and /ws/, and the backend restores the verified identity for the action log.",
       risk: "one shared account, no roles, no SSO, no per-user audit beyond that header.",
       recommended: "put an authenticating proxy in front of the Ingress when the incident history needs real access control.",
     },

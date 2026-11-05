@@ -1,0 +1,29 @@
+# Disposable login verification: no production networks, data or integrations.
+# docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml up -d --build
+# python3 deploy/check-browser-session.py
+# docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml down
+services:
+  redis:
+    image: redis:7.2.7
+    command: [redis-server, --appendonly, 'yes']
+    volumes: [login-preview-data:/data]
+  backend:
+    build: ../backend
+    environment:
+      LISTEN_ADDR: ':8080'
+      REDIS_ADDR: redis:6379
+      TIMELINE_READ_USER: preview-operator
+      TIMELINE_READ_PASSWORD: preview-only-password
+      LEGACY_API_AUTH_REQUIRED: 'true'
+      BROWSER_SESSION_SECURE: 'false'
+      FORWARD_TO_AI_WORKER: 'false'
+    depends_on: [redis]
+  ui:
+    build: ../ui
+    ports: ['127.0.0.1:8186:80']
+    environment:
+      NGINX_RESOLVER: 127.0.0.11
+      BACKEND_URL: http://backend:8080
+    depends_on: [backend]
+volumes:
+  login-preview-data:
