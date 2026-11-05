@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Search } from "./Search";
+import { BrandMark } from "./BrandMark";
 import { X } from "lucide-react";
 import { buildRoute, routes, type PageId } from "../data/navigation";
 import type { Language, ThemeMode, Translation } from "../i18n/types";
@@ -47,7 +48,10 @@ export function MobileNavigation({
       onCancel={onClose}
     >
       <div className="mobile-panel-head">
-        <span>IncidentGPT</span>
+        <span className="brand">
+          <BrandMark size={26} />
+          IncidentGPT
+        </span>
         <button
           className="icon-button"
           type="button"

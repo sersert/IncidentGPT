@@ -1,4 +1,5 @@
-import { ArrowUpRight, BookOpen, Check, Layers } from "lucide-react";
+import { ArrowUpRight, Check, Layers } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 import type { Language, Translation } from "../i18n/types";
 import { buildRoute } from "../data/navigation";
 
@@ -45,7 +46,7 @@ export function Hero({ t, language }: { t: Translation; language: Language }) {
       >
         <div className="preview-toolbar">
           <span>
-            <BookOpen size={15} />
+            <BrandMark size={17} />
             IncidentGPT
           </span>
           <span>{ru ? "Пример интерфейса" : "UI example"}</span>

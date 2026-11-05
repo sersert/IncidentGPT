@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M6 4h12v16H6z" stroke="#6b7fae" stroke-width="1.6"/><path d="M10 8h4m-4 4h4m-4 4h4" stroke="#6b7fae" stroke-width="1.6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>:root { color: #202838; } @media (prefers-color-scheme: dark) { :root { color: #e8ebf1; } }</style>
+  <path d="M11 4H4v24h7M21 4h7v24h-7M16 14v9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="9" r="1.5" fill="currentColor"/>
+</svg>

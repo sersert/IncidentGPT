@@ -2,6 +2,7 @@ import { ArrowUpRight, Menu, Moon, Sun, Monitor } from "lucide-react";
 import type { Language, ThemeMode, Translation } from "../i18n/types";
 import { buildRoute, routes, type PageId } from "../data/navigation";
 import { Search } from "./Search";
+import { BrandMark } from "./BrandMark";
 
 type HeaderProps = {
   t: Translation;
@@ -31,12 +32,7 @@ export function Header({
         href={buildRoute(language, "")}
         aria-label="IncidentGPT overview"
       >
-        <img
-          className="brand-logo"
-          src={`${import.meta.env.BASE_URL}logo.svg`}
-          alt=""
-          aria-hidden="true"
-        />
+        <BrandMark size={26} />
         <span>IncidentGPT</span>
       </a>
       <nav className="desktop-nav" aria-label="Primary">
