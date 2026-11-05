@@ -47,3 +47,6 @@ Thumbs.db
 
 # Локальные черновики PR не являются документацией проекта.
 /pr-descriptions/
+
+/website/test-results/
+/website/playwright-report/

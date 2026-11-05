@@ -1,20 +1,24 @@
-export type TocItem = {
-  id: string;
-  label: string;
-};
-
-type TableOfContentsProps = {
+import { buildRoute } from "../data/navigation";
+import type { Language } from "../i18n/types";
+export type TocItem = { id: string; label: string };
+export function TableOfContents({
+  items,
+  language,
+  path,
+  label,
+}: {
   items: TocItem[];
-};
-
-export function TableOfContents({ items }: TableOfContentsProps) {
+  language: Language;
+  path: string;
+  label: string;
+}) {
   return (
-    <aside className="toc" aria-label="Table of contents">
+    <nav className="toc" aria-label={label}>
       {items.map((item) => (
-        <a key={item.id} href={`#${item.id}`}>
+        <a key={item.id} href={buildRoute(language, path, item.id)}>
           {item.label}
         </a>
       ))}
-    </aside>
+    </nav>
   );
 }

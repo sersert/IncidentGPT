@@ -48,3 +48,22 @@ The main CSS variables are in `src/styles/globals.css`:
 - `--success`, `--warning`, `--error`
 
 The site supports dark, light and system themes. The selected theme and language are stored only in localStorage.
+
+## Ссылка на рабочий инстанс
+
+`VITE_PRODUCT_URL=https://incident.example npm run build` включает кнопки входа и
+перехода в продукт. Без переменной, при некорректном URL или URL с credentials
+кнопки скрыты. Поддерживаются HTTP/HTTPS. В workflow Pages только основной
+репозиторий имеет свой адрес по умолчанию; форки задают собственную repository
+variable `INCIDENTGPT_PRODUCT_URL` либо оставляют её пустой.
+
+Ссылки на разделы имеют вид `#/ru/configuration?s=generator`: их можно копировать,
+открывать в новой вкладке и использовать после перезагрузки.
+
+## Браузерные регрессии
+
+Соберите `VITE_BASE_PATH=/IncidentGPT/ npm run build`, затем выполните
+`npx playwright install chromium` и `npm run test:browser`. Проверяются прямые
+ссылки на разделы, reload/new tab, Escape и восстановление фокуса мобильного
+меню. CI использует Chromium; локально можно задать
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` на существующий Chromium-браузер.

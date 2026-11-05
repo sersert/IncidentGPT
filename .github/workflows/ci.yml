@@ -83,6 +83,35 @@ jobs:
       - name: build and browser regressions
         run: npm run test:browser
 
+  website:
+    name: verify GitHub Pages
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser navigation regressions
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-pages-candidate
+          retention-days: 7
+          path: website/dist
+
   # Линт Dockerfile'ов по чек-листу антипаттернов.
   hadolint:
     name: hadolint
