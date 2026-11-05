@@ -34,4 +34,6 @@ helm template incidentgpt backend/chart --set operations.enabled=true --set oper
 if grep -F 'component: knowledge-mcp' "$scratch/external"; then echo 'Unexpected receiver policy on external MCP' >&2; exit 1; fi
 if helm template incidentgpt deploy/incidentgpt --set incidentgpt-backend.operations.enabled=true --set incidentgpt-backend.operations.existingSecret=ops --set incidentgpt-backend.readerAuth.existingSecret=reader >"$scratch/out" 2>"$scratch/error"; then echo 'Partial operations enabled' >&2; exit 1; fi
 grep -F 'enabled together' "$scratch/error" >/dev/null
+if helm template incidentgpt deploy/incidentgpt -f docs/examples/values-operations.yaml --set incidentgpt-backend.enabled=false >"$scratch/out" 2>"$scratch/error"; then echo 'Control backend disabled' >&2; exit 1; fi
+grep -F 'requires incidentgpt-backend.enabled' "$scratch/error" >/dev/null
 echo 'Operations chart checks passed.'

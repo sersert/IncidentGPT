@@ -81,6 +81,7 @@ test('an expired API session returns to sign-in', async ({ page }) => {
   let expired = false
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '')
+    if (path === '/operations/status') return route.fulfill({ status: 404, body: 'disabled' })
     if (expired) return route.fulfill({ status: 401, body: 'session expired' })
     return route.fulfill({
       json:

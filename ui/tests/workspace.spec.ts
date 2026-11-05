@@ -38,6 +38,10 @@ const test = base.extend<{ apiFixture: Fixture }>({
       const request = route.request()
       const url = new URL(request.url())
       const path = url.pathname.replace('/api/v1', '')
+      if (path === '/operations/status') {
+        await route.fulfill({ status: 404, body: 'disabled' })
+        return
+      }
       fixture.requests.push(`${request.method()} ${path}${url.search}`)
       let json: unknown
       if (path === '/auth/session') json = { username: 'preview-operator' }

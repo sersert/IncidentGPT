@@ -1633,11 +1633,14 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func handleReady(w http.ResponseWriter, r *http.Request) {
-	if durableEnabled() {
+	if durableEnabled() || operationsEnabled() {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		if store.disk == nil || store.disk.rdb.Ping(ctx).Err() != nil {
-			http.Error(w, "durable storage unavailable", http.StatusServiceUnavailable)
+		store.RLock()
+		disk := store.disk
+		store.RUnlock()
+		if disk == nil || disk.rdb.Ping(ctx).Err() != nil {
+			http.Error(w, "persistent storage unavailable", http.StatusServiceUnavailable)
 			return
 		}
 	}

@@ -5,3 +5,6 @@
 {{- if and (or $backend $worker $enricher) (not (and $backend $worker $enricher)) -}}
 {{- fail "operations must be enabled together; use global.operations.enabled=true" -}}
 {{- end -}}
+{{- if and (or $backend $worker $enricher) (not (index .Values "incidentgpt-backend").enabled) -}}
+{{- fail "operations requires incidentgpt-backend.enabled=true" -}}
+{{- end -}}

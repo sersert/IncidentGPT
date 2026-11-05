@@ -178,6 +178,8 @@ jobs:
           exit 1
       - name: Verify session lifecycle and protected routes
         run: python3 deploy/check-browser-session.py
+      - name: Verify default Basic upgrade without reader Secret
+        run: python3 deploy/test-basic-auth-upgrade.py
       - name: Verify late Redis recovery without durable mode
         run: python3 deploy/test-session-redis-recovery.py
       - name: Preview logs
