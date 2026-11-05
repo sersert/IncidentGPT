@@ -28,6 +28,10 @@ test "$(grep -c 'key: operations-service-token' "$scratch/enabled")" = 3
 grep -F 'name: AI_CONTROL_URL' "$scratch/enabled" >/dev/null
 grep -F 'name: incidentgpt-backend-to-ai-worker' "$scratch/enabled" >/dev/null
 grep -F 'app: incidentgpt-backend' "$scratch/enabled" >/dev/null
-helm template incidentgpt backend/chart --set operations.enabled=true --set operations.existingSecret=ops --set readerAuth.existingSecret=reader --set operations.mcpHealthURL=http://knowledge-mcp:8080/healthz >"$scratch/mcp"
+helm template incidentgpt backend/chart --set operations.enabled=true --set operations.existingSecret=ops --set readerAuth.existingSecret=reader --set operations.mcpHealthURL=http://knowledge-mcp:8080/healthz --set operations.mcpNetworkPolicy.enabled=true >"$scratch/mcp"
 grep -F 'app.kubernetes.io/component: knowledge-mcp' "$scratch/mcp" >/dev/null
+helm template incidentgpt backend/chart --set operations.enabled=true --set operations.existingSecret=ops --set readerAuth.existingSecret=reader --set operations.mcpHealthURL=https://external.example/healthz >"$scratch/external"
+if grep -F 'component: knowledge-mcp' "$scratch/external"; then echo 'Unexpected receiver policy on external MCP' >&2; exit 1; fi
+if helm template incidentgpt deploy/incidentgpt --set incidentgpt-backend.operations.enabled=true --set incidentgpt-backend.operations.existingSecret=ops --set incidentgpt-backend.readerAuth.existingSecret=reader >"$scratch/out" 2>"$scratch/error"; then echo 'Partial operations enabled' >&2; exit 1; fi
+grep -F 'enabled together' "$scratch/error" >/dev/null
 echo 'Operations chart checks passed.'

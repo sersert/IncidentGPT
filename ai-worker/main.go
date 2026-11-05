@@ -96,7 +96,7 @@ var (
 	sanitizerClient *SanitizerClient
 	httpClient      = &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if controlRequired() && len(via) > 0 && via[0].Method == "POST" && via[0].URL.String() == appCfg.ORBaseURL {
+			if controlRequired() && len(via) > 0 && via[0].Method == "POST" && isProviderURL(via[0].URL) {
 				return http.ErrUseLastResponse
 			}
 			if len(via) >= 10 {
@@ -189,7 +189,9 @@ func main() {
 	mux.HandleFunc("/metrics", metricsHandler)
 	mux.HandleFunc("GET /internal/operations", workerOperations)
 	mux.HandleFunc("POST /internal/operations/model-probe", workerModelProbe)
-	startAIControlPolling()
+	controlCtx, stopControl := context.WithCancel(context.Background())
+	defer stopControl()
+	startAIControlPolling(controlCtx)
 	mux.HandleFunc("/incident", incidentHandler)
 	mux.HandleFunc("/incident-raw", incidentRawHandler)
 	mux.HandleFunc("/incident-group", incidentGroupHandler)
@@ -212,6 +214,8 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-sigCh
+		stopControl()
+		signal.Stop(sigCh)
 		log.Printf("INFO: received signal %v, shutting down (waiting for %d active tasks)", sig, activeTasksCount())
 
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -177,6 +177,11 @@ func TestModelProbeIsExplicitAuthenticatedAndRateLimited(t *testing.T) {
 	if w := request(true); w.Code != 423 || calls.Load() != 1 {
 		t.Fatal("paid probe ran while paused")
 	}
+	enabled.Store(true)
+	revision.Store(3)
+	if w := request(true); w.Code != 200 || calls.Load() != 2 {
+		t.Fatal("paused preflight consumed probe budget")
+	}
 }
 func TestStaleControlResponseCannotReenableAI(t *testing.T) {
 	_, _, _ = setupControl(t)
@@ -190,5 +195,41 @@ func TestStaleControlResponseCannotReenableAI(t *testing.T) {
 	aiRuntime.apply(controlState{Enabled: &off, Revision: 0}, nil)
 	if !aiRuntime.paused() {
 		t.Fatal("Redis data loss retained permission to spend tokens")
+	}
+}
+
+type countingProviderTransport struct{ calls *atomic.Int32 }
+
+func (t countingProviderTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	t.calls.Add(1)
+	return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"OK"}}]}`))}, nil
+}
+func TestCanonicalProviderURLsCannotBypassPauseOrRedirectGuard(t *testing.T) {
+	setupControl(t)
+	var calls atomic.Int32
+	transport := controlledProviderTransport{base: countingProviderTransport{calls: &calls}}
+	for _, endpoint := range []string{"HTTPS://openrouter.ai/api/v1/chat/completions", "https://OPENROUTER.AI:443/api/v1/chat/completions", "https://openrouter.ai/api/v1/chat/completions?route=primary"} {
+		appCfg.ORBaseURL = endpoint
+		request, _ := http.NewRequest("POST", "https://openrouter.ai/api/v1/chat/completions", nil)
+		if _, err := transport.RoundTrip(request); err == nil || calls.Load() != 0 {
+			t.Fatalf("noncanonical URL bypassed pause: %s", endpoint)
+		}
+		redirect, _ := http.NewRequest("GET", "https://other.example/", nil)
+		if err := httpClient.CheckRedirect(redirect, []*http.Request{request}); err != http.ErrUseLastResponse {
+			t.Fatalf("provider redirect escaped guard: %s", endpoint)
+		}
+	}
+}
+func TestMissingControlStateCanBeRecoveredWithoutWorkerRestart(t *testing.T) {
+	setupControl(t)
+	on, off := true, false
+	aiRuntime.apply(controlState{Enabled: &on, Revision: 7}, nil)
+	aiRuntime.apply(controlState{Enabled: &off, Revision: 0}, nil)
+	if !aiRuntime.paused() {
+		t.Fatal("loss of control record did not pause")
+	}
+	aiRuntime.apply(controlState{Enabled: &on, Revision: 1}, nil)
+	if aiRuntime.paused() {
+		t.Fatal("operator could not enable after safe reset")
 	}
 }

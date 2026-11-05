@@ -74,11 +74,14 @@ func connectStorage(parent context.Context, addr, password string) *Storage {
 // Durable queues cannot run in the legacy in-memory fallback. Retry before
 // serving traffic so a fresh Helm install does not depend on Redis pod ordering.
 func awaitDurableStorage(ctx context.Context) error {
-	if !durableEnabled() || store.disk != nil {
+	if (!durableEnabled() && !operationsEnabled()) || store.disk != nil {
 		return nil
 	}
 	addr := env("REDIS_ADDR", "")
 	if addr == "" {
+		if operationsEnabled() && !durableEnabled() {
+			return fmt.Errorf("operations requires REDIS_ADDR")
+		}
 		return fmt.Errorf("durable analysis requires REDIS_ADDR")
 	}
 	for {

@@ -259,7 +259,7 @@ func executeAnalysis(ctx context.Context, e *jobEnvelope) (*AnalysisVersion, err
 		return nil, fmt.Errorf("provider_or_worker_unavailable")
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == 423 && operationsEnabled() {
+	if resp.StatusCode == 423 {
 		return nil, fmt.Errorf("ai_paused")
 	}
 	if resp.StatusCode != 200 {

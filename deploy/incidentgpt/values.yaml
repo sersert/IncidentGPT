@@ -1,3 +1,8 @@
+# Единый opt-in мониторинга и AI control во всех трёх компонентах.
+global:
+  operations:
+    enabled: false
+
 # Единый values для всех компонентов IncidentGPT.
 # Ключ верхнего уровня = имя соответствующего subchart'а.
 #

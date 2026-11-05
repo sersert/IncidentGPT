@@ -1,0 +1,7 @@
+{{- $global := dig "operations" "enabled" false (.Values.global | default dict) -}}
+{{- $backend := or $global (index .Values "incidentgpt-backend").operations.enabled -}}
+{{- $worker := or $global (index .Values "ai-worker").operations.enabled -}}
+{{- $enricher := or $global (index .Values "incidentgpt-enricher").operations.enabled -}}
+{{- if and (or $backend $worker $enricher) (not (and $backend $worker $enricher)) -}}
+{{- fail "operations must be enabled together; use global.operations.enabled=true" -}}
+{{- end -}}

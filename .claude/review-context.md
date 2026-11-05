@@ -12,7 +12,7 @@
 ## Мониторинг и AI control (кандидат 2026-11-04)
 
 - Контракт и rollback: `docs/operations.md`, opt-in `operations.enabled` во всех
-  трёх сервисах, существующий Secret с `operations-service-token` (≥32 байт).
+  трёх сервисах (в umbrella — global.operations.enabled), существующий Secret с `operations-service-token` (≥32 байт).
   Worker использует `AI_CONTROL_URL`; backend/enricher `OPERATIONS_ENABLED`.
 - Backend Basic routes: GET operations/status, GET/PUT operations/ai-control,
   POST operations/model-probe под `/api/v1`. Мутации JSON+Origin+verified Basic
@@ -23,7 +23,7 @@
   `/internal/operations/model-probe`; enricher GET `/internal/operations`.
 - Redis: `igpt:operations:ai-control` JSON v1 без TTL; `:audit` stream MAXLEN
   ~1000; `igpt:operations:model-probe:limit` SET NX TTL60s. Missing state paused,
-  corrupt/unavailable/lower revision fail-closed. Worker без controlURL работает
+  corrupt/unavailable и откат к enabled fail-closed; безопасный reset к paused принимает новую базу ревизий. Worker без controlURL работает
   по-старому: снятие opt-in/старый rollback не сохраняет паузу!
 - Guard перед каждым provider POST, опрос control 2s, отмена контекстов; запрет
   provider redirect только при opt-in. Durable pause не расходует attempts,
@@ -32,7 +32,7 @@
   LLM не вызывает; платный sanitizer-protected probe max_tokens8 — явный POST,
   лимит раз в минуту Redis+worker. Наблюдения не сохраняют текст/секреты.
 - Существующие receiver NP покрывают core checks; новый optional MCP grant
-  ограничен component=knowledge-mcp + instance=release и `operations.mcpPort`.
+  ограничен component=knowledge-mcp + instance=release и `operations.mcpPort`, создаётся только с operations.mcpNetworkPolicy.enabled=true.
 - UI имеет Playwright runner/tests monitoring (fixtures), CI запускает Chromium.
   Это не замена deployment verification с ingress/Secrets и реальными источниками.
 
