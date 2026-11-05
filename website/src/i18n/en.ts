@@ -37,7 +37,7 @@ export const en = {
     potentialRisk: "Potential risk",
   },
   hero: {
-    title: "Understand incidents before the alert storm ends",
+    title: "Kubernetes incident analysis",
     eyebrow: "Prometheus → Kubernetes → Logs → Telegram & Web UI",
     description:
       "IncidentGPT enriches Prometheus alerts with Kubernetes context and log excerpts, groups an event cascade into one incident, and delivers an engineering analysis draft to Telegram and the web UI.",

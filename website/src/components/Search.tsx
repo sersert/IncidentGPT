@@ -8,17 +8,28 @@ import { searchDocs, type SearchEntry } from "../lib/search";
 type SearchProps = {
   t: Translation;
   language: Language;
+  onNavigate?: () => void;
 };
 
-export function Search({ t, language }: SearchProps) {
+export function Search({ t, language, onNavigate }: SearchProps) {
   const [query, setQuery] = useState("");
   const entries = useMemo<SearchEntry[]>(
     () =>
       routes.map((route) => ({
         id: route.id,
         title: t.navigation[route.id],
-        description: route.id === "overview" ? t.hero.description : t.pages[route.id].description,
-        anchors: ["Prometheus", "Kubernetes", "Telegram", "OpenRouter", "Redis", "Alertmanager"],
+        description:
+          route.id === "overview"
+            ? t.hero.description
+            : t.pages[route.id].description,
+        anchors: [
+          "Prometheus",
+          "Kubernetes",
+          "Telegram",
+          "OpenRouter",
+          "Redis",
+          "Alertmanager",
+        ],
       })),
     [t],
   );
@@ -28,15 +39,27 @@ export function Search({ t, language }: SearchProps) {
     <div className="search">
       <label>
         <SearchIcon size={15} aria-hidden="true" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.common.search} />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t.common.search}
+        />
       </label>
       {query.trim() ? (
         <div className="search-results">
           {results.length ? (
             results.map((entry) => {
-              const route = routes.find((item) => item.id === entry.id) ?? routes[0];
+              const route =
+                routes.find((item) => item.id === entry.id) ?? routes[0];
               return (
-                <a key={entry.id} href={buildRoute(language, route.path)} onClick={() => setQuery("")}>
+                <a
+                  key={entry.id}
+                  href={buildRoute(language, route.path)}
+                  onClick={() => {
+                    setQuery("");
+                    onNavigate?.();
+                  }}
+                >
                   <strong>{entry.title}</strong>
                   <span>{entry.description}</span>
                 </a>

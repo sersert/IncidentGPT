@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { Search } from "./Search";
 import { X } from "lucide-react";
 import { buildRoute, routes, type PageId } from "../data/navigation";
 import type { Language, ThemeMode, Translation } from "../i18n/types";
@@ -23,43 +25,89 @@ export function MobileNavigation({
   onLanguageChange,
   onThemeChange,
 }: MobileNavigationProps) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    dialog.current?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
   if (!open) {
     return null;
   }
 
   return (
-    <div className="mobile-panel" role="dialog" aria-modal="true" aria-label="Navigation">
+    <dialog
+      ref={dialog}
+      className="mobile-panel"
+      aria-label={language === "ru" ? "Навигация" : "Navigation"}
+      onCancel={onClose}
+    >
       <div className="mobile-panel-head">
         <span>IncidentGPT</span>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="Close menu">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onClose}
+          autoFocus
+          aria-label={language === "ru" ? "Закрыть меню" : "Close menu"}
+        >
           <X size={20} />
         </button>
       </div>
       <nav aria-label="Mobile">
         {routes.map((route) => (
-          <a key={route.id} href={buildRoute(language, route.path)} className={activePage === route.id ? "active" : ""} onClick={onClose}>
+          <a
+            key={route.id}
+            href={buildRoute(language, route.path)}
+            className={activePage === route.id ? "active" : ""}
+            onClick={onClose}
+          >
             {t.navigation[route.id]}
           </a>
         ))}
-        <a href="https://github.com/sersert/IncidentGPT" target="_blank" rel="noreferrer" onClick={onClose}>
+        <a
+          href="https://github.com/sersert/IncidentGPT"
+          target="_blank"
+          rel="noreferrer"
+          onClick={onClose}
+        >
           {t.common.github}
         </a>
       </nav>
       <div className="mobile-controls">
+        <div className="mobile-search">
+          <Search t={t} language={language} onNavigate={onClose} />
+        </div>
         <div className="segmented">
-          <button type="button" className={language === "ru" ? "selected" : ""} onClick={() => onLanguageChange("ru")}>
+          <button
+            type="button"
+            className={language === "ru" ? "selected" : ""}
+            onClick={() => onLanguageChange("ru")}
+          >
             RU
           </button>
-          <button type="button" className={language === "en" ? "selected" : ""} onClick={() => onLanguageChange("en")}>
+          <button
+            type="button"
+            className={language === "en" ? "selected" : ""}
+            onClick={() => onLanguageChange("en")}
+          >
             EN
           </button>
         </div>
-        <select value={theme} onChange={(event) => onThemeChange(event.target.value as ThemeMode)} aria-label={t.common.theme}>
+        <select
+          value={theme}
+          onChange={(event) => onThemeChange(event.target.value as ThemeMode)}
+          aria-label={t.common.theme}
+        >
           <option value="system">{t.common.system}</option>
           <option value="dark">{t.common.dark}</option>
           <option value="light">{t.common.light}</option>
         </select>
       </div>
-    </div>
+    </dialog>
   );
 }

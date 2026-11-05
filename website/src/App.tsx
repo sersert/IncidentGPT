@@ -190,6 +190,10 @@ export default function App() {
     setThemeState(next);
   }
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [path]);
+
   const toc = useMemo(() => pageToc(route.id, t), [route.id, t]);
   const isHome = route.id === "overview";
   const docPage = isHome ? null : (route.id as DocPageId);
@@ -229,9 +233,9 @@ export default function App() {
         </div>
         {!isHome && toc.length ? <TableOfContents items={toc} /> : null}
       </main>
-      <a className="back-to-top" href="#top">
+      <button type="button" className="back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>
         {t.common.top}
-      </a>
+      </button>
       <Footer t={t} language={language} />
     </>
   );

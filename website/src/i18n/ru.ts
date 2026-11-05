@@ -37,10 +37,10 @@ export const ru = {
     potentialRisk: "Риск",
   },
   hero: {
-    title: "Разобраться в инциденте раньше, чем закончится шторм алертов",
+    title: "Разбор инцидентов Kubernetes",
     eyebrow: "Prometheus → Kubernetes → логи → Telegram и веб",
     description:
-      "IncidentGPT обогащает алерты данными Prometheus, Kubernetes и выжимкой логов, связывает каскад событий в один инцидент и отдаёт инженерный черновик разбора в Telegram и веб-интерфейс.",
+      "Алерты Prometheus, контекст Kubernetes и логи — в одном инциденте. Получайте AI-разбор в рабочем пространстве и Telegram, чтобы быстрее перейти к проверке гипотез.",
     installButton: "Начать установку",
     githubButton: "Открыть GitHub",
     architectureLink: "Посмотреть архитектуру",
