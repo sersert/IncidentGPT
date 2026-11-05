@@ -107,7 +107,7 @@ func redactEmails(s string, summary *domain.Summary) string {
 }
 
 var phoneRE = regexp.MustCompile(`(?:\+?\d[\d ()-]{8,}\d)`)
-var hexIdentifierRE = regexp.MustCompile(`\b[0-9a-fA-F]{32}(?:[0-9a-fA-F]{32})?\b`)
+var hexIdentifierRE = regexp.MustCompile(`\b(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\b`)
 
 func redactPhones(s string, summary *domain.Summary) string {
 	// Do not treat digit runs inside opaque hashes/IDs as phone numbers. Keep

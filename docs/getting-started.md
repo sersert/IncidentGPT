@@ -80,20 +80,26 @@ incidentgpt-sanitizer:
 отрендеренных Secret. Sanitizer должен работать в fail-closed режиме; не отключайте
 его ради прохождения теста. Подробнее: [граница санитизации](security/data-sanitizer-ru.md).
 
-Backend читает исходные credentials из отдельного Secret, который umbrella-чарт автоматически не создаёт. Пример values включает `LEGACY_API_AUTH_REQUIRED=true` и ссылается на `incidentgpt-preview-reader`. Создайте его в namespace стенда; логин и пароль должны совпадать с `incidentgpt-ui.auth.username/password` в `values-local.yaml`:
+Backend читает исходные credentials из отдельного Secret, который umbrella-чарт автоматически не создаёт. Пример values включает `LEGACY_API_AUTH_REQUIRED=true` и ссылается на `incidentgpt-preview-reader`. Создайте его в namespace стенда; этот Secret задаёт логин и пароль новой страницы входа:
 
 ```bash
 kubectl create namespace incidentgpt --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n incidentgpt create secret generic incidentgpt-preview-reader \
   --from-literal=username=admin \
-  --from-literal=password='<тот-же-пароль-что-в-values-local.yaml>'
+  --from-literal=password='<пароль-входа-в-IncidentGPT>'
 ```
 
-Для production используйте управляемые Secrets. Даже при внешнем htpasswd Secret UI backend нужен Secret с исходными username/password. Подробности — [доступ к веб-интерфейсу](web-ui.md#доступ).
+Для production используйте управляемые Secrets. Страница входа использует исходные username/password backend; старый htpasswd Secret UI больше не участвует в авторизации. Подробности — [доступ к веб-интерфейсу](web-ui.md#доступ).
 
 ## 4. Разверните и проверьте готовность
 
-В текущем образе UI DNS-резолвер nginx зафиксирован как `10.96.0.10`. До запуска проверьте ClusterIP DNS: `kubectl -n kube-system get service kube-dns`. На k3s (обычно `10.43.0.10`) и кластерах с другим адресом DNS прокси `/api/` и `/ws/` не сможет разрешить имя backend. Пока резолвер не вынесен в настройки, для такого стенда нужен собственный образ UI с адресом DNS кластера в обоих блоках `resolver` файла `ui/nginx.conf`. Успешный port-forward или `/healthz` эту проблему не выявляет.
+Проверьте ClusterIP DNS: `kubectl -n kube-system get service kube-dns`.
+По умолчанию UI использует `incidentgpt-ui.dnsResolver: "10.96.0.10"`;
+для k3s обычно нужно `"10.43.0.10"`. При другом namespace задайте
+`incidentgpt-ui.backendURL`, например `http://incidentgpt-backend.preview.svc.cluster.local:8080`.
+Эти настройки передаются nginx при запуске, пересборка образа не нужна.
+Проверьте настоящий вход и запрос `/api/v1/dashboard/stats`: один `/healthz`
+не проверяет DNS и доступность backend.
 
 ```bash
 helm dependency build --skip-refresh deploy/incidentgpt

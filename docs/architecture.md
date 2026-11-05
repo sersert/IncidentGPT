@@ -177,3 +177,9 @@ producers. Roll back in reverse workflow order: stop reports/diagnostics, drain
 analysis and durable correlation, disable topology/change collectors, then revert
 consumers. Preserve additive records and acknowledge documented AOF/disk loss windows.
 No historical timestamps or collector coverage are fabricated during migration.
+
+## Поиск документации через MCP
+
+При настройке MCP AI worker предлагает модели один read-only инструмент `search_knowledge`. Модель выбирает момент поиска; worker выполняет до двух запросов на попытку разбора через MCP Go SDK и возвращает санитизированные результаты как untrusted reference material. Отдельный `knowledge-mcp` читает только явно заданные Confluence spaces либо каталоги GitHub/GitLab. Запрос и результат проходят Sanitizer; содержимое повторно проверяется перед внешним LLM. Команды и записи в источники отсутствуют.
+
+Structured analysis сохраняет additive `knowledge` со статусом, provenance и excerpts; гипотезы связываются с документацией через `knowledge_reference_ids`, отдельно от evidence наблюдений. Старые версии без metadata остаются совместимыми. Конфигурация, установка и ограничения: [mcp-knowledge.md](mcp-knowledge.md).

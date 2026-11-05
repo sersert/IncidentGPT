@@ -95,10 +95,19 @@ var (
 	appCfg          Config
 	sanitizerClient *SanitizerClient
 	httpClient      = &http.Client{
-		Transport: &http.Transport{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if controlRequired() && len(via) > 0 && via[0].Method == "POST" && via[0].URL.String() == appCfg.ORBaseURL {
+				return http.ErrUseLastResponse
+			}
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return nil
+		},
+		Transport: controlledProviderTransport{base: &http.Transport{
 			TLSNextProto:      make(map[string]func(string, *tls.Conn) http.RoundTripper),
 			DisableKeepAlives: true,
-		},
+		}},
 	}
 	// llmSemaphore ограничивает конкурентность LLM-вызовов при шторме алертов.
 	llmSemaphore = make(chan struct{}, 8)
@@ -178,6 +187,9 @@ func main() {
 	mux.HandleFunc("/readyz", readyzHandler)
 	mux.HandleFunc("/status", statusHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
+	mux.HandleFunc("GET /internal/operations", workerOperations)
+	mux.HandleFunc("POST /internal/operations/model-probe", workerModelProbe)
+	startAIControlPolling()
 	mux.HandleFunc("/incident", incidentHandler)
 	mux.HandleFunc("/incident-raw", incidentRawHandler)
 	mux.HandleFunc("/incident-group", incidentGroupHandler)
@@ -325,6 +337,10 @@ func processSingleAlert(w http.ResponseWriter, ctx context.Context, alert Enrich
 
 		aiText, err := callOpenRouter(aiCtx, prompt)
 		if err != nil {
+			if aiRuntime.paused() {
+				log.Print("INFO: AI analysis skipped while paused or control unavailable")
+				return
+			}
 			log.Printf("ERROR: openrouter call failed for message_id=%d: %v", parentMsgID, err)
 			return
 		}
@@ -529,6 +545,10 @@ func incidentGroupHandler(w http.ResponseWriter, r *http.Request) {
 
 		aiText, err := callOpenRouterWithSystem(aiCtx, sysPrompt, prompt)
 		if err != nil {
+			if aiRuntime.paused() {
+				log.Print("INFO: AI analysis skipped while paused or control unavailable")
+				return
+			}
 			log.Printf("ERROR: openrouter group call failed: %v", err)
 			return
 		}
@@ -722,76 +742,21 @@ func callOpenRouterWithSystem(ctx context.Context, sysPrompt, prompt string) (st
 		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
 	}
 
-	type ORMessage struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-
 	safeUserPrompt := "<incident_data>\n{\n  \"sanitized\": true,\n  \"payload\": " + jsonString(prompt) + "\n}\n</incident_data>"
-
-	payload := map[string]interface{}{
-		"model":      appCfg.ORModel,
-		"max_tokens": appCfg.ORMaxTokens,
-		"messages": []ORMessage{
-			{
-				Role:    "system",
-				Content: sysPrompt,
-			},
-			{
-				Role:    "user",
-				Content: safeUserPrompt,
-			},
-		},
-	}
-
-	body, _ := json.Marshal(payload)
+	payload := map[string]any{"model": appCfg.ORModel, "max_tokens": appCfg.ORMaxTokens, "messages": []map[string]string{{"role": "system", "content": sysPrompt}, {"role": "user", "content": safeUserPrompt}}}
 	ctx2, cancel := context.WithTimeout(ctx, appCfg.ORTimeout)
 	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx2, http.MethodPost, appCfg.ORBaseURL, bytes.NewReader(body))
-	if err != nil {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", err
-	}
-
-	if os.Getenv("DEBUG_OR_PAYLOAD") == "1" {
-		log.Printf("DEBUG: OpenRouter request payload prepared bytes=%d", len(body))
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+appCfg.ORAPIKey)
-	req.Header.Set("Connection", "close")
-
 	start := time.Now()
-	resp, err := httpClient.Do(req)
+	message, _, trace, err := knowledgeAwareCompletion(ctx2, payload)
 	appMetrics.observe("incidentgpt_llm_duration_seconds", time.Since(start).Seconds())
 	if err != nil {
+		if aiRuntime.paused() {
+			return "", errAIPaused
+		}
 		appMetrics.inc("incidentgpt_openrouter_errors_total")
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", fmt.Errorf("openrouter HTTP %d", resp.StatusCode)
-	}
-
-	var orResp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&orResp); err != nil {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", err
-	}
-	if len(orResp.Choices) == 0 {
-		appMetrics.inc("incidentgpt_openrouter_errors_total")
-		return "", fmt.Errorf("openrouter: empty choices")
-	}
-	return orResp.Choices[0].Message.Content, nil
+	return message.Content + knowledgeFooter(trace), nil
 }
 
 //

@@ -33,9 +33,13 @@
 
 ## Documentation
 
+Автоматический поиск AI-разбора по Confluence, GitHub или GitLab через отдельный устанавливаемый MCP-сервер: [настройка источников и доступа](docs/mcp-knowledge.md).
+
 Полная документация и интерактивное руководство доступны на GitHub Pages:
 
 https://sersert.github.io/IncidentGPT/
+
+- [Мониторинг компонентов и выключатель AI](docs/operations.md) — opt-in панель доступности и сохранённая пауза обращений к модели.
 
 ## Telegram setup
 

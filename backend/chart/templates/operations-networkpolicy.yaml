@@ -1,0 +1,24 @@
+{{- if and .Values.operations.enabled .Values.networkPolicy.enabled .Values.operations.mcpHealthURL }}
+# Дополнительный receiver grant для optional MCP из отдельного PR.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "incidentgpt-backend.fullname" . }}-operations-to-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: knowledge-mcp
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: {{ include "incidentgpt-backend.fullname" . }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.operations.mcpPort }}
+{{- end }}

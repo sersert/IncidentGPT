@@ -501,6 +501,7 @@ func main() {
 	mux.HandleFunc("/status", statusHandler)
 	mux.HandleFunc("POST /v1/diagnostics", diagnosticsHandler)
 	mux.HandleFunc("/metrics", metricsHandler)
+	mux.HandleFunc("GET /internal/operations", enricherOperations)
 	mux.HandleFunc("/alert", alertHandler)
 
 	srv := &http.Server{

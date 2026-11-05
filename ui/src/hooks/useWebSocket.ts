@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { WSMessage } from '@/api/types.ts'
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws/incidents`
+const WS_URL =
+  import.meta.env.VITE_WS_URL ||
+  `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/incidents`
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000]
@@ -35,12 +37,17 @@ export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
           const msg = JSON.parse(event.data) as WSMessage
           setLastMessage(msg)
           onMessageRef.current?.(msg)
-        } catch { /* ignore malformed */ }
+        } catch {
+          /* ignore malformed */
+        }
       }
 
       ws.onclose = () => {
         setIsConnected(false)
-        const delay = RECONNECT_DELAYS[Math.min(retriesRef.current, RECONNECT_DELAYS.length - 1)]
+        const delay =
+          RECONNECT_DELAYS[
+            Math.min(retriesRef.current, RECONNECT_DELAYS.length - 1)
+          ]
         retriesRef.current++
         timerRef.current = setTimeout(connect, delay)
       }
@@ -55,7 +62,10 @@ export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
     connect()
     return () => {
       clearTimeout(timerRef.current)
-      wsRef.current?.close()
+      if (wsRef.current) {
+        wsRef.current.onclose = null
+        wsRef.current.close()
+      }
     }
   }, [connect])
 

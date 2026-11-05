@@ -1,5 +1,9 @@
 replicaCount: 1
 
+# Set to the cluster DNS address / internal backend service for this installation.
+dnsResolver: "10.96.0.10"
+backendURL: "http://incidentgpt-backend.incidentgpt.svc.cluster.local:8080"
+
 image:
   repository: ghcr.io/sersert/incidentgpt-ui
   tag: "0.2.0"
@@ -36,6 +40,7 @@ networkPolicy:
 # Базовая авторизация на входе в UI (nginx). Прикрывает и интерфейс, и /api/.
 # Пароль хэшируется bcrypt'ом в шаблоне; для прода лучше подложить свой Secret
 # с ключом htpasswd через existingSecret и не держать пароль в values.
+# Legacy htpasswd settings retained for rollback. New sign-in uses the backend reader Secret.
 auth:
   enabled: true
   username: admin

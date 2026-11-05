@@ -1,0 +1,6 @@
+apiVersion: v2
+name: incidentgpt-knowledge-mcp
+description: MCP-поиск по разрешённым Confluence spaces и Git-репозиториям
+type: application
+version: 0.2.0
+appVersion: "0.2.0"

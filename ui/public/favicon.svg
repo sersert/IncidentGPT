@@ -1,8 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#141620"/>
-  <!-- Восьмигранник — план дозорной башни сверху. Внутри пульс: система смотрит и жива. -->
-  <path d="M12 5h8l7 7v8l-7 7h-8l-7-7v-8l7-7z"
-        fill="#7C7CFF" fill-opacity=".12" stroke="#7C7CFF" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M9.5 16.6h2.4l1.7-4.4 2.7 8.6 1.9-5.2 1.1 1h3.2"
-        fill="none" stroke="#7C7CFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>:root { color: #202838; } @media (prefers-color-scheme: dark) { :root { color: #e8ebf1; } }</style>
+  <path d="M11 4H4v24h7M21 4h7v24h-7M16 14v9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="9" r="1.5" fill="currentColor"/>
 </svg>
