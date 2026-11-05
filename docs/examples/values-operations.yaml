@@ -1,0 +1,21 @@
+# Накладывается на рабочий values с image tag проверенного кандидата.
+# Секреты уже должны существовать в namespace релиза.
+incidentgpt-backend:
+  readerAuth:
+    existingSecret: incidentgpt-reader
+  operations:
+    enabled: true
+    existingSecret: incidentgpt-operations
+    workerURL: http://ai-worker:8080
+    enricherURL: http://incidentgpt-enricher:9099
+    # Пусто, пока optional MCP из отдельного PR не установлен.
+    mcpHealthURL: ""
+ai-worker:
+  operations:
+    enabled: true
+    existingSecret: incidentgpt-operations
+    controlURL: http://incidentgpt-backend:8080/internal/operations/ai-control
+incidentgpt-enricher:
+  operations:
+    enabled: true
+    existingSecret: incidentgpt-operations

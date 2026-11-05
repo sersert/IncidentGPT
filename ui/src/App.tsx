@@ -10,12 +10,14 @@ import { Predictions } from '@/pages/Predictions.tsx'
 import { Settings } from '@/pages/Settings.tsx'
 import { Help } from '@/pages/Help.tsx'
 import { NotFound } from '@/pages/NotFound.tsx'
+import { Operations } from '@/pages/Operations.tsx'
 
 export default function App() {
   return (
     <AuthGate>
       <BrowserRouter>
         <Routes>
+          <Route path="/operations" element={<Operations />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/incidents" element={<IncidentList />} />

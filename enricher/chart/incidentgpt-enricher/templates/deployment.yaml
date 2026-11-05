@@ -22,6 +22,9 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- if and .Values.operations.enabled (not .Values.operations.existingSecret) }}
+{{- fail "operations requires existingSecret" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,6 +57,15 @@ spec:
             - containerPort: 9099
               name: http
           env:
+            {{- if .Values.operations.enabled }}
+            - name: OPERATIONS_ENABLED
+              value: "true"
+            - name: OPERATIONS_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.operations.existingSecret }}
+                  key: {{ .Values.operations.tokenKey }}
+            {{- end }}
             {{- if .Values.changes.durableCorrelation }}
             - name: REDIS_STARTUP_TIMEOUT
               value: {{ printf "%ds" (int .Values.redisStartup.timeoutSeconds) | quote }}

@@ -26,6 +26,14 @@
 {{- fail "GUIDED_DIAGNOSTICS_ENABLED requires env.DIAGNOSTIC_COLLECTOR_URL" }}
 {{- end }}
 {{- end }}
+{{- if .Values.operations.enabled }}
+{{- if not .Values.operations.existingSecret }}
+{{- fail "operations requires existingSecret" }}
+{{- end }}
+{{- if not (or .Values.readerAuth.existingSecret .Values.changes.existingSecret) }}
+{{- fail "operations requires backend reader credentials" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,8 +64,23 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
+            {{- if .Values.operations.enabled }}
+            - name: OPERATIONS_ENABLED
+              value: "true"
+            - name: OPERATIONS_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.operations.existingSecret }}
+                  key: {{ .Values.operations.tokenKey }}
+            - name: OPERATIONS_WORKER_URL
+              value: {{ .Values.operations.workerURL | quote }}
+            - name: OPERATIONS_ENRICHER_URL
+              value: {{ .Values.operations.enricherURL | quote }}
+            - name: OPERATIONS_MCP_HEALTH_URL
+              value: {{ .Values.operations.mcpHealthURL | quote }}
+            {{- end }}
             {{- range $key, $value := .Values.env }}
-            {{- if not (or (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
+            {{- if not (or (hasPrefix "OPERATIONS_" $key) (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}

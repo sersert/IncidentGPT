@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+- Opt-in `/operations`: реальные health checks важных компонентов, свежесть
+  последнего inference, явный ограниченный платный probe; автообновление без LLM.
+- Сохранённая в Redis пауза AI: общий guard всех provider POST, отмена текущих
+  контекстов, fail-closed при отказе control. Raw ingestion/Telegram и report jobs
+  независимы; durable-анализы откладываются без расхода retry budget. Новые ключи
+  `igpt:operations:ai-control` (JSON v1 без TTL), `:audit` (stream MAXLEN ~1000),
+  `igpt:operations:model-probe:limit` (TTL 60s). Совместимость/rollback и Secret
+  opt-in описаны в `docs/operations.md`; первоначальное состояние — пауза.
 - Добавлен отдельный MCP-сервер для read-only поиска по разрешённым Confluence spaces и каталогам GitHub/GitLab. При явной настройке AI worker сам вызывает поиск по необходимости (не более двух обращений), сохраняя default-поведение без MCP. Запросы и документы проходят fail-closed санитизацию. Sanitizer сохраняет непрозрачные 40-символьные Git SHA, продолжая маскировать credentials и телефоны. Версии structured-анализа получают additive metadata `knowledge` и `knowledge_reference_ids`; старые записи совместимы, новых Redis keys и миграций нет. Подробнее: [mcp-knowledge.md](docs/mcp-knowledge.md).
 
 - Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`

@@ -136,6 +136,8 @@ jobs:
       - run: helm lint backend/chart
       - run: helm lint ui/chart
       - run: helm lint deploy/redis
+      - name: operations configuration guards
+        run: bash deploy/test-operations-charts.sh
       - name: diagnostics configuration guards
         run: bash deploy/test-diagnostics-charts.sh
       - name: report configuration and auth compatibility

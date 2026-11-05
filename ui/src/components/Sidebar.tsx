@@ -7,6 +7,7 @@ import {
   BarChart3,
   TrendingUp,
   Plug,
+  Activity,
   Settings,
   BookOpen,
 } from 'lucide-react'
@@ -41,6 +42,7 @@ export function Sidebar({ activeIncidents, warnings, mobile = false, onNavigate 
     {
       title: 'Настройки',
       items: [
+        { to: '/operations', label: 'Состояние системы', icon: Activity },
         { to: '/settings/integrations', label: 'Интеграции', icon: Plug },
         { to: '/settings/llm', label: 'Модель', icon: Settings },
       ],

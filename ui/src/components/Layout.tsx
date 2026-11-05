@@ -6,6 +6,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { Sidebar } from './Sidebar.tsx'
 import { useDashboardStats } from '@/hooks/useDashboard.ts'
 import { usePredictions } from '@/hooks/usePredictions.ts'
+import { OperationsBar } from './OperationsBar'
 
 const names: Record<string, string> = {
   incidents: 'Инциденты',
@@ -130,6 +131,7 @@ export function Layout() {
           className="min-w-0 px-4 pt-8 pb-16 outline-none sm:px-8 lg:px-10 lg:pt-10"
         >
           <div className="mx-auto max-w-[1280px]">
+            <OperationsBar />
             <Outlet />
           </div>
         </main>

@@ -9,6 +9,33 @@
 - Контракт: additive `AnalysisVersion.knowledge`, `Hypothesis.knowledge_reference_ids`, без новых ключей Redis. Metadata живёт внутри immutable analysis versions, не участвует в evidence ownership/подтверждении решения. Инструкции: `docs/mcp-knowledge.md`.
 Дополняет `CLAUDE.md`, не повторяет его. При расхождении верить коду. Обновлять в PR, меняющих маршруты, ключи Redis, флаги, секреты, NetworkPolicy.
 
+## Мониторинг и AI control (кандидат 2026-11-04)
+
+- Контракт и rollback: `docs/operations.md`, opt-in `operations.enabled` во всех
+  трёх сервисах, существующий Secret с `operations-service-token` (≥32 байт).
+  Worker использует `AI_CONTROL_URL`; backend/enricher `OPERATIONS_ENABLED`.
+- Backend Basic routes: GET operations/status, GET/PUT operations/ai-control,
+  POST operations/model-probe под `/api/v1`. Мутации JSON+Origin+verified Basic
+  actor, CAS revision, без доверия X-Auth-User. Включение требует managed worker;
+  пауза сохраняется и без его ответа, UI не выдаёт её за подтверждённое применение.
+- Internal Bearer routes без browser Origin: backend GET
+  `/internal/operations/ai-control`; worker GET `/internal/operations`, POST
+  `/internal/operations/model-probe`; enricher GET `/internal/operations`.
+- Redis: `igpt:operations:ai-control` JSON v1 без TTL; `:audit` stream MAXLEN
+  ~1000; `igpt:operations:model-probe:limit` SET NX TTL60s. Missing state paused,
+  corrupt/unavailable/lower revision fail-closed. Worker без controlURL работает
+  по-старому: снятие opt-in/старый rollback не сохраняет паузу!
+- Guard перед каждым provider POST, опрос control 2s, отмена контекстов; запрет
+  provider redirect только при opt-in. Durable pause не расходует attempts,
+  423 возвращает running job в очередь; deterministic reports не блокируются.
+- Модель green только после реального корректного inference ≤5min. Автоопрос
+  LLM не вызывает; платный sanitizer-protected probe max_tokens8 — явный POST,
+  лимит раз в минуту Redis+worker. Наблюдения не сохраняют текст/секреты.
+- Существующие receiver NP покрывают core checks; новый optional MCP grant
+  ограничен component=knowledge-mcp + instance=release и `operations.mcpPort`.
+- UI имеет Playwright runner/tests monitoring (fixtures), CI запускает Chromium.
+  Это не замена deployment verification с ingress/Secrets и реальными источниками.
+
 ## 1. HTTP-маршруты и кто их закрывает
 
 **enricher** `:9099`, `enricher/main.go:480-487`: `GET /healthz /readyz /status /metrics` — без auth. `POST /alert` (`alertHandler` main.go:516) — без auth, защита только NetworkPolicy (ns `monitoring`).

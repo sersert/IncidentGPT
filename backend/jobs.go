@@ -161,13 +161,26 @@ local key='igpt:job:'..ids[1];local raw=redis.call('GET',key)
 if not raw then redis.call('ZREM',KEYS[1],ids[1]);return nil end
 local e=cjson.decode(raw)
 if e.job.status == 'canceled' or e.job.status == 'complete' or e.job.status == 'failed' then redis.call('ZREM',KEYS[1],ids[1]);return nil end
+if ARGV[5]=='paused' and e.job.kind~='report' then
+ e.job.status='queued';e.job.error_code='ai_paused';e.owner=nil;e.lease_until=nil
+ redis.call('SET',key,cjson.encode(e));redis.call('ZADD',KEYS[1],tonumber(ARGV[1])+10000,e.job.job_id);return nil
+end
 if e.job.attempts >= 4 then if e.job.kind=='diagnostics' or e.job.kind=='report' then local activeKey='igpt:'..e.job.kind..':active:'..e.job.incident_id;if redis.call('GET',activeKey)==e.job.job_id then redis.call('DEL',activeKey) end end;e.job.status='failed';e.job.error_code='retry_budget_exhausted';e.job.finished_at=ARGV[4];redis.call('SET',key,cjson.encode(e));redis.call('ZREM',KEYS[1],ids[1]);redis.call('ZREM','igpt:jobs:pending:created',ids[1]);redis.call('INCR','igpt:jobs:failures');return nil end
 e.owner=ARGV[2];e.lease_until=tonumber(ARGV[3]);e.job.status='running';e.job.attempts=e.job.attempts+1; if e.job.attempts>1 then redis.call('INCR','igpt:jobs:retries') end
 raw=cjson.encode(e);redis.call('SET',key,raw);redis.call('ZADD',KEYS[1],ARGV[3],ids[1]);return raw`)
 
 func claimJob(ctx context.Context) (*jobEnvelope, error) {
+	pause := ""
+	if operationsEnabled() {
+		controlCtx, cancel := context.WithTimeout(ctx, time.Second)
+		state, err := readAIControl(controlCtx)
+		cancel()
+		if err != nil || !state.Enabled {
+			pause = "paused"
+		}
+	}
 	now := time.Now().UTC()
-	raw, err := claimJobScript.Run(ctx, store.disk.rdb, []string{jobsDue}, now.UnixMilli(), newStableID("owner"), now.Add(90*time.Second).UnixMilli(), now.Format(time.RFC3339Nano)).Text()
+	raw, err := claimJobScript.Run(ctx, store.disk.rdb, []string{jobsDue}, now.UnixMilli(), newStableID("owner"), now.Add(90*time.Second).UnixMilli(), now.Format(time.RFC3339Nano), pause).Text()
 	if err == redis.Nil {
 		return nil, nil
 	}
@@ -182,6 +195,7 @@ func claimJob(ctx context.Context) (*jobEnvelope, error) {
 var finishJobScript = redis.NewScript(`
 local raw=redis.call('GET',KEYS[1]);if not raw then return 0 end
 local e=cjson.decode(raw);if e.owner ~= ARGV[1] or e.job.status ~= 'running' or e.lease_until < tonumber(ARGV[2]) then return 0 end
+if ARGV[4]=='ai_paused' then e.job.attempts=math.max(0,e.job.attempts-1) end
 e.job.status=ARGV[3];e.job.error_code=ARGV[4]; if ARGV[3]=='failed' then redis.call('INCR','igpt:jobs:failures') end
 if ARGV[3] == 'queued' then redis.call('ZADD',KEYS[2],ARGV[5],e.job.job_id)
 else if e.job.kind=='diagnostics' and redis.call('GET','igpt:diagnostics:active:'..e.job.incident_id)==e.job.job_id then redis.call('DEL','igpt:diagnostics:active:'..e.job.incident_id) end;e.job.finished_at=ARGV[6];redis.call('ZREM',KEYS[2],e.job.job_id);redis.call('ZREM','igpt:jobs:pending:created',e.job.job_id) end
@@ -201,6 +215,8 @@ func finishJob(ctx context.Context, e *jobEnvelope, a *AnalysisVersion, code str
 	data := []byte("{}")
 	if a != nil {
 		data, _ = json.Marshal(a)
+	} else if code == "ai_paused" {
+		status = "queued"
 	} else if e.Job.Attempts >= 4 {
 		status = "failed"
 	} else {
@@ -211,7 +227,11 @@ func finishJob(ctx context.Context, e *jobEnvelope, a *AnalysisVersion, code str
 		latency = a.CompletedAt.Sub(a.StartedAt).Seconds()
 	}
 	now := time.Now().UTC()
-	n, err := finishJobScript.Run(ctx, store.disk.rdb, []string{"igpt:job:" + e.Job.ID, jobsDue, analysisKey(e.Job.AnalysisID), "igpt:analysis:history:" + e.Job.IncidentID, "igpt:analysis:requested:" + e.Job.IncidentID, analysisLatest(e.Job.IncidentID)}, e.Owner, now.UnixMilli(), status, code, now.Add(time.Duration(1<<e.Job.Attempts)*time.Second).UnixMilli(), now.Format(time.RFC3339Nano), data, latency).Int()
+	delay := time.Duration(1<<e.Job.Attempts) * time.Second
+	if code == "ai_paused" {
+		delay = 10 * time.Second
+	}
+	n, err := finishJobScript.Run(ctx, store.disk.rdb, []string{"igpt:job:" + e.Job.ID, jobsDue, analysisKey(e.Job.AnalysisID), "igpt:analysis:history:" + e.Job.IncidentID, "igpt:analysis:requested:" + e.Job.IncidentID, analysisLatest(e.Job.IncidentID)}, e.Owner, now.UnixMilli(), status, code, now.Add(delay).UnixMilli(), now.Format(time.RFC3339Nano), data, latency).Int()
 	if err != nil || n != 1 {
 		return fmt.Errorf("lease lost or completion unavailable")
 	}
@@ -239,6 +259,9 @@ func executeAnalysis(ctx context.Context, e *jobEnvelope) (*AnalysisVersion, err
 		return nil, fmt.Errorf("provider_or_worker_unavailable")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == 423 && operationsEnabled() {
+		return nil, fmt.Errorf("ai_paused")
+	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("worker_http_%d", resp.StatusCode)
 	}

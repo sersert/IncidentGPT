@@ -93,3 +93,14 @@ readerAuth:
   existingSecret: ""
   usernameKey: username
   passwordKey: password
+
+# Общий operational token — только из существующего Secret.
+operations:
+  enabled: false
+  existingSecret: ""
+  tokenKey: operations-service-token
+  workerURL: http://ai-worker:8080
+  enricherURL: http://incidentgpt-enricher:9099
+  mcpHealthURL: ""
+  # Receiver grant только для MCP этого релиза; для внешнего сервера настройте его политику отдельно.
+  mcpPort: 8080
