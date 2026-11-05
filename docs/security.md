@@ -76,20 +76,21 @@ If you discover a security issue, avoid posting exploit details publicly. Contac
 
 Новые API используют сервисные Bearer-токены или собственную проверку Basic-auth
 backend (`TIMELINE_READ_*`), независимо от nginx и `X-Auth-User`. Старые PATCH
-status/assignee и dashboard/analytics сохраняют защиту UI Basic-auth и NetworkPolicy.
+status/assignee и dashboard/analytics сохраняют защиту nginx auth_request и NetworkPolicy.
 Для дополнительной проверки этих старых API включите `LEGACY_API_AUTH_REQUIRED=true`
 и задайте `changes.existingSecret` либо `readerAuth.existingSecret`. Отсутствие
 credentials в этом режиме даёт 401, автоматического ослабления защиты нет.
 Новые reports/lifecycle/analysis API всегда требуют backend credentials.
 
-Учётная запись backend должна совпадать с UI. При внешнем htpasswd нужен отдельный
-Secret с исходными username/password; хеш htpasswd не подходит. Чарт не копирует
+Страница входа использует учётную запись backend и серверную сессию. Нужен
+Secret с исходными username/password; старый хеш htpasswd не подходит. Чарт не копирует
 admin/admin в backend и не создаёт reader Secret автоматически. Выбранный Secret
 обязателен: ошибка имени/ключа блокирует запуск, вместо скрытого 401 после установки.
 Браузерные изменения проверяют Origin. Для прокси, меняющего Host, задайте полные
 доверенные адреса в `ALLOWED_ORIGINS` через запятую, например
 `http://127.0.0.1:8088,https://incident.example`. Wildcard, path и произвольные
-forwarded-заголовки не дают доступа; Basic-auth остаётся обязательным для новых API.
+forwarded-заголовки не дают доступа. Для новых API backend проверяет Basic principal
+либо восстанавливает его из действующей серверной сессии.
 Общая administrator-роль не обеспечивает разделение команд. Backend/Redis/diagnostics
 должны оставаться приватными под NetworkPolicy.
 
@@ -120,7 +121,7 @@ Deletion/archival must consider both. Read the [workflow-specific limits and rol
 `TIMELINE_READ_*` — историческое имя общей administrator-пары, а не отдельная
 read-only роль. Она авторизует новые graph/regroup/diagnostics API; разделения
 операторов и tenancy пока нет. Нельзя выдавать эти credentials как read-only.
-Имя в audit берётся из проверенного Basic principal. `X-Auth-User` от прямого
+Имя в audit берётся из проверенного Basic principal, включая восстановленный из сессии. `X-Auth-User` от прямого
 клиента не является доказательством другой личности и не может подменять actor.
 
 Graph/regroup требуют JSON и проверяют browser Origin; произвольный сторонний
@@ -135,3 +136,16 @@ Graph/regroup требуют JSON и проверяют browser Origin; прои
 Источники включает оператор. Он ограничивает Confluence spaces и repository/paths и выдаёт серверу минимальные права чтения; модели доступны только короткие поисковые запросы. Worker хранит отдельный MCP client token и не получает credentials источников. MCP принимает внутренний Bearer доступ, отвергает browser Origin, а NetworkPolicy ограничивает вход AI worker того же namespace. Публичного ingress/OAuth discovery по умолчанию нет; token открывает общую настроенную область без изоляции по пользователям.
 
 Query и документы проходят fail-closed Sanitizer, ссылки/версии проверяются, произвольные адреса модели не запрашиваются, provider redirects не следуются. Документы не исполняются и не считаются подтверждением причины/восстановления; ссылки на них не проходят как incident evidence IDs. Бюджеты запросов, TLS/CA, дополнительные права egress и ротация Secrets описаны в [руководстве MCP](mcp-knowledge.md).
+
+## Browser sessions
+
+The public sign-in shell contains no operational data. Nginx authenticates all API
+and WebSocket paths through a backend subrequest, including API URLs ending in
+static-file extensions. Passwords are never stored in browser storage or cookies.
+Session cookies are opaque, HttpOnly, Secure by default, SameSite=Strict and expire
+after eight hours. Login/logout require a trusted browser Origin. Logout deletes
+the server session; credential rotation invalidates existing sessions. Redis stores
+only token hashes and expires sessions automatically. The bounded in-memory fallback
+is intended for one backend process. Keep Redis private and persistent across replicas.
+Session endpoints return no-store responses without a browser Basic challenge.
+See [deployment and upgrade requirements](web-ui.md#доступ).

@@ -141,25 +141,39 @@ incidentgpt-enricher:
 
 ## Доступ
 
-Вход закрыт basic-авторизацией на nginx, она прикрывает и интерфейс, и `/api/`:
+Вход выполняется на отдельной странице IncidentGPT. HTML, стили и скрипты
+доступны до входа; данные `/api/` и `/ws/` защищены nginx `auth_request`.
+Backend проверяет существующие `TIMELINE_READ_USER` / `TIMELINE_READ_PASSWORD`.
+Настройте `incidentgpt-backend.readerAuth.existingSecret` с ключами `username` и
+`password`. При использовании `changes.existingSecret` пароль берётся из
+`timeline-read-password`, а пользователь — из `TIMELINE_READ_USER`. Эти два пути
+Secret нельзя включать одновременно. Umbrella-чарт не создаёт reader Secret.
 
-```yaml
-incidentgpt-ui:
-  auth:
-    enabled: true
-    username: admin
-    password: admin        # для продакшена — existingSecret
-```
+Сессия действует восемь часов. Браузер получает случайный токен в HttpOnly,
+SameSite=Strict, Secure cookie, без пароля в localStorage/sessionStorage. В Redis
+сохраняется только SHA-256 токена, fingerprint credentials и время истечения;
+выход удаляет сессию, смена credentials инвалидирует старые сессии. Без Redis
+используется ограниченная память одного backend: рестарт завершает сессии, а
+несколько реплик требуют общего Redis. При недоступном настроенном Redis вход
+закрывается. Миграций данных нет; ключи сессий имеют TTL восемь часов.
 
-Nginx получает bcrypt-запись htpasswd. Backend проверяет пароль независимо и
-читает его исходное значение из reader Secret: ограничьте доступ к этим Secrets
-и не выводите их в CI-логи или PR.
-Проба готовности вынесена на `/healthz` без авторизации — иначе kubelet получал
-бы 401 и под никогда не становился ready.
+Для HTTP только на изолированном локальном preview задайте
+`incidentgpt-backend.env.BROWSER_SESSION_SECURE: "false"`; production использует
+HTTPS и значение по умолчанию `true`. Login/logout требуют доверенный Origin;
+nginx ограничивает частоту запросов к endpoint входа. За общим reverse proxy
+лимит может делиться между клиентами с одним адресом.
 
-Nginx передаёт Authorization и имя вошедшего. Backend независимо проверяет Basic credentials для новых привилегированных API. Старые API, включая изменение статуса/назначения, по умолчанию сохраняют границу UI Basic-auth/NetworkPolicy; для независимой проверки включите `incidentgpt-backend.env.LEGACY_API_AUTH_REQUIRED: "true"`. Заголовок `X-Auth-User` сам по себе не подтверждает личность.
+Существующие Basic-клиенты API продолжают работать. Cookie преобразуется во
+внутренний проверенный principal, поэтому независимые проверки backend и audit
+сохраняются. Nginx стирает входящий `X-Auth-User`. Для независимой защиты старых
+API включите `LEGACY_API_AUTH_REQUIRED=true`; backend и Redis должны оставаться
+приватными под NetworkPolicy. `/healthz` остаётся публичным для kubelet.
 
-Umbrella-чарт не создаёт backend reader Secret автоматически. Настройте `incidentgpt-backend.readerAuth.existingSecret`: ключи `username` и `password` должны содержать тот же логин и исходный пароль, что и `incidentgpt-ui.auth.username/password` либо запись во внешнем htpasswd Secret. При заданном `incidentgpt-backend.changes.existingSecret` reader password берётся из него (`timeline-read-password`), а username — из `TIMELINE_READ_USER`; согласуйте этот путь отдельно и не задавайте оба варианта Secret одновременно. Не публикуйте значения Secret или rendered YAML. Полный пример — [первый запуск](getting-started.md#3-заполните-настройки-и-отдельный-файл-секретов).
+Старые `incidentgpt-ui.auth.*` и htpasswd Secret сохранены для совместимости
+values и отката; новый UI не использует htpasswd для входа. При обновлении
+обязательно задайте reader Secret backend и обновляйте **оба** образа — UI и
+backend. Без reader credentials вход закрыт. Не выводите Secrets или rendered
+YAML в CI/MR. Полный пример — [первый запуск](getting-started.md).
 
 ---
 

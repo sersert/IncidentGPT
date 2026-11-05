@@ -1657,6 +1657,8 @@ func intQuery(r *http.Request, key string, def int) int {
 
 func backendHandler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/auth/session", handleBrowserSession)
+	mux.HandleFunc("GET /api/v1/auth/check", handleBrowserAccess)
 	mux.HandleFunc("GET /readyz", handleReady)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/analyses", handleAnalysisVersions)
 	mux.HandleFunc("GET /api/v1/incidents/{id}/evidence/{evidence}", handleEvidence)
@@ -1733,7 +1735,7 @@ func backendHandler() http.Handler {
 	// Health
 	mux.HandleFunc("GET /healthz", handleHealth)
 
-	return corsMiddleware(mux)
+	return browserSessionMiddleware(corsMiddleware(mux))
 }
 
 func main() {

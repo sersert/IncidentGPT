@@ -1,7 +1,7 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY . .
 ARG VITE_API_URL=/api/v1
 ARG VITE_WS_URL=
@@ -23,6 +23,8 @@ LABEL org.opencontainers.image.source="https://github.com/sersert/IncidentGPT" \
       org.opencontainers.image.licenses="MIT"
 
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV NGINX_RESOLVER=10.96.0.10 \
+    BACKEND_URL=http://incidentgpt-backend.incidentgpt.svc.cluster.local:8080
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

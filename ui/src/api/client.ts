@@ -10,7 +10,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  url: string,
+  body?: unknown,
+): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -18,6 +22,8 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   })
 
   if (!res.ok) {
+    if (res.status === 401)
+      window.dispatchEvent(new Event('incidentgpt:unauthorized'))
     const text = await res.text().catch(() => res.statusText)
     throw new ApiError(res.status, text)
   }
