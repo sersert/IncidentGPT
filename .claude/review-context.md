@@ -36,6 +36,19 @@
 - UI имеет Playwright runner/tests monitoring (fixtures), CI запускает Chromium.
   Это не замена deployment verification с ingress/Secrets и реальными источниками.
 
+## Opt-in сессии браузера
+
+- Basic/htpasswd остаётся default. UI `authMode=session` согласуется с backend
+  `browserSessions.enabled=true`/`BROWSER_SESSIONS_ENABLED=true` и reader Secret.
+  `/auth-config.json` сообщает только режим. Новые auth/session (GET/POST/DELETE)
+  и auth/check (GET) возвращают 404 без opt-in; login/logout и cookie-мутации требуют Origin.
+- Redis: `igpt:session:<SHA256(cookie)>`, TTL8h, token-bound HMAC credentials и expires.
+  Нет автономного password verifier; старые preview `browser-session:*` только истекают.
+  Недоступный настроенный Redis — 503, клиент повторяет подключение независимо от durable.
+- Auth и audit читают verified principal из context; пароль в Authorization не копируется.
+  UI и backend session-режима обновляются вместе. Basic-контракт и htpasswd сохранены.
+- Real IP доверяется только явно заданным CIDR ingress, пустой список — default.
+
 ## 1. HTTP-маршруты и кто их закрывает
 
 **enricher** `:9099`, `enricher/main.go:480-487`: `GET /healthz /readyz /status /metrics` — без auth. `POST /alert` (`alertHandler` main.go:516) — без auth, защита только NetworkPolicy (ns `monitoring`).

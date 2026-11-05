@@ -16,12 +16,14 @@ services:
       TIMELINE_READ_PASSWORD: preview-only-password
       LEGACY_API_AUTH_REQUIRED: 'true'
       BROWSER_SESSION_SECURE: 'false'
+      BROWSER_SESSIONS_ENABLED: 'true'
       FORWARD_TO_AI_WORKER: 'false'
     depends_on: [redis]
   ui:
     build: ../ui
     ports: ['127.0.0.1:8186:80']
     environment:
+      AUTH_MODE: session
       NGINX_RESOLVER: 127.0.0.11
       BACKEND_URL: http://backend:8080
     depends_on: [backend]

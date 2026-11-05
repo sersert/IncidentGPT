@@ -1,12 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ThemeToggle } from './ThemeToggle'
 import { BrandMark } from './BrandMark'
 
+type AuthMode = 'basic' | 'session'
+const AuthModeContext = createContext<AuthMode>('basic')
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const client = useQueryClient()
+  const modeRef = useRef<AuthMode>('basic')
+  const [mode, setMode] = useState<AuthMode>('basic')
   const [state, setState] = useState<'loading' | 'signed-out' | 'signed-in'>(
     'loading',
   )
@@ -16,20 +28,42 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const signOut = useCallback(() => {
+    if (modeRef.current === 'basic') return
     client.clear()
     setPassword('')
     setState('signed-out')
   }, [client])
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/v1/auth/session', {
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-      .then((response) => setState(response.ok ? 'signed-in' : 'signed-out'))
-      .catch(() => {
-        if (!controller.signal.aborted) setState('signed-out')
-      })
+    async function restore() {
+      try {
+        const config = await fetch('/auth-config.json', {
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        if (!config.ok) throw new Error('auth configuration unavailable')
+        const { mode: configured } = await config.json()
+        if (configured !== 'basic' && configured !== 'session')
+          throw new Error('invalid auth mode')
+        modeRef.current = configured
+        setMode(configured)
+        if (configured === 'basic') {
+          setState('signed-in')
+          return
+        }
+        const response = await fetch('/api/v1/auth/session', {
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        setState(response.ok ? 'signed-in' : 'signed-out')
+      } catch {
+        if (!controller.signal.aborted) {
+          setError('Не удалось проверить вход. Обновите страницу.')
+          setState('signed-out')
+        }
+      }
+    }
+    void restore()
     window.addEventListener('incidentgpt:unauthorized', signOut)
     return () => {
       controller.abort()
@@ -64,7 +98,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setBusy(false)
     }
   }
-  if (state === 'signed-in') return children
+  if (state === 'signed-in')
+    return (
+      <AuthModeContext.Provider value={mode}>
+        {children}
+      </AuthModeContext.Provider>
+    )
   return (
     <div className="login-shell">
       <header className="login-header">
@@ -146,8 +185,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 export function LogoutButton() {
+  const mode = useContext(AuthModeContext)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
+  if (mode === 'basic') return null
   return (
     <button
       type="button"

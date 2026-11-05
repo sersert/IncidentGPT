@@ -33,6 +33,7 @@ const test = base.extend<{ apiFixture: Fixture }>({
     let assignee: string | null = null
     let assignmentAttempts = 0
     page.on('pageerror', error => errors.push(error.message))
+    await page.route('**/auth-config.json', route => route.fulfill({ json: { mode: 'session' } }))
     await page.route('**/api/v1/**', async route => {
       const request = route.request()
       const url = new URL(request.url())

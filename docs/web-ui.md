@@ -141,39 +141,64 @@ incidentgpt-enricher:
 
 ## Доступ
 
-Вход выполняется на отдельной странице IncidentGPT. HTML, стили и скрипты
-доступны до входа; данные `/api/` и `/ws/` защищены nginx `auth_request`.
-Backend проверяет существующие `TIMELINE_READ_USER` / `TIMELINE_READ_PASSWORD`.
-Настройте `incidentgpt-backend.readerAuth.existingSecret` с ключами `username` и
-`password`. При использовании `changes.existingSecret` пароль берётся из
-`timeline-read-password`, а пользователь — из `TIMELINE_READ_USER`. Эти два пути
-Secret нельзя включать одновременно. Umbrella-чарт не создаёт reader Secret.
+По умолчанию остаётся прежний **Basic-вход nginx** (`incidentgpt-ui.authMode: basic`):
+существующий htpasswd и Basic-клиенты работают после обновления без новых Secrets.
+`auth.enabled` и `auth.existingSecret` относятся к этому режиму. Secret чарта не
+создаётся при внешнем htpasswd. Новый образ UI совместим со старым backend в basic.
 
-Сессия действует восемь часов. Браузер получает случайный токен в HttpOnly,
-SameSite=Strict, Secure cookie, без пароля в localStorage/sessionStorage. В Redis
-сохраняется только SHA-256 токена, fingerprint credentials и время истечения;
-выход удаляет сессию, смена credentials инвалидирует старые сессии. Без Redis
-используется ограниченная память одного backend: рестарт завершает сессии, а
-несколько реплик требуют общего Redis. При недоступном настроенном Redis вход
-закрывается. Миграций данных нет; ключи сессий имеют TTL восемь часов.
+Страница входа с серверными сессиями — отдельный opt-in. Обновите UI и backend
+одним проверенным кандидатом и задайте:
 
-Для HTTP только на изолированном локальном preview задайте
-`incidentgpt-backend.env.BROWSER_SESSION_SECURE: "false"`; production использует
-HTTPS и значение по умолчанию `true`. Login/logout требуют доверенный Origin;
-nginx ограничивает частоту запросов к endpoint входа. За общим reverse proxy
-лимит может делиться между клиентами с одним адресом.
+```yaml
+incidentgpt-ui:
+  authMode: session
+  # CIDR именно ваших ingress/reverse proxy, не произвольных клиентов.
+  trustedProxyCIDRs: ["10.42.0.0/16"]
+  realIpHeader: X-Forwarded-For
+  loginBurst: 20
+incidentgpt-backend:
+  browserSessions:
+    enabled: true
+  readerAuth:
+    existingSecret: incidentgpt-reader
+```
 
-Существующие Basic-клиенты API продолжают работать. Cookie преобразуется во
-внутренний проверенный principal, поэтому независимые проверки backend и audit
-сохраняются. Nginx стирает входящий `X-Auth-User`. Для независимой защиты старых
-API включите `LEGACY_API_AUTH_REQUIRED=true`; backend и Redis должны оставаться
-приватными под NetworkPolicy. `/healthz` остаётся публичным для kubelet.
+CIDR в примере замените адресами ingress своей установки. По умолчанию список
+доверенных прокси пуст: нельзя подделать адрес через произвольный X-Forwarded-For.
+Без настройки доверия лимит POST-входов разделяется клиентами одного прокси.
+Лимит не применяется к проверке сессии и выходу. `/auth-config.json` публично
+сообщает только `basic|session`, без operational data и credentials.
 
-Старые `incidentgpt-ui.auth.*` и htpasswd Secret сохранены для совместимости
-values и отката; новый UI не использует htpasswd для входа. При обновлении
-обязательно задайте reader Secret backend и обновляйте **оба** образа — UI и
-backend. Без reader credentials вход закрыт. Не выводите Secrets или rendered
-YAML в CI/MR. Полный пример — [первый запуск](getting-started.md).
+Reader Secret содержит исходные `username` и `password` для `TIMELINE_READ_*`.
+При использовании `changes.existingSecret` пароль берётся из `timeline-read-password`,
+а пользователь — из `TIMELINE_READ_USER`; оба пути Secret одновременно запрещены.
+Umbrella-чарт отклоняет session без backend, включённого browserSessions и reader
+credentials. Сами значения ключей Secret проверит Kubernetes при запуске pod.
+
+В session HTML/стили/скрипты публичны, `/api/` и `/ws/` закрыты `auth_request`.
+Случайная HttpOnly/Secure/SameSite=Strict cookie действует восемь часов. Пароль
+не записывается в браузер и не подставляется в Authorization внутренних запросов:
+после проверки в контексте хранится только principal, который используют auth и audit.
+Любые изменения через cookie требуют доверенный Origin, включая старые API.
+Basic API-клиенты session-режима сверяются с backend reader credentials.
+
+Redis хранит `igpt:session:<SHA256(cookie)>` с TTL восемь часов: token-bound
+`HMAC-SHA256(user\0password, cookie)` и срок действия. Дамп не содержит отдельного
+офлайн-проверяемого хеша пароля. Выход удаляет запись; смена credentials отзывает
+старые сессии. Клиент сессий переподключается независимо от durable-режима, включая
+поздний старт Redis. При настроенном, но недоступном Redis возвращается 503; тихого
+перехода на локальные сессии нет. Только отсутствие `REDIS_ADDR` разрешает ограниченную
+память одного процесса. Для нескольких реплик нужен общий Redis.
+
+Для HTTP изолированного preview можно задать `BROWSER_SESSION_SECURE=false` в
+`incidentgpt-backend.env`; production использует HTTPS и значение true. Новый UI
+в session со старым backend несовместим (auth-check даст nginx 500); сначала
+обновите оба образа и reader Secret. Для отката верните `authMode: basic` и
+`browserSessions.enabled: false`, сохранив старый htpasswd Secret. Старые preview-ключи
+`browser-session:*` новая версия не читает; они исчезают по прежнему TTL.
+Данные инцидентов не мигрируют. Backend/Redis остаются приватными под NetworkPolicy.
+Для независимой проверки старых API сохраняется `LEGACY_API_AUTH_REQUIRED=true`.
+`/healthz` остаётся публичным. Не выводите Secrets или rendered YAML в CI/MR.
 
 ---
 

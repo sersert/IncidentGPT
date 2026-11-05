@@ -1,3 +1,7 @@
+# Браузерные сессии включаются вместе с incidentgpt-ui.authMode=session.
+browserSessions:
+  enabled: false
+
 replicaCount: 1
 
 image:

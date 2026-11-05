@@ -1,3 +1,6 @@
+{{- if and .Values.browserSessions.enabled (not .Values.readerAuth.existingSecret) (not .Values.changes.existingSecret) }}
+{{- fail "browserSessions.enabled requires readerAuth.existingSecret or changes.existingSecret" }}
+{{- end }}
 {{- if eq (toString .Values.env.REPORTS_ENABLED) "true" }}
 {{- if ne (toString .Values.env.DURABLE_ANALYSIS_ENABLED) "true" }}
 {{- fail "REPORTS_ENABLED requires DURABLE_ANALYSIS_ENABLED=true" }}
@@ -79,8 +82,10 @@ spec:
             - name: OPERATIONS_MCP_HEALTH_URL
               value: {{ .Values.operations.mcpHealthURL | quote }}
             {{- end }}
+            - name: BROWSER_SESSIONS_ENABLED
+              value: {{ .Values.browserSessions.enabled | quote }}
             {{- range $key, $value := .Values.env }}
-            {{- if not (or (hasPrefix "OPERATIONS_" $key) (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
+            {{- if not (or (hasPrefix "OPERATIONS_" $key) (eq $key "BROWSER_SESSIONS_ENABLED") (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}

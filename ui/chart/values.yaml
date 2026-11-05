@@ -1,6 +1,13 @@
 replicaCount: 1
 
-# Set to the cluster DNS address / internal backend service for this installation.
+# Basic сохраняет прежний вход через htpasswd. Session включается явно вместе с backend.
+authMode: basic
+# Только адреса доверенных ingress/reverse proxy; пустой список не доверяет X-Forwarded-For.
+trustedProxyCIDRs: []
+realIpHeader: X-Forwarded-For
+loginBurst: 20
+
+# DNS кластера и внутренний адрес backend для этой установки.
 dnsResolver: "10.96.0.10"
 backendURL: "http://incidentgpt-backend.incidentgpt.svc.cluster.local:8080"
 
@@ -40,7 +47,7 @@ networkPolicy:
 # Базовая авторизация на входе в UI (nginx). Прикрывает и интерфейс, и /api/.
 # Пароль хэшируется bcrypt'ом в шаблоне; для прода лучше подложить свой Secret
 # с ключом htpasswd через existingSecret и не держать пароль в values.
-# Legacy htpasswd settings retained for rollback. New sign-in uses the backend reader Secret.
+# В режиме basic используется htpasswd; session использует reader Secret backend.
 auth:
   enabled: true
   username: admin

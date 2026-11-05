@@ -89,7 +89,7 @@ kubectl -n incidentgpt create secret generic incidentgpt-preview-reader \
   --from-literal=password='<пароль-входа-в-IncidentGPT>'
 ```
 
-Для production используйте управляемые Secrets. Страница входа использует исходные username/password backend; старый htpasswd Secret UI больше не участвует в авторизации. Подробности — [доступ к веб-интерфейсу](web-ui.md#доступ).
+Для production используйте управляемые Secrets. По умолчанию сохраняется Basic/htpasswd. Для новой страницы входа явно включите `authMode: session` и `browserSessions.enabled: true`; она использует reader credentials backend. Подробности — [доступ к веб-интерфейсу](web-ui.md#доступ).
 
 ## 4. Разверните и проверьте готовность
 
