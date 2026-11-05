@@ -129,3 +129,9 @@ Graph/regroup требуют JSON и проверяют browser Origin; прои
 Чтение выключенного графа возвращает только `enabled:false` и пустые списки,
 без новых credentials/metadata; включённый граф требует backend Basic-auth.
 Подробные флаги, сроки хранения и rollout: [руководство](roadmap/dependency-correlation.md).
+
+## MCP и внешняя база знаний
+
+Источники включает оператор. Он ограничивает Confluence spaces и repository/paths и выдаёт серверу минимальные права чтения; модели доступны только короткие поисковые запросы. Worker хранит отдельный MCP client token и не получает credentials источников. MCP принимает внутренний Bearer доступ, отвергает browser Origin, а NetworkPolicy ограничивает вход AI worker того же namespace. Публичного ingress/OAuth discovery по умолчанию нет; token открывает общую настроенную область без изоляции по пользователям.
+
+Query и документы проходят fail-closed Sanitizer, ссылки/версии проверяются, произвольные адреса модели не запрашиваются, provider redirects не следуются. Документы не исполняются и не считаются подтверждением причины/восстановления; ссылки на них не проходят как incident evidence IDs. Бюджеты запросов, TLS/CA, дополнительные права egress и ротация Secrets описаны в [руководстве MCP](mcp-knowledge.md).

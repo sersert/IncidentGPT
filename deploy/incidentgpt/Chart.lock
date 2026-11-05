@@ -1,4 +1,7 @@
 dependencies:
+- name: incidentgpt-knowledge-mcp
+  repository: file://../../knowledge-mcp/chart
+  version: 0.2.0
 - name: incidentgpt-enricher
   repository: file://../../enricher/chart/incidentgpt-enricher
   version: 0.2.0
@@ -17,5 +20,5 @@ dependencies:
 - name: incidentgpt-redis
   repository: file://../redis
   version: 0.2.0
-digest: sha256:ee27e69d8c11032663e92215ee79b3ca472a97922491a78bc09a9b25a8b72864
-generated: "2026-08-09T20:19:59.383523+03:00"
+digest: sha256:a1c2027adfd9a9eecf02a210b1718df71cd2554e98b02e6bc894e5677a338198
+generated: "2026-11-04T19:06:07.036107+03:00"

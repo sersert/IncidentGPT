@@ -36,6 +36,16 @@ spec:
       ports:
         - port: 8080
           protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: knowledge-mcp
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - port: 8080
+          protocol: TCP
     # Prometheus scrape /metrics из monitoring namespace (kube-prometheus-stack)
     - from:
         - namespaceSelector:

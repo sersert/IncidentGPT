@@ -4,7 +4,8 @@ import { get } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import { formatDate } from '@/lib/time'
 
-type Analysis = { analysis_id: string; summary: string; completed_at: string; human_confirmation: string; missing_information: string[]; suggested_next_checks: string[]; composition_hash: string; hypotheses: { text: string; supporting_evidence_ids: string[]; contradicting_evidence_ids: string[] }[] }
+type KnowledgeReference = { reference_id: string; source_id: string; provider: string; title: string; url: string; version: string; excerpt: string; retrieved_at: string }
+type Analysis = { analysis_id: string; summary: string; completed_at: string; human_confirmation: string; missing_information: string[]; suggested_next_checks: string[]; composition_hash: string; knowledge?: { status: string; calls: number; references: KnowledgeReference[] }; hypotheses: { text: string; supporting_evidence_ids: string[]; contradicting_evidence_ids: string[]; knowledge_reference_ids?: string[] }[] }
 type Evidence = { evidence_id: string; source_type: string; availability: string; excerpt: string; collection_time?: string; observation_start?: string; resource: string }
 export function AnalysisHistory({ incidentId }: { incidentId: string }) {
  const [selected, setSelected] = useState('')
@@ -22,6 +23,17 @@ export function AnalysisHistory({ incidentId }: { incidentId: string }) {
     <p className="mb-2 text-xs text-text-muted">Подтверждение человеком: {a.human_confirmation}. Это гипотезы, а не установленная причина.</p>
     <p className="text-sm">{a.summary}</p>{a.composition_hash !== history.data?.composition_hash && <p role="status" className="mt-2 text-xs">Анализ относится к предыдущему составу инцидента. Обновите контекст.</p>}
     {a.hypotheses.map((h, i) => <div key={i} className="mt-3 border-t border-border-soft pt-3 text-xs"><p>{h.text}</p>{[['Поддерживает', h.supporting_evidence_ids], ['Противоречит', h.contradicting_evidence_ids]].map(([label, ids]) => <p key={label as string} className="mt-1">{label}: {(ids as string[]).map(id => <button key={id} className="mr-2 text-accent underline" onClick={() => setEvidenceId(id)}>{id.slice(0, 22)}…</button>)}</p>)}</div>)}
+    {a.knowledge && <section aria-label="Источники базы знаний" className="mt-3 border-t border-border-soft pt-3 text-xs">
+      <p>База знаний: {({ not_requested: 'поиск не понадобился', available: 'доступна', partial: 'частично доступна', unavailable: 'недоступна' } as Record<string, string>)[a.knowledge.status] ?? 'состояние неизвестно'}. Обращений: {a.knowledge.calls}.</p>
+      <p className="mt-1 text-text-muted">Документация — справочный материал, а не доказательство причины инцидента.</p>
+      {(a.knowledge.references ?? []).map(ref => <details key={ref.reference_id} className="mt-2 rounded bg-surface-tertiary p-3">
+        <summary>{ref.title} · {ref.source_id}</summary>
+        <a className="mt-2 inline-block text-accent underline" href={ref.url} target="_blank" rel="noopener noreferrer">Открыть источник</a>
+        <p className="mt-1 break-all">{ref.reference_id} · версия {ref.version} · получено {formatDate(ref.retrieved_at)}</p>
+        <p className="mt-1">Ссылки из гипотез: {a.hypotheses.filter(h => h.knowledge_reference_ids?.includes(ref.reference_id)).map(h => h.text).join('; ') || 'документ получен для справки'}</p>
+        <pre className="mt-2 whitespace-pre-wrap break-words">{ref.excerpt}</pre>
+      </details>)}
+    </section>}
     <p className="mt-3 text-xs">Не хватает данных: {a.missing_information?.join('; ') || 'модель не указала'}</p><p className="mt-2 text-xs">Следующие проверки: {a.suggested_next_checks?.join('; ') || 'не указаны'}</p>
    </>}
   </>}

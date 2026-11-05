@@ -1,3 +1,9 @@
+{{- if and .Values.knowledgeMCP.enabled (not .Values.knowledgeMCP.existingSecret) }}
+{{- fail "knowledgeMCP requires existingSecret" }}
+{{- end }}
+{{- if and .Values.knowledgeMCP.enabled (not .Values.knowledgeMCP.url) }}
+{{- fail "knowledgeMCP requires url" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,6 +41,15 @@ spec:
             - containerPort: 8080
               name: http
           env:
+            {{- if .Values.knowledgeMCP.enabled }}
+            - name: KNOWLEDGE_MCP_URL
+              value: {{ .Values.knowledgeMCP.url | quote }}
+            - name: KNOWLEDGE_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.knowledgeMCP.existingSecret }}
+                  key: {{ .Values.knowledgeMCP.tokenKey }}
+            {{- end }}
             - name: ANALYSIS_SERVICE_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -57,7 +72,7 @@ spec:
                   name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.sanitizerAuthSharedSecretKey | quote }}
             {{- range $name, $value := .Values.env }}
-            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN") (eq $name "SANITIZER_AUTH_SHARED_SECRET")) }}
+            {{- if not (or (eq $name "OPENROUTER_API_KEY") (eq $name "TELEGRAM_BOT_TOKEN") (eq $name "SANITIZER_AUTH_SHARED_SECRET") (eq $name "KNOWLEDGE_MCP_URL") (eq $name "KNOWLEDGE_MCP_TOKEN")) }}
             - name: {{ $name }}
               value: {{ $value | quote }}
             {{- end }}

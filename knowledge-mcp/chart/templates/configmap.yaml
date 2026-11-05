@@ -1,0 +1,14 @@
+{{- if not .Values.secrets.existingSecret }}
+{{- fail "knowledge-mcp requires secrets.existingSecret" }}
+{{- end }}
+{{- if not .Values.sources }}
+{{- fail "knowledge-mcp requires explicitly scoped sources" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "knowledge-mcp.fullname" . }}
+  labels:
+    {{- include "knowledge-mcp.labels" . | nindent 4 }}
+data:
+  sources.json: {{ .Values.sources | toJson | quote }}

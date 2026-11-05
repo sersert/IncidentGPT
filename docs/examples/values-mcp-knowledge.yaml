@@ -1,0 +1,32 @@
+# Сначала создайте Secrets и соберите образы одного кандидата: docs/mcp-knowledge.md.
+incidentgpt-knowledge-mcp:
+  enabled: true
+  secrets:
+    existingSecret: incidentgpt-knowledge-sources
+  sources:
+    - id: ops-confluence
+      kind: confluence
+      api_url: https://example.atlassian.net/wiki/rest/api
+      web_url: https://example.atlassian.net/wiki
+      spaces: [OPS]
+      token_key: confluence-token
+      username_key: confluence-email
+    - id: github-runbooks
+      kind: github
+      api_url: https://api.github.com
+      web_url: https://github.com
+      repository: your-org/runbooks
+      paths: [docs, runbooks]
+      token_key: github-token
+    - id: gitlab-runbooks
+      kind: gitlab
+      api_url: https://gitlab.example.com/api/v4
+      web_url: https://gitlab.example.com
+      repository: your-group/runbooks
+      ref: main
+      paths: [docs, runbooks]
+      token_key: gitlab-token
+ai-worker:
+  knowledgeMCP:
+    enabled: true
+    existingSecret: incidentgpt-knowledge-client
