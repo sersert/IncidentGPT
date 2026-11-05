@@ -1455,3 +1455,18 @@ td code {
     font-size: 36px;
   }
 }
+
+.toc button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toc button:hover {
+  color: var(--text);
+  background: var(--card-2);
+}

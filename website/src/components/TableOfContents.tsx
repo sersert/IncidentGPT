@@ -11,9 +11,21 @@ export function TableOfContents({ items }: TableOfContentsProps) {
   return (
     <aside className="toc" aria-label="Table of contents">
       {items.map((item) => (
-        <a key={item.id} href={`#${item.id}`}>
+        <button
+          key={item.id}
+          type="button"
+          onClick={() =>
+            document.getElementById(item.id)?.scrollIntoView({
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "instant"
+                : "smooth",
+              block: "start",
+            })
+          }
+        >
           {item.label}
-        </a>
+        </button>
       ))}
     </aside>
   );
