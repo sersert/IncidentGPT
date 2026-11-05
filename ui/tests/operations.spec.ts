@@ -85,7 +85,8 @@ test('disabled feature and denied credentials do not display healthy lamps', asy
   await expect(page.getByRole('article')).toHaveCount(0)
   await page.route('**/api/v1/operations/status', route => route.fulfill({ status: 401, body: 'unauthorized' }))
   await page.getByRole('button', { name: 'Обновить', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Состояние недоступно')
+  await expect(page.getByRole('heading', { name: 'Вход в IncidentGPT' })).toBeVisible()
+  await expect(page.getByRole('article')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Выключить AI', exact: true })).toHaveCount(0)
 })
 
