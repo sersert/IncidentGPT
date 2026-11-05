@@ -307,7 +307,7 @@ export const en = {
     alertmanagerNote:
       "route.receiver and receivers[].name must match exactly. continue: true keeps existing Slack, PagerDuty or other receivers active.",
     verifyIntro:
-      "The UI has its own Ingress. Sign-in uses the backend account from a reader Secret; nginx checks the session before granting access to /api/ and /ws/. Use HTTPS in production.",
+      "The UI retains nginx Basic authentication by default. Session sign-in is opt-in through authMode=session and browserSessions.enabled; it requires a backend reader Secret and HTTPS.",
   },
   configuration: {
     headings: {
@@ -488,9 +488,9 @@ export const en = {
       body: "The service still runs and keeps state in memory, but any pod restart wipes the history. For anything beyond a demo an archive needs a real database.",
     },
     accessIntro:
-      "Sign-in uses an eight-hour server session and an HttpOnly/Secure cookie. Configure a backend reader Secret with the original username/password. Legacy htpasswd is unused; upgrade UI and backend together.",
+      "Basic/htpasswd remains the default. Enable eight-hour server sessions with authMode=session, browserSessions.enabled=true and a backend reader Secret. Upgrade UI and backend together.",
     accessProbe:
-      "The readiness probe is served from /healthz without auth — otherwise kubelet would get a 401 and the pod would never become ready. The logged-in name is passed to backend in the X-Auth-User header and lands in the incident action log: who took it and when.",
+      "The readiness probe is served from /healthz without auth — otherwise kubelet would get a 401 and the pod would never become ready. Basic identity is verified by nginx; session identity is passed through backend context for the action log.",
     screens: [
       { name: "Incidents", body: "groups with the number of merged alerts and the short verdict of the analysis." },
       { name: "Incident", body: "group members, discarded noise with a reason, the full analysis, logs from the store, context (namespace, pod, node, deployment) and the action log." },
@@ -668,7 +668,7 @@ export const en = {
       body: "Sanitizer masks secrets, tokens and personal data before anything leaves the cluster, but it is a filter with rules, not a guarantee. Treat the model as an external party: do not widen enrichment to full configuration dumps or Kubernetes Secrets and expect masking to catch everything.",
     },
     security: {
-      behavior: "sign-in creates a server session. Nginx checks access to /api/ and /ws/, and the backend restores the verified identity for the action log.",
+      behavior: "Basic/htpasswd remains the default. Opt-in session sign-in protects /api/ and /ws/ through nginx, and the backend retains the verified identity for the action log.",
       risk: "one shared account, no roles, no SSO, no per-user audit beyond that header.",
       recommended: "put an authenticating proxy in front of the Ingress when the incident history needs real access control.",
     },

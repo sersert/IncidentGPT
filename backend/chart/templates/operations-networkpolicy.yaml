@@ -1,5 +1,6 @@
-{{- if and .Values.operations.enabled .Values.networkPolicy.enabled .Values.operations.mcpHealthURL }}
-# Дополнительный receiver grant для optional MCP из отдельного PR.
+{{- if and (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) .Values.networkPolicy.enabled .Values.operations.mcpNetworkPolicy.enabled .Values.operations.mcpHealthURL }}
+# Явный opt-in: первая Ingress-политика изолирует выбранные MCP-поды.
+# Предпочтительно настраивать все разрешённые клиенты в чарте самого MCP.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

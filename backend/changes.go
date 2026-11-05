@@ -105,6 +105,9 @@ func changeReadAuth(w http.ResponseWriter, r *http.Request) bool {
 	if !browserOriginAllowed(w, r) {
 		return false
 	}
+	if browserPrincipal(r) != "" {
+		return true
+	}
 	user, pass, ok := r.BasicAuth()
 	expectedUser, expectedPass := env("TIMELINE_READ_USER", ""), env("TIMELINE_READ_PASSWORD", "")
 	if !ok || expectedUser == "" || expectedPass == "" || subtle.ConstantTimeCompare([]byte(user), []byte(expectedUser)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(expectedPass)) != 1 {

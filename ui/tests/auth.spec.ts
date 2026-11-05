@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { mockDashboardStats } from '../src/api/mocks'
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/auth-config.json', (route) =>
+    route.fulfill({ json: { mode: 'session' } }),
+  )
+})
+
 test('sign-in protects deep links, reports errors, and logout removes workspace access', async ({
   page,
 }) => {
@@ -75,6 +81,7 @@ test('an expired API session returns to sign-in', async ({ page }) => {
   let expired = false
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '')
+    if (path === '/operations/status') return route.fulfill({ status: 404, body: 'disabled' })
     if (expired) return route.fulfill({ status: 401, body: 'session expired' })
     return route.fulfill({
       json:
@@ -95,4 +102,28 @@ test('an expired API session returns to sign-in', async ({ page }) => {
     page.getByRole('heading', { name: 'Вход в IncidentGPT' }),
   ).toBeVisible()
   await expect(page.getByLabel('Пароль', { exact: true })).toHaveValue('')
+})
+
+test('basic mode keeps the existing workspace without session login', async ({
+  page,
+}) => {
+  let sessionRequests = 0
+  await page.route('**/auth-config.json', (route) =>
+    route.fulfill({ json: { mode: 'basic' } }),
+  )
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/session')) sessionRequests++
+    return route.fulfill({
+      json: path.endsWith('/dashboard/stats') ? mockDashboardStats : [],
+    })
+  })
+  await page.goto('/')
+  await expect(
+    page.getByRole('button', { name: 'Обновить', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Выйти', exact: true }),
+  ).toHaveCount(0)
+  expect(sessionRequests).toBe(0)
 })

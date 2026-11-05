@@ -1,0 +1,9 @@
+{{- $ui := index .Values "incidentgpt-ui" -}}
+{{- $backend := index .Values "incidentgpt-backend" -}}
+{{- if and $ui.enabled (eq $ui.authMode "session") -}}
+{{- if not $backend.enabled -}}{{- fail "authMode=session requires incidentgpt-backend.enabled" -}}{{- end -}}
+{{- if not $backend.browserSessions.enabled -}}{{- fail "authMode=session requires incidentgpt-backend.browserSessions.enabled" -}}{{- end -}}
+{{- if and (not $backend.readerAuth.existingSecret) (not $backend.changes.existingSecret) -}}
+{{- fail "authMode=session requires backend readerAuth.existingSecret or changes.existingSecret" -}}
+{{- end -}}
+{{- end -}}

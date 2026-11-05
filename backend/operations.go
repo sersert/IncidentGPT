@@ -102,7 +102,7 @@ func handleAIControl(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	actor, _, _ := r.BasicAuth()
+	actor := verifiedActor(r)
 	if len(actor) > 200 {
 		http.Error(w, "actor identity exceeds budget", 400)
 		return
@@ -168,8 +168,9 @@ type OperationsSnapshot struct {
 var operationsClient = &http.Client{Timeout: 3500 * time.Millisecond, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 var operationsCache struct {
 	sync.Mutex
-	at    time.Time
-	value OperationsSnapshot
+	at     time.Time
+	value  OperationsSnapshot
+	flight chan struct{}
 }
 
 func workerBase() string {
@@ -234,12 +235,44 @@ func probeComponent(ctx context.Context, id, name, endpoint string, authenticate
 	_ = json.Unmarshal(raw, &data)
 	return check, data
 }
+
+// Одно независимое обновление для всех клиентов; отмена браузерного запроса
+// не превращается в закэшированный сбой остальных источников.
 func collectOperations(ctx context.Context) OperationsSnapshot {
 	operationsCache.Lock()
-	defer operationsCache.Unlock()
 	if time.Since(operationsCache.at) < 10*time.Second {
-		return operationsCache.value
+		value := operationsCache.value
+		operationsCache.Unlock()
+		return value
 	}
+	if operationsCache.flight == nil {
+		done := make(chan struct{})
+		operationsCache.flight = done
+		go func() {
+			collectCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			value := gatherOperations(collectCtx)
+			cancel()
+			operationsCache.Lock()
+			operationsCache.value = value
+			operationsCache.at = time.Now()
+			operationsCache.flight = nil
+			close(done)
+			operationsCache.Unlock()
+		}()
+	}
+	done := operationsCache.flight
+	operationsCache.Unlock()
+	select {
+	case <-done:
+		operationsCache.Lock()
+		value := operationsCache.value
+		operationsCache.Unlock()
+		return value
+	case <-ctx.Done():
+		return OperationsSnapshot{CheckedAt: time.Now().UTC()}
+	}
+}
+func gatherOperations(ctx context.Context) OperationsSnapshot {
 	snapshot := OperationsSnapshot{CheckedAt: time.Now().UTC(), Components: []ComponentCheck{{ID: "backend", Name: "Backend API", Status: "healthy", Detail: "API ответил на этот запрос", CheckedAt: time.Now().UTC()}}}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -254,7 +287,7 @@ func collectOperations(ctx context.Context) OperationsSnapshot {
 		}) {
 			defer wg.Done()
 			endpoint := target.url
-			if endpoint == "/readyz" {
+			if strings.HasPrefix(endpoint, "/") {
 				endpoint = ""
 			}
 			check, data := probeComponent(ctx, target.id, target.name, endpoint, target.auth)
@@ -293,23 +326,37 @@ func collectOperations(ctx context.Context) OperationsSnapshot {
 			snapshot.Components = append(snapshot.Components, check)
 		}(target)
 	}
-	wg.Wait()
-	redisCheck := ComponentCheck{ID: "redis", Name: "Redis", Status: "not_configured", Detail: "Постоянное хранилище не настроено", CheckedAt: time.Now().UTC()}
-	if store.disk != nil {
-		pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-		start := time.Now()
-		err := store.disk.rdb.Ping(pingCtx).Err()
-		cancel()
-		redisCheck.LatencyMS = time.Since(start).Milliseconds()
-		if err == nil {
-			redisCheck.Status = "healthy"
-			redisCheck.Detail = "Redis PING успешен"
-		} else {
-			redisCheck.Status = "unhealthy"
-			redisCheck.Detail = "Redis не отвечает"
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		redisCheck := ComponentCheck{ID: "redis", Name: "Redis", Status: "not_configured", Detail: "Постоянное хранилище не настроено", CheckedAt: time.Now().UTC()}
+		if store.disk != nil {
+			pingCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			start := time.Now()
+			err := store.disk.rdb.Ping(pingCtx).Err()
+			cancel()
+			redisCheck.LatencyMS = time.Since(start).Milliseconds()
+			if err == nil {
+				redisCheck.Status = "healthy"
+				redisCheck.Detail = "Redis PING успешен"
+			} else {
+				redisCheck.Status = "unhealthy"
+				redisCheck.Detail = "Redis не отвечает"
+			}
 		}
-	}
-	snapshot.Components = append(snapshot.Components, redisCheck)
+		mu.Lock()
+		snapshot.Components = append(snapshot.Components, redisCheck)
+		mu.Unlock()
+
+	}()
+	go func() {
+		defer wg.Done()
+		check := probeLogs(ctx)
+		mu.Lock()
+		snapshot.Components = append(snapshot.Components, check)
+		mu.Unlock()
+	}()
+	wg.Wait()
 	model := ComponentCheck{ID: "model", Name: "Модель LLM", Status: "unknown", Detail: "Нет недавнего подтверждённого ответа модели", CheckedAt: time.Now().UTC()}
 	if data, ok := snapshot.Worker["model"].(map[string]any); ok {
 		if status, ok := data["status"].(string); ok && (status == "healthy" || status == "unhealthy" || status == "unknown") {
@@ -340,12 +387,10 @@ func collectOperations(ctx context.Context) OperationsSnapshot {
 			telegram.Detail = "getMe успешен; отправка в канал отдельно не проверялась"
 		}
 	}
-	snapshot.Components = append(snapshot.Components, telegram, probeLogs(ctx))
+	snapshot.Components = append(snapshot.Components, telegram)
 
 	order := map[string]int{"model": 0, "worker": 1, "backend": 2, "enricher": 3, "redis": 4, "enricher_redis": 5, "sanitizer": 6, "telegram": 7, "metrics": 8, "logs": 9, "kubernetes": 10, "mcp": 11}
 	sort.SliceStable(snapshot.Components, func(i, j int) bool { return order[snapshot.Components[i].ID] < order[snapshot.Components[j].ID] })
-	operationsCache.at = time.Now()
-	operationsCache.value = snapshot
 	return snapshot
 }
 func handleOperations(w http.ResponseWriter, r *http.Request) {
@@ -359,6 +404,10 @@ func handleOperations(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	snapshot := collectOperations(ctx)
+	if ctx.Err() != nil {
+		http.Error(w, "monitoring request canceled", 504)
+		return
+	}
 	state, err := readAIControl(ctx)
 	snapshot.ControlAvailable = err == nil
 	if err == nil {
@@ -389,7 +438,8 @@ func handleModelProbe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "AI paused", 423)
 		return
 	}
-	allowed, err := store.disk.rdb.SetNX(ctx, "igpt:operations:model-probe:limit", "1", time.Minute).Result()
+	probeOwner := newStableID("probe")
+	allowed, err := store.disk.rdb.SetNX(ctx, "igpt:operations:model-probe:limit", probeOwner, time.Minute).Result()
 	if err != nil {
 		http.Error(w, "probe limiter unavailable", 503)
 		return
@@ -417,7 +467,18 @@ func handleModelProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp.StatusCode != 200 {
-		http.Error(w, fmt.Sprintf("worker probe HTTP %d", resp.StatusCode), resp.StatusCode)
+		if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 423 || resp.StatusCode == 503 {
+			releaseOwnedLock(store.disk.rdb, "igpt:operations:model-probe:limit", probeOwner)
+		}
+		status, code := http.StatusBadGateway, "worker_probe_failed"
+		if resp.StatusCode == 423 {
+			status, code = 423, "ai_paused"
+		} else if resp.StatusCode == 503 {
+			status, code = 503, "worker_unavailable"
+		} else if resp.StatusCode == 429 {
+			status, code = 429, "worker_rate_limited"
+		}
+		writeJSON(w, status, map[string]string{"error_code": code})
 		return
 	}
 	var result struct {

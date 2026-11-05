@@ -135,6 +135,8 @@ jobs:
       - run: helm lint sanitizer/chart
       - run: helm lint backend/chart
       - run: helm lint ui/chart
+      - name: Browser auth compatibility guards
+        run: bash deploy/test-browser-auth-charts.sh
       - run: helm lint deploy/redis
       - name: operations configuration guards
         run: bash deploy/test-operations-charts.sh
@@ -176,6 +178,10 @@ jobs:
           exit 1
       - name: Verify session lifecycle and protected routes
         run: python3 deploy/check-browser-session.py
+      - name: Verify default Basic upgrade without reader Secret
+        run: python3 deploy/test-basic-auth-upgrade.py
+      - name: Verify late Redis recovery without durable mode
+        run: python3 deploy/test-session-redis-recovery.py
       - name: Preview logs
         if: failure()
         run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml logs --tail=80

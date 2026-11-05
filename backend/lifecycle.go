@@ -204,7 +204,7 @@ func handleLifecycle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	actor, _, _ := r.BasicAuth()
+	actor := verifiedActor(r)
 	err := mutateLifecycle(ctx, inc, func(l *Lifecycle) error {
 		if l.Revision != req.Revision {
 			return redis.TxFailedErr

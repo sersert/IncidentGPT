@@ -97,7 +97,7 @@ func handleRegroup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	actor, _, _ := r.BasicAuth()
+	actor := verifiedActor(r)
 	auditID := newStableID("regroup")
 	moved.IncidentID = &target.ID
 	moved.CorrelationReason = "human move by " + actor + "; audit " + auditID
