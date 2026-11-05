@@ -50,6 +50,8 @@ jobs:
         run: npm test
 
       - name: Build
+        env:
+          VITE_PRODUCT_URL: ${{ vars.INCIDENTGPT_PRODUCT_URL || (github.repository == 'sersert/IncidentGPT' && 'https://incidentgpt.sersert.io/') || '' }}
         working-directory: website
         run: npm run build
 

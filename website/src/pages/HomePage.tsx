@@ -20,8 +20,8 @@ export function HomePage({ t, language }: HomePageProps) {
     <>
       <Hero t={t} language={language} />
       <section className="home-docs">
-        <h2>{language === "ru" ? "Документация" : "Documentation"}</h2>
-        <nav aria-label={language === "ru" ? "С чего начать" : "Get started"}>
+        <h2>{t.common.documentation}</h2>
+        <nav aria-label={t.common.getStarted}>
           {(["installation", "configuration", "webUi"] as const).map((page) => (
             <a
               key={page}

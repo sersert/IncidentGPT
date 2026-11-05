@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { Search } from "./Search";
 import { BrandMark } from "./BrandMark";
 import { X } from "lucide-react";
@@ -12,6 +12,7 @@ type MobileNavigationProps = {
   theme: ThemeMode;
   activePage: PageId;
   onClose: () => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   onLanguageChange: (language: Language) => void;
   onThemeChange: (theme: ThemeMode) => void;
 };
@@ -23,19 +24,24 @@ export function MobileNavigation({
   theme,
   activePage,
   onClose,
+  triggerRef,
   onLanguageChange,
   onThemeChange,
 }: MobileNavigationProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (!open) return;
-    dialog.current?.showModal();
+    const element = dialog.current;
+    const trigger = triggerRef.current;
+    if (element && !element.open) element.showModal();
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      if (element?.open) element.close();
       document.body.style.overflow = previous;
+      trigger?.focus();
     };
-  }, [open]);
+  }, [open, triggerRef]);
   if (!open) {
     return null;
   }
@@ -43,8 +49,9 @@ export function MobileNavigation({
   return (
     <dialog
       ref={dialog}
+      id="documentation-menu"
       className="mobile-panel"
-      aria-label={language === "ru" ? "Навигация" : "Navigation"}
+      aria-label={t.common.mobileNavigation}
       onCancel={onClose}
     >
       <div className="mobile-panel-head">
@@ -57,7 +64,7 @@ export function MobileNavigation({
           type="button"
           onClick={onClose}
           autoFocus
-          aria-label={language === "ru" ? "Закрыть меню" : "Close menu"}
+          aria-label={t.common.closeMenu}
         >
           <X size={20} />
         </button>

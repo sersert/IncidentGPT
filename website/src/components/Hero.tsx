@@ -1,10 +1,10 @@
 import { ArrowUpRight, Check, Layers } from "lucide-react";
+import { productUrl } from "../lib/product";
 import { BrandMark } from "./BrandMark";
 import type { Language, Translation } from "../i18n/types";
 import { buildRoute } from "../data/navigation";
 
 export function Hero({ t, language }: { t: Translation; language: Language }) {
-  const ru = language === "ru";
   return (
     <section className="hero-section">
       <div className="hero-copy">
@@ -17,16 +17,19 @@ export function Hero({ t, language }: { t: Translation; language: Language }) {
           >
             {t.hero.installButton}
           </a>
-          <a
-            className="button"
-            href="https://incidentgpt.sersert.io/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {ru ? "Открыть продукт" : "Open workspace"}
-            <ArrowUpRight size={16} />
-          </a>
+          {productUrl ? (
+            <a
+              className="button"
+              href={productUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t.hero.productButton}
+              <ArrowUpRight size={16} />
+            </a>
+          ) : null}
         </div>
+        <p className="hero-note">{t.home.humanNote}</p>
         <a
           className="hero-source text-link"
           href="https://github.com/sersert/IncidentGPT"
@@ -36,49 +39,38 @@ export function Hero({ t, language }: { t: Translation; language: Language }) {
           GitHub <ArrowUpRight size={13} />
         </a>
       </div>
-      <div
-        className="workspace-preview"
-        aria-label={
-          ru
-            ? "Демонстрационный пример инцидента"
-            : "Illustrative incident example"
-        }
-      >
+      <div className="workspace-preview" aria-label={t.hero.preview.label}>
         <div className="preview-toolbar">
           <span>
             <BrandMark size={17} />
             IncidentGPT
           </span>
-          <span>{ru ? "Пример интерфейса" : "UI example"}</span>
+          <span>{t.hero.preview.example}</span>
         </div>
         <div className="preview-content">
           <div className="preview-breadcrumb">
-            {ru ? "Инциденты" : "Incidents"}
+            {t.hero.preview.incidents}
             <span>/</span>INC-042
           </div>
           <div className="preview-heading">
             <span className="preview-severity">P2</span>
-            <span>{ru ? "Требует внимания" : "Needs attention"}</span>
+            <span>{t.hero.preview.status}</span>
           </div>
-          <h2>{ru ? "Высокая нагрузка на CPU" : "High CPU utilization"}</h2>
+          <h2>{t.hero.preview.title}</h2>
           <p className="preview-meta">
             monitoring <span>·</span> synthetic-pod-1
           </p>
           <div className="preview-tabs">
-            <span>{ru ? "Обзор" : "Overview"}</span>
-            <span>{ru ? "Алерты · 3" : "Alerts · 3"}</span>
-            <span>{ru ? "Контекст" : "Context"}</span>
+            <span>{t.navigation.overview}</span>
+            <span>{t.hero.preview.alerts}</span>
+            <span>{t.hero.preview.context}</span>
           </div>
           <div className="preview-analysis">
             <span className="preview-label">
               <Layers size={14} />
-              {ru ? "Черновик AI-разбора" : "AI analysis draft"}
+              {t.hero.preview.analysis}
             </span>
-            <p>
-              {ru
-                ? "Насыщение CPU совпало с ростом задержек. Проверьте лимиты ресурсов и последние изменения workload."
-                : "CPU saturation coincides with rising latency. Check resource limits and recent workload changes."}
-            </p>
+            <p>{t.hero.preview.body}</p>
           </div>
           <div className="preview-evidence">
             <Check size={14} />
@@ -86,14 +78,10 @@ export function Hero({ t, language }: { t: Translation; language: Language }) {
             <Check size={14} />
             Kubernetes
             <Check size={14} />
-            {ru ? "Логи" : "Logs"}
+            {t.hero.preview.logs}
           </div>
         </div>
-        <div className="preview-caption">
-          {ru
-            ? "Демонстрационные данные · решение принимает инженер"
-            : "Illustrative data · the engineer makes the decision"}
-        </div>
+        <div className="preview-caption">{t.hero.preview.caption}</div>
       </div>
     </section>
   );

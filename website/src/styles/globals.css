@@ -26,7 +26,6 @@
   background: var(--bg);
   color: var(--text);
 }
-
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f7f8fa;
@@ -40,45 +39,26 @@
   --k8s: #2c5db2;
   --shadow: 0 8px 28px #20283808;
 }
-
 * {
   box-sizing: border-box;
 }
-
 html {
   scroll-behavior: smooth;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
 body {
   margin: 0;
   min-width: 320px;
   background: var(--bg);
   color: var(--text);
 }
-
 a {
   color: inherit;
 }
-
 button,
 input,
 select {
   font: inherit;
 }
-
 button,
 a,
 input,
@@ -86,42 +66,36 @@ select {
   outline-color: var(--ai);
   outline-offset: 3px;
 }
-
 .site-header {
   position: sticky;
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 18px;
-  min-height: 72px;
   padding: 0 28px;
   border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 20%);
-  background: color-mix(in srgb, var(--bg), transparent 10%);
-  backdrop-filter: blur(18px);
+  min-height: 64px;
+  padding-inline: max(24px, calc((100vw - 1220px) / 2));
+  gap: 20px;
+  grid-template-columns: auto 1fr auto;
+  background: var(--surface);
+  backdrop-filter: none;
 }
-
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-weight: 600;
   text-decoration: none;
+  letter-spacing: -0.04em;
+  font-size: 18px;
 }
-
-.brand-logo {
-  width: 24px;
-  height: 24px;
-  display: block;
-}
-
 .desktop-nav {
   display: flex;
   align-items: center;
   gap: 6px;
+  justify-content: center;
 }
-
 .desktop-nav a,
 .docs-sidebar a,
 .toc a,
@@ -129,13 +103,11 @@ select {
   color: var(--muted);
   text-decoration: none;
 }
-
 .desktop-nav a {
   padding: 9px 10px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
 }
-
 .desktop-nav a.active,
 .desktop-nav a:hover,
 .docs-sidebar a.active,
@@ -145,13 +117,11 @@ select {
   color: var(--text);
   background: color-mix(in srgb, var(--card-2), transparent 25%);
 }
-
 .header-tools {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 .icon-button,
 .icon-text,
 .button,
@@ -164,7 +134,6 @@ select {
   border-radius: 8px;
   cursor: pointer;
 }
-
 .icon-button,
 .mobile-menu-button {
   display: inline-grid;
@@ -172,11 +141,9 @@ select {
   width: 38px;
   height: 38px;
 }
-
 .mobile-menu-button {
   display: none;
 }
-
 .icon-text,
 .button {
   display: inline-flex;
@@ -186,19 +153,16 @@ select {
   padding: 0 12px;
   text-decoration: none;
 }
-
 .button.primary {
   border-color: transparent;
   background: var(--ai);
   color: var(--bg);
 }
-
 .text-link {
   color: var(--muted);
   text-decoration-color: var(--border);
   text-underline-offset: 4px;
 }
-
 .segmented {
   display: flex;
   padding: 3px;
@@ -206,7 +170,6 @@ select {
   border-radius: 8px;
   background: var(--surface);
 }
-
 .segmented button {
   min-width: 38px;
   height: 30px;
@@ -214,18 +177,15 @@ select {
   background: transparent;
   color: var(--muted);
 }
-
 .segmented button.selected,
 .tabs .selected {
   background: var(--card-2);
   color: var(--text);
 }
-
 .search {
   position: relative;
-  width: min(290px, 24vw);
+  width: 190px;
 }
-
 .search label {
   display: flex;
   align-items: center;
@@ -237,15 +197,14 @@ select {
   background: var(--surface);
   color: var(--muted);
 }
-
 .search input {
   width: 100%;
   min-width: 0;
   border: 0;
   background: transparent;
   color: var(--text);
+  font-size: 12px;
 }
-
 .search-results {
   position: absolute;
   top: 46px;
@@ -258,7 +217,6 @@ select {
   background: var(--surface);
   box-shadow: var(--shadow);
 }
-
 .search-results a,
 .search-results .empty {
   display: grid;
@@ -268,34 +226,29 @@ select {
   color: var(--muted);
   text-decoration: none;
 }
-
 .search-results strong {
   color: var(--text);
 }
-
 .home-main,
 .docs-shell,
 .site-footer {
   width: min(1220px, calc(100% - 36px));
   margin: 0 auto;
 }
-
 .hero-section {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 42px;
   align-items: center;
-  min-height: 580px;
-  padding: 58px 0 36px;
+  margin-top: 0;
+  gap: 64px;
+  padding: 65px 0;
+  min-height: 520px;
 }
-
-.eyebrow,
 .breadcrumbs {
   color: var(--muted);
   font-size: 14px;
   letter-spacing: 0;
 }
-
 h1,
 h2,
 h3 {
@@ -303,7 +256,6 @@ h3 {
   line-height: 1.1;
   letter-spacing: 0;
 }
-
 h1 {
   max-width: 900px;
   font-size: clamp(38px, 4.5vw, 62px);
@@ -311,84 +263,42 @@ h1 {
   letter-spacing: -0.05em;
   line-height: 1.08;
 }
-
 h2 {
   font-size: 26px;
   font-weight: 550;
   letter-spacing: -0.025em;
 }
-
 h3 {
   font-size: 19px;
 }
-
 p,
 li,
 dd {
   color: var(--muted);
   line-height: 1.65;
 }
-
 .hero-description {
-  max-width: 720px;
-  font-size: 16px;
+  max-width: 58ch;
+  font-size: 15px;
 }
-
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  margin-top: 28px;
+  margin-top: 24px;
 }
-
-.flow-card {
-  display: grid;
-  gap: 10px;
-  padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card), transparent 8%),
-    color-mix(in srgb, var(--surface), transparent 4%)
-  );
-  box-shadow: var(--shadow);
-}
-
-.flow-row {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-}
-
-.flow-row span {
-  display: block;
-  width: 100%;
-  padding: 13px;
-  border: 1px solid color-mix(in srgb, var(--border), transparent 20%);
-  border-radius: 8px;
-  text-align: center;
-  background: var(--card);
-}
-
 .section-heading {
   display: grid;
   gap: 10px;
   margin-bottom: 22px;
 }
-
 .generator-grid {
   display: grid;
-  /* Полю нужна фиксированная комфортная ширина: в двух узких колонках адреса
-     и модели не помещались. Остальное забирает вывод. */
   grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
   gap: 22px;
-  /* Без этого колонка формы растягивается по высоте вывода, а её строки
-     разъезжаются: подпись оказывается далеко от своего поля. */
   align-items: start;
 }
-
 .feature-grid,
 .quick-grid,
 .troubleshooting-grid,
@@ -397,16 +307,11 @@ dd {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
-
-/* Карточкам метрик нужна ширина под PromQL: три в ряд режут запрос в лапшу. */
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px;
 }
-
-.feature-card,
-.compare-grid article,
 .metric-card,
 .problem-card,
 .limitation-list article,
@@ -417,46 +322,27 @@ dd {
   border-radius: 8px;
   background: color-mix(in srgb, var(--card), transparent 4%);
 }
-
-.feature-card,
-.compare-grid article,
 .metric-card,
 .problem-card,
 .limitation-list article {
   padding: 18px;
 }
-
-.feature-icon {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  margin-bottom: 14px;
-  border-radius: 8px;
-  color: var(--ai);
-  background: var(--card-2);
-}
-
 .callout {
   display: flex;
   gap: 12px;
   padding: 16px;
   margin: 22px 0;
 }
-
 .callout strong {
   display: block;
   margin-bottom: 4px;
 }
-
 .callout-warning {
   border-color: color-mix(in srgb, var(--warning), var(--border) 45%);
 }
-
 .callout-success {
   border-color: color-mix(in srgb, var(--success), var(--border) 45%);
 }
-
 .code-block {
   overflow: hidden;
   margin: 0 0 16px;
@@ -464,11 +350,9 @@ dd {
   border-radius: 8px;
   background: #070a10;
 }
-
 :root[data-theme="light"] .code-block {
   background: #0b1020;
 }
-
 .code-block figcaption {
   display: flex;
   justify-content: space-between;
@@ -481,13 +365,11 @@ dd {
   font-family: var(--mono);
   font-size: 13px;
 }
-
 .code-block pre {
   overflow: auto;
   margin: 0;
   padding: 16px;
 }
-
 .code-block code {
   font-family: var(--mono);
   font-size: 13px;
@@ -495,86 +377,65 @@ dd {
   color: #e9eef9;
   white-space: pre;
 }
-
-.reliability-band {
-  margin: 48px 0;
-  padding: 34px;
-  border: 1px solid color-mix(in srgb, var(--ai), var(--border));
-  border-radius: 8px;
-  background: var(--surface);
-}
-
 section {
   scroll-margin-top: 94px;
   margin: 46px 0;
 }
-
 .docs-shell {
   display: grid;
-  grid-template-columns: 210px minmax(0, 1fr) 180px;
-  gap: 26px;
   padding-top: 34px;
+  grid-template-columns: 190px minmax(0, 1fr) 160px;
+  gap: 32px;
 }
-
 .docs-sidebar,
 .toc {
   position: sticky;
   top: 92px;
   align-self: start;
 }
-
 .docs-sidebar nav,
 .toc {
   display: grid;
   gap: 6px;
 }
-
 .docs-sidebar a,
 .toc a {
   padding: 9px 10px;
   border-radius: 8px;
   font-size: 14px;
 }
-
 .toc a {
   font-size: 13px;
 }
-
 .page-header {
   padding-bottom: 26px;
   border-bottom: 1px solid var(--border);
 }
-
 .page-header h1 {
-  font-size: clamp(38px, 5vw, 58px);
+  font-size: 36px;
+  letter-spacing: -0.04em;
 }
-
 .doc-page h2 {
   margin-bottom: 14px;
 }
-
 .steps {
   padding-left: 22px;
 }
-
 .fact-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin: 18px 0;
 }
-
 .fact-grid div {
   display: grid;
   gap: 8px;
   padding: 14px;
 }
-
 .fact-grid span {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
-
 .diagram {
   overflow: auto;
   padding: 18px;
@@ -582,12 +443,10 @@ section {
   border-radius: 8px;
   background: var(--surface);
 }
-
 .flow-explorer {
   overflow: hidden;
   margin-top: 18px;
 }
-
 .flow-tabs,
 .tabs,
 .generator-actions {
@@ -596,7 +455,6 @@ section {
   gap: 8px;
   margin-bottom: 12px;
 }
-
 .flow-tabs button,
 .tabs button,
 .static-tabs span {
@@ -604,97 +462,76 @@ section {
   padding: 0 12px;
   border-radius: 8px;
 }
-
 .flow-detail {
   padding: 18px;
 }
-
 .flow-detail dl,
 .metric-card dl {
   display: grid;
   gap: 10px;
   margin: 14px 0 0;
 }
-
-/* Имя метрики — длинный идентификатор в одно слово: без переноса вылезает
-   за карточку. */
 .metric-card h3 {
   margin: 0 0 8px;
   font-family: var(--mono);
   font-size: 15px;
   overflow-wrap: anywhere;
 }
-
 .metric-card > p {
   margin: 0 0 14px;
   color: var(--muted);
   font-size: 14px;
 }
-
-/* PromQL в узкой карточке лучше перенести, чем прятать в горизонтальный скролл. */
 .metric-card .code-block code {
   font-size: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-
 .metric-card .code-block pre {
   padding: 12px 14px;
 }
-
 .metric-card dl {
   gap: 0;
   border-top: 1px solid var(--border);
 }
-
 .metric-card dl > div {
   display: grid;
-  /* «Кардинальность» — самая длинная подпись, по ней и колонка. */
   grid-template-columns: minmax(0, 124px) minmax(0, 1fr);
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 45%);
 }
-
 .metric-card dl > div:last-child {
   border-bottom: none;
 }
-
-/* Без uppercase: «Кардинальность» капсом не влезает в колонку подписи. */
 .metric-card dt {
   color: var(--muted);
   font-size: 12.5px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-
 .metric-card dd {
   font-size: 13px;
   line-height: 1.5;
 }
-
 dt {
   color: var(--text);
   font-weight: 700;
 }
-
 dd {
   margin: 0;
 }
-
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-
 table {
   width: 100%;
   min-width: 720px;
   border-collapse: collapse;
   background: color-mix(in srgb, var(--card), transparent 4%);
 }
-
 th,
 td {
   padding: 12px 14px;
@@ -702,32 +539,24 @@ td {
   text-align: left;
   vertical-align: top;
 }
-
 th {
   color: var(--text);
 }
-
 td code {
   font-family: var(--mono);
   color: var(--text);
-  /* Длинные URL внутри значений иначе распирают таблицу в горизонтальный скролл. */
   overflow-wrap: anywhere;
 }
-
-/* Таблицы переменных окружения: четыре колонки, из них три — длинные
-   технические значения. Фиксированная раскладка не даёт им растянуть строку. */
 .env-table table {
   min-width: 0;
   table-layout: fixed;
   font-size: 13px;
   line-height: 1.55;
 }
-
 .env-table th,
 .env-table td {
   padding: 10px 12px;
 }
-
 .env-table th {
   font-size: 12px;
   letter-spacing: 0.04em;
@@ -735,26 +564,21 @@ td code {
   color: var(--muted);
   background: var(--surface);
 }
-
 .env-table td:first-child code {
   font-size: 12.5px;
   color: var(--text);
 }
-
 .env-table td:nth-child(2) code,
 .env-table td:nth-child(3) code {
   font-size: 12px;
   color: var(--muted);
 }
-
 .env-table tbody tr:last-child td {
   border-bottom: none;
 }
-
 .env-table tbody tr:hover td {
   background: color-mix(in srgb, var(--card-2), transparent 55%);
 }
-
 .env-table .muted {
   margin: 6px 0 0;
   font-size: 12px;
@@ -762,7 +586,6 @@ td code {
   padding-left: 9px;
   border-left: 2px solid var(--border);
 }
-
 .check-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -770,26 +593,22 @@ td code {
   padding: 0;
   list-style: none;
 }
-
 .check-list li::before {
   content: "[ ] ";
   color: var(--success);
   font-family: var(--mono);
 }
-
 .generator {
   padding: 22px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
 }
-
 .generator-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
-
 .generator-form label {
   display: grid;
   align-content: start;
@@ -797,13 +616,9 @@ td code {
   color: var(--muted);
   font-size: 13px;
 }
-
-/* Сгенерированные values длинные: без предела высоты кнопки и форма уезжают
-   на экран вверх. */
 .generator .code-block pre {
   max-height: 520px;
 }
-
 .generator-form input,
 .mobile-controls select {
   width: 100%;
@@ -814,34 +629,30 @@ td code {
   background: var(--card);
   color: var(--text);
 }
-
 .muted {
   color: var(--muted);
 }
-
 .site-footer {
   display: flex;
   justify-content: space-between;
   gap: 24px;
   padding: 40px 0;
   border-top: 1px solid var(--border);
+  font-size: 12px;
 }
-
 .site-footer p {
   max-width: 520px;
 }
-
 .site-footer nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  max-width: 560px;
+  gap: 14px 22px;
 }
-
 .site-footer a {
   color: var(--muted);
   text-decoration: none;
 }
-
 .back-to-top {
   position: fixed;
   right: 18px;
@@ -852,8 +663,9 @@ td code {
   background: var(--surface);
   color: var(--muted);
   text-decoration: none;
+  cursor: pointer;
+  font-size: 12px;
 }
-
 .mobile-panel {
   position: fixed;
   inset: 0;
@@ -863,181 +675,37 @@ td code {
   gap: 18px;
   padding: 18px;
   background: var(--bg);
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  border: 0;
+  overflow: auto;
+  color: var(--text);
 }
-
 .mobile-panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
 }
-
 .mobile-panel nav {
   display: grid;
   gap: 8px;
 }
-
 .mobile-panel nav a {
   padding: 13px;
   border-radius: 8px;
   background: var(--surface);
 }
-
 .mobile-controls {
   display: grid;
   gap: 12px;
 }
-
-@media (max-width: 1120px) {
-  .desktop-nav {
-    display: none;
-  }
-
-  .mobile-menu-button {
-    display: inline-grid;
-  }
-
-  .search {
-    width: min(260px, 34vw);
-  }
-
-  .docs-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .docs-sidebar,
-  .toc {
-    display: none;
-  }
-}
-
-@media (max-width: 820px) {
-  .site-header {
-    grid-template-columns: auto 1fr;
-    padding: 0 16px;
-  }
-
-  .header-tools {
-    justify-content: end;
-  }
-
-  .search,
-  .header-tools .segmented,
-  .header-tools .icon-button {
-    display: none;
-  }
-
-  .hero-section,
-  .two-column,
-  .compare-grid,
-  .generator-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .feature-grid,
-  .quick-grid,
-  .metric-grid,
-  .troubleshooting-grid,
-  .limitation-list,
-  .fact-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .generator-form,
-  .check-list {
-    grid-template-columns: 1fr;
-  }
-
-  /* На узком экране четыре колонки не помещаются даже с переносами — отдаём
-     таблицу горизонтальному скроллу .table-wrap. */
-  .env-table table {
-    min-width: 560px;
-  }
-
-  h1 {
-    font-size: 44px;
-  }
-
-  .hero-section {
-    min-height: auto;
-    padding-top: 34px;
-  }
-
-  .site-footer {
-    display: grid;
-  }
-}
-
-@media (max-width: 430px) {
-  .home-main,
-  .docs-shell,
-  .site-footer {
-    width: min(100% - 24px, 1220px);
-  }
-
-  h1 {
-    font-size: 38px;
-  }
-
-  .hero-actions,
-  .button,
-  .icon-text {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .back-to-top {
-    display: none;
-  }
-}
-
-/* Compact documentation shell and a concrete workspace example. */
-.site-header {
-  min-height: 64px;
-  padding-inline: max(24px, calc((100vw - 1220px) / 2));
-  gap: 20px;
-  grid-template-columns: auto 1fr auto;
-  background: var(--surface);
-  backdrop-filter: none;
-}
-.desktop-nav {
-  justify-content: center;
-}
-.desktop-nav a {
-  font-size: 13px;
-}
-.brand {
-  letter-spacing: -0.04em;
-  font-size: 18px;
-}
-.search {
-  width: 190px;
-}
-.search input {
-  font-size: 12px;
-}
 .product-link {
   font-size: 12px;
   background: var(--card-2);
-}
-.hero-section {
-  margin-top: 0;
-  gap: 64px;
-  padding: 65px 0;
-}
-.eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  margin-bottom: 25px;
-}
-.eyebrow-dot {
-  width: 6px;
-  height: 6px;
-  background: var(--ai);
-  border-radius: 50%;
 }
 .hero-actions .button {
   min-height: 43px;
@@ -1058,10 +726,10 @@ td code {
   min-width: 0;
   border: 1px solid var(--border);
   background: var(--surface);
-  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 12px 45px #00000008;
   font-size: 12px;
+  box-shadow: none;
+  border-radius: 6px;
 }
 .preview-toolbar {
   display: flex;
@@ -1165,62 +833,21 @@ td code {
   color: var(--muted);
   background: var(--bg);
 }
-.two-column,
-.compare-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-}
-.two-column h2 {
-  margin-bottom: 20px;
-}
 .quick-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .section-heading p {
   margin: 0;
 }
-.feature-card {
-  padding: 24px;
-}
-.feature-card h3 {
-  font-size: 16px;
-  font-weight: 550;
-}
-.feature-card p {
-  font-size: 13px;
-}
-.feature-icon {
-  width: 30px;
-  height: 30px;
-  background: transparent;
-}
-.feature-icon svg {
-  width: 21px;
-}
 .feature-grid {
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 48px;
 }
 .home-main > .content-column > section:not(.hero-section) {
   margin-block: 64px;
 }
-.site-footer {
-  font-size: 12px;
-}
-.site-footer nav {
-  max-width: 560px;
-  gap: 14px 22px;
-}
-.back-to-top {
-  cursor: pointer;
-  font-size: 12px;
-}
 .doc-page {
   min-width: 0;
-}
-.page-header h1 {
-  font-size: 36px;
-  letter-spacing: -0.04em;
 }
 .page-header p {
   font-size: 14px;
@@ -1233,121 +860,8 @@ td code {
 .docs-sidebar a {
   font-size: 13px;
 }
-.docs-shell {
-  grid-template-columns: 190px minmax(0, 1fr) 160px;
-  gap: 32px;
-}
 .content-column {
   min-width: 0;
-}
-@media (max-width: 1200px) {
-  .search {
-    width: 170px;
-  }
-  .desktop-nav {
-    gap: 0;
-  }
-  .desktop-nav a {
-    padding: 8px;
-  }
-  .site-header {
-    gap: 12px;
-    padding-inline: 20px;
-  }
-}
-@media (max-width: 1120px) {
-  .docs-shell {
-    grid-template-columns: 190px minmax(0, 1fr);
-  }
-  .docs-sidebar {
-    display: block;
-  }
-  .hero-section {
-    gap: 30px;
-  }
-  .search {
-    width: 220px;
-  }
-}
-@media (max-width: 820px) {
-  .hero-section {
-    grid-template-columns: 1fr;
-    padding: 40px 0;
-    gap: 36px;
-  }
-  .hero-copy {
-    max-width: 580px;
-  }
-  .hero-description {
-    font-size: 16px;
-  }
-  .workspace-preview {
-    max-width: 580px;
-    width: 100%;
-  }
-  .two-column,
-  .compare-grid,
-  .quick-grid {
-    grid-template-columns: 1fr;
-  }
-  .docs-shell {
-    grid-template-columns: 1fr;
-  }
-  .docs-sidebar {
-    display: none;
-  }
-  .site-header {
-    grid-template-columns: auto 1fr;
-  }
-  .hero-section h1 {
-    font-size: 44px;
-  }
-  .site-footer nav {
-    max-width: none;
-  }
-  .home-main > .content-column > section:not(.hero-section) {
-    margin-block: 44px;
-  }
-}
-@media (max-width: 430px) {
-  .header-tools .product-link {
-    width: auto;
-    min-height: 34px;
-    padding: 0 10px;
-  }
-  .hero-section h1 {
-    font-size: 38px;
-  }
-  .preview-content {
-    padding: 20px;
-  }
-  .preview-tabs {
-    gap: 18px;
-  }
-  .hero-actions .button {
-    width: 100%;
-  }
-  .site-header {
-    gap: 8px;
-    padding-inline: 14px;
-  }
-  .brand {
-    font-size: 17px;
-  }
-  .preview-content h2 {
-    font-size: 20px;
-  }
-}
-
-.mobile-panel {
-  width: 100%;
-  max-width: none;
-  height: 100dvh;
-  max-height: 100dvh;
-  margin: 0;
-  border: 0;
-  overflow: auto;
-  color: var(--text);
 }
 .mobile-search .search {
   display: block;
@@ -1357,26 +871,10 @@ td code {
   width: 100%;
   z-index: 2;
 }
-
-.two-column > div {
-  min-width: 0;
-}
-
-/* Plain documentation layout: one product example and direct entry points. */
-.hero-section {
-  min-height: 520px;
-}
 .hero-section h1 {
   font-size: clamp(34px, 3.6vw, 46px);
   font-weight: 550;
   letter-spacing: -0.04em;
-}
-.hero-description {
-  max-width: 58ch;
-  font-size: 15px;
-}
-.hero-actions {
-  margin-top: 24px;
 }
 .hero-actions .primary {
   background: var(--text);
@@ -1384,10 +882,6 @@ td code {
 }
 :root[data-theme="light"] .hero-actions .primary {
   color: var(--bg);
-}
-.workspace-preview {
-  box-shadow: none;
-  border-radius: 6px;
 }
 .home-docs {
   border-block: 1px solid var(--border);
@@ -1421,10 +915,6 @@ td code {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
-.feature-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 48px;
-}
 .feature-grid article {
   padding: 22px 0;
   border-bottom: 1px solid var(--border);
@@ -1440,9 +930,136 @@ td code {
 .section-heading h2 {
   font-size: 23px;
 }
-@media (max-width: 820px) {
+.hero-note {
+  margin: 20px 0 0;
+  max-width: 58ch;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media (max-width: 1200px) {
+  .search {
+    width: 170px;
+  }
+  .desktop-nav {
+    gap: 0;
+  }
+  .desktop-nav a {
+    padding: 8px;
+  }
+  .site-header {
+    gap: 12px;
+    padding-inline: 20px;
+  }
+}
+@media (max-width: 1120px) {
+  .desktop-nav {
+    display: none;
+  }
+  .mobile-menu-button {
+    display: inline-grid;
+  }
+  .search {
+    width: 220px;
+  }
+  .docs-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .docs-sidebar,
+  .toc {
+    display: none;
+  }
+  .docs-sidebar {
+    display: block;
+  }
   .hero-section {
+    gap: 30px;
+  }
+}
+@media (max-width: 820px) {
+  .site-header {
+    padding: 0 16px;
+    grid-template-columns: auto 1fr;
+  }
+  .header-tools {
+    justify-content: end;
+  }
+  .search,
+  .header-tools .segmented,
+  .header-tools .icon-button {
+    display: none;
+  }
+  .hero-section,
+  .generator-grid {
+    grid-template-columns: 1fr;
+  }
+  .feature-grid,
+  .quick-grid,
+  .metric-grid,
+  .troubleshooting-grid,
+  .limitation-list,
+  .fact-grid {
+    grid-template-columns: 1fr;
+  }
+  .generator-form,
+  .check-list {
+    grid-template-columns: 1fr;
+  }
+  .env-table table {
+    min-width: 560px;
+  }
+  h1 {
+    font-size: 44px;
+  }
+  .hero-section {
+    padding-top: 34px;
+    grid-template-columns: 1fr;
+    padding: 40px 0;
+    gap: 36px;
     min-height: 0;
+  }
+  .site-footer {
+    display: grid;
+  }
+  .hero-copy {
+    max-width: 580px;
+  }
+  .hero-description {
+    font-size: 16px;
+  }
+  .workspace-preview {
+    max-width: 580px;
+    width: 100%;
+  }
+  .quick-grid {
+    grid-template-columns: 1fr;
+  }
+  .docs-shell {
+    grid-template-columns: 1fr;
+  }
+  .docs-sidebar {
+    display: none;
+  }
+  .hero-section h1 {
+    font-size: 36px;
+  }
+  .site-footer nav {
+    max-width: none;
+  }
+  .home-main > .content-column > section:not(.hero-section) {
+    margin-block: 44px;
   }
   .home-docs nav {
     grid-template-columns: 1fr;
@@ -1451,22 +1068,50 @@ td code {
   .feature-grid {
     grid-template-columns: 1fr;
   }
-  .hero-section h1 {
-    font-size: 36px;
+}
+@media (max-width: 430px) {
+  .home-main,
+  .docs-shell,
+  .site-footer {
+    width: min(100% - 24px, 1220px);
   }
-}
-
-.toc button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  text-align: left;
-  padding: 9px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.toc button:hover {
-  color: var(--text);
-  background: var(--card-2);
+  h1 {
+    font-size: 38px;
+  }
+  .hero-actions,
+  .button,
+  .icon-text {
+    width: 100%;
+    justify-content: center;
+  }
+  .back-to-top {
+    display: none;
+  }
+  .header-tools .product-link {
+    width: auto;
+    min-height: 34px;
+    padding: 0 10px;
+  }
+  .hero-section h1 {
+    font-size: 38px;
+  }
+  .preview-content {
+    padding: 20px;
+  }
+  .preview-tabs {
+    gap: 18px;
+  }
+  .hero-actions .button {
+    width: 100%;
+  }
+  .site-header {
+    gap: 8px;
+    padding-inline: 14px;
+  }
+  .brand {
+    font-size: 17px;
+  }
+  .preview-content h2 {
+    font-size: 20px;
+  }
 }

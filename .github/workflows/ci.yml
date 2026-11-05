@@ -100,9 +100,14 @@ jobs:
       - run: npm run build
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser navigation regressions
+        run: npm run test:browser
       - uses: actions/upload-artifact@v4
         with:
           name: github-pages-candidate
+          retention-days: 7
           path: website/dist
 
   # Линт Dockerfile'ов по чек-листу антипаттернов.
