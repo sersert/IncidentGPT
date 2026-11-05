@@ -81,30 +81,6 @@ jobs:
       - name: build and browser regressions
         run: npm run test:browser
 
-  browser-auth:
-    name: verify browser sessions behind nginx
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Start isolated candidate
-        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml up -d --build
-      - name: Wait for auth proxy
-        run: |
-          for attempt in $(seq 1 45); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8186/api/v1/auth/session || true)
-            if [ "$code" = 401 ]; then exit 0; fi
-            sleep 2
-          done
-          exit 1
-      - name: Verify session lifecycle and protected routes
-        run: python3 deploy/check-browser-session.py
-      - name: Preview logs
-        if: failure()
-        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml logs --tail=80
-      - name: Stop preview
-        if: always()
-        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml down
-
   # Линт Dockerfile'ов по чек-листу антипаттернов.
   hadolint:
     name: hadolint
@@ -176,3 +152,27 @@ jobs:
           # Проверяем на нижнюю поддерживаемую версию: что валидно в 1.28,
           # то валидно и дальше, а обратное неверно.
           kubeconform -strict -summary -kubernetes-version 1.28.0 /tmp/render.yaml
+
+  browser-auth:
+    name: verify browser sessions behind nginx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start isolated candidate
+        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml up -d --build
+      - name: Wait for auth proxy
+        run: |
+          for attempt in $(seq 1 45); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8186/api/v1/auth/session || true)
+            if [ "$code" = 401 ]; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Verify session lifecycle and protected routes
+        run: python3 deploy/check-browser-session.py
+      - name: Preview logs
+        if: failure()
+        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml logs --tail=80
+      - name: Stop preview
+        if: always()
+        run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml down
