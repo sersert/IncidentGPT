@@ -194,6 +194,8 @@ func main() {
 	mux.HandleFunc("/incident-raw", incidentRawHandler)
 	mux.HandleFunc("/incident-group", incidentGroupHandler)
 	mux.HandleFunc("POST /v1/analyze", structuredAnalysisHandler)
+	mux.HandleFunc("GET /v1/evaluation/profiles", evaluationProfilesHandler)
+	mux.HandleFunc("POST /v1/evaluation/analyze", structuredAnalysisHandler)
 
 	srv := &http.Server{
 		Addr:              appCfg.ListenAddr,

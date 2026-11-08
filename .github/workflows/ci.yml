@@ -136,6 +136,8 @@ jobs:
       - run: helm lint backend/chart
       - run: helm lint ui/chart
       - run: helm lint deploy/redis
+      - name: evaluation configuration guards
+        run: bash deploy/test-evaluation-charts.sh
       - name: operations configuration guards
         run: bash deploy/test-operations-charts.sh
       - name: diagnostics configuration guards
@@ -182,3 +184,36 @@ jobs:
       - name: Stop preview
         if: always()
         run: docker compose -p incidentgpt-login-preview -f deploy/login-preview.compose.yaml down
+
+  model-evaluation-preview:
+    name: verify isolated model evaluation deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Start isolated candidate with fixture provider
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: docker compose -p incidentgpt-evaluation-preview -f deploy/evaluation-preview.compose.yaml up -d --build
+      - name: Verify authenticated comparison and side-effect isolation
+        run: python3 deploy/check-evaluation-preview.py --proof-output /tmp/incidentgpt-evaluation-proof.json
+      - name: Verify retained state after restart
+        run: |
+          docker compose -p incidentgpt-evaluation-preview -f deploy/evaluation-preview.compose.yaml restart backend worker
+          python3 deploy/check-evaluation-preview.py --verify-proof /tmp/incidentgpt-evaluation-proof.json
+      - name: Record immutable candidate images
+        run: python3 deploy/evaluation-image-proof.py > /tmp/incidentgpt-evaluation-images.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-evaluation-deployment-proof
+          retention-days: 7
+          path: |
+            /tmp/incidentgpt-evaluation-proof.json
+            /tmp/incidentgpt-evaluation-images.json
+      - name: Preview logs
+        if: failure()
+        run: docker compose -p incidentgpt-evaluation-preview -f deploy/evaluation-preview.compose.yaml logs --tail=80
+      - name: Stop owned preview
+        if: always()
+        run: docker compose -p incidentgpt-evaluation-preview -f deploy/evaluation-preview.compose.yaml down

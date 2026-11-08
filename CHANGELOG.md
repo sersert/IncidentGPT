@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+- Opt-in model evaluation lab (`/evaluation`): immutable incident snapshots and
+  engineer-authored cases, explicit comparison of 1–4 allowlisted model/prompt
+  profiles, provider-reported usage and revisioned human assessments. Expected
+  causes stay outside inference. Separate bounded Redis queue, no Telegram or
+  live-analysis updates, no automatic paid retries, AI pause support and 90-day
+  retention. Configuration and verified preview: `docs/model-evaluation.md`.
+
 - Opt-in `/operations`: реальные health checks важных компонентов, свежесть
   последнего inference, явный ограниченный платный probe; автообновление без LLM.
 - Сохранённая в Redis пауза AI: общий guard всех provider POST, отмена текущих

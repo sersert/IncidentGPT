@@ -10,6 +10,7 @@ import { Predictions } from '@/pages/Predictions.tsx'
 import { Settings } from '@/pages/Settings.tsx'
 import { Help } from '@/pages/Help.tsx'
 import { NotFound } from '@/pages/NotFound.tsx'
+import { ModelEvaluation } from '@/pages/ModelEvaluation'
 import { Operations } from '@/pages/Operations.tsx'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/settings/:section" element={<Settings />} />
             <Route path="/help" element={<Help />} />
+            <Route path="/evaluation" element={<ModelEvaluation />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

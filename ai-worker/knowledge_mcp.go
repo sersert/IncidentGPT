@@ -129,6 +129,9 @@ func searchKnowledgeMCP(ctx context.Context, query string) (knowledgeToolOutput,
 }
 
 func providerCompletion(ctx context.Context, payload map[string]any) (providerMessage, map[string]any, error) {
+	return providerCompletionUsing(ctx, payload, httpClient)
+}
+func providerCompletionUsing(ctx context.Context, payload map[string]any, client *http.Client) (providerMessage, map[string]any, error) {
 	var message providerMessage
 	if appCfg.ORAPIKey == "" {
 		return message, nil, fmt.Errorf("provider not configured")
@@ -143,7 +146,7 @@ func providerCompletion(ctx context.Context, payload map[string]any) (providerMe
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+appCfg.ORAPIKey)
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return message, nil, fmt.Errorf("provider unavailable")
 	}

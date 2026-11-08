@@ -378,3 +378,7 @@ fail-closed sanitizer clients, persist/back up Redis, then enable compatible pro
 Missing source/collection/recovery data remains unknown; model confidence and
 temporal correlation do not establish cause. Lifecycle analytics do not estimate
 MTTR reduction or saved hours. See [architecture](docs/architecture.md), [security](docs/security.md), [web workflows](docs/web-ui.md) and [reports and handoffs](docs/roadmap/postmortem-and-handoff.md).
+
+### Model evaluation lab
+
+The optional [model evaluation lab](docs/model-evaluation.md) compares allowlisted models on frozen incident observations or engineer-authored test cases. Expected causes remain separate from inference; results, provider usage and human reviews stay independent of live incident analysis.

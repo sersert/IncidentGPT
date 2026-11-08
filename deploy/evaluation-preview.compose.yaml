@@ -1,0 +1,90 @@
+# Isolated local candidate. All credentials and data below are disposable fixtures.
+# docker compose -p incidentgpt-evaluation-preview -f deploy/evaluation-preview.compose.yaml up -d --build
+services:
+  redis:
+    image: redis:7.2.7
+    command: [redis-server, --appendonly, 'yes']
+    volumes: [evaluation-preview-data:/data]
+    networks: [evaluation]
+  test-redis:
+    image: redis:7.2.7
+    ports: ['127.0.0.1:6399:6379']
+    networks: [evaluation, preview-ingress]
+  provider:
+    image: python:3.13-alpine
+    command: [python, /fixture/provider.py]
+    volumes: ['./fixtures/evaluation-provider.py:/fixture/provider.py:ro']
+    ports: ['127.0.0.1:8196:8080']
+    networks: [evaluation, preview-ingress]
+  sanitizer:
+    build:
+      context: ../sanitizer
+      args:
+        GIT_COMMIT: ${CANDIDATE_SHA:-unknown}
+    environment:
+      SANITIZER_AUTH_SHARED_SECRET: evaluation-preview-hmac-not-for-production
+      SANITIZER_FAIL_CLOSED: 'true'
+    networks: [evaluation]
+  worker:
+    build:
+      context: ../ai-worker
+      args:
+        GIT_COMMIT: ${CANDIDATE_SHA:-unknown}
+    environment:
+      LISTEN_ADDR: ':8080'
+      ANALYSIS_SERVICE_TOKEN: evaluation-preview-service-token-32-bytes
+      SANITIZER_URL: http://sanitizer:8080
+      SANITIZER_AUTH_SHARED_SECRET: evaluation-preview-hmac-not-for-production
+      TELEGRAM_BOT_TOKEN: preview-only
+      TELEGRAM_CHANNEL_ID: '-1000000000000'
+      TELEGRAM_API_BASE_URL: http://provider:8080
+      OPENROUTER_API_KEY: preview-only
+      OPENROUTER_BASE_URL: http://provider:8080/v1/chat/completions
+      OPENROUTER_MODEL: mock/production
+      EVALUATION_ENABLED: 'true'
+      EVALUATION_PROFILES_JSON: '[{"id":"alpha","label":"Alpha (fixture)","model":"mock/alpha","max_tokens":512},{"id":"beta","label":"Beta (fixture)","model":"mock/beta","prompt_version":"evidence-analysis/alternatives-v1","max_tokens":768},{"id":"invalid","label":"Invalid citations (fixture)","model":"mock/invalid","max_tokens":512}]'
+      OPERATIONS_SERVICE_TOKEN: evaluation-preview-operations-token-32-bytes
+      AI_CONTROL_URL: http://backend:8080/internal/operations/ai-control
+    depends_on: [sanitizer, provider]
+    networks: [evaluation]
+  backend:
+    build:
+      context: ../backend
+      args:
+        GIT_COMMIT: ${CANDIDATE_SHA:-unknown}
+    environment:
+      LISTEN_ADDR: ':8080'
+      REDIS_ADDR: redis:6379
+      TIMELINE_READ_USER: preview-operator
+      TIMELINE_READ_PASSWORD: preview-only-password
+      LEGACY_API_AUTH_REQUIRED: 'true'
+      BROWSER_SESSION_SECURE: 'false'
+      FORWARD_TO_AI_WORKER: 'false'
+      STRUCTURED_WORKER_URL: http://worker:8080/v1/analyze
+      ANALYSIS_SERVICE_TOKEN: evaluation-preview-service-token-32-bytes
+      SANITIZER_URL: http://sanitizer:8080
+      SANITIZER_AUTH_SHARED_SECRET: evaluation-preview-hmac-not-for-production
+      EVALUATION_ENABLED: 'true'
+      OPERATIONS_ENABLED: 'true'
+      OPERATIONS_WORKER_URL: http://worker:8080
+      OPERATIONS_SERVICE_TOKEN: evaluation-preview-operations-token-32-bytes
+    depends_on: [redis, sanitizer]
+    networks: [evaluation]
+  ui:
+    build:
+      context: ../ui
+      args:
+        GIT_COMMIT: ${CANDIDATE_SHA:-unknown}
+    ports: ['127.0.0.1:8195:80']
+    environment:
+      NGINX_RESOLVER: 127.0.0.11
+      BACKEND_URL: http://backend:8080
+    depends_on: [backend]
+    networks: [evaluation, preview-ingress]
+networks:
+  preview-ingress:
+    driver: bridge
+  evaluation:
+    internal: true
+volumes:
+  evaluation-preview-data:

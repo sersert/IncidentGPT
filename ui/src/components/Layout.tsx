@@ -15,6 +15,7 @@ const names: Record<string, string> = {
   predictions: 'Прогнозы',
   settings: 'Настройки',
   help: 'Руководство',
+  evaluation: 'Тестирование моделей',
 }
 
 export function Layout() {

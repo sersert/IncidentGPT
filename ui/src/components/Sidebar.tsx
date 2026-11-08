@@ -10,6 +10,7 @@ import {
   Activity,
   Settings,
   BookOpen,
+  FlaskConical,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -45,6 +46,7 @@ export function Sidebar({ activeIncidents, warnings, mobile = false, onNavigate 
         { to: '/operations', label: 'Состояние системы', icon: Activity },
         { to: '/settings/integrations', label: 'Интеграции', icon: Plug },
         { to: '/settings/llm', label: 'Модель', icon: Settings },
+        { to: '/evaluation', label: 'Тестирование моделей', icon: FlaskConical },
       ],
     },
   ]
