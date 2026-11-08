@@ -46,13 +46,12 @@ export type Translation = {
   >;
   common: {
     signIn: string;
-    openMenu: string;
-    closeMenu: string;
     mobileNavigation: string;
     tableOfContents: string;
-    documentation: string;
-    getStarted: string;
-
+    navigation: string;
+    openMenu: string;
+    closeMenu: string;
+    skip: string;
     copy: string;
     copied: string;
     download: string;
@@ -72,28 +71,43 @@ export type Translation = {
     potentialRisk: string;
   };
   hero: {
-    productButton: string;
-    preview: {
-      label: string;
-      example: string;
-      incidents: string;
-      status: string;
-      title: string;
-      alerts: string;
-      context: string;
-      analysis: string;
-      body: string;
-      logs: string;
-      caption: string;
-    };
     title: string;
+    eyebrow: string;
     description: string;
     installButton: string;
+    githubButton: string;
+    architectureLink: string;
     demoNote: string;
+    caption: string;
+  };
+  demo: {
+    label: string;
+    queue: string;
+    severity: string;
+    status: string;
+    title: string;
+    summary: string;
+    tabsLabel: string;
+    tabs: readonly string[];
+    evidence: string;
+    footer: string;
+    panels: readonly {
+      title: string;
+      body: string;
+      items: readonly string[];
+    }[];
   };
   home: {
+    workflowLabel: string;
+    workflowTitle: string;
+    workflow: readonly { title: string; body: string }[];
+    featuresLabel: string;
     featuresTitle: string;
     featuresSubtitle: string;
+    optInNote: string;
+    reliabilityTitle: string;
+    reliabilityBody: string;
+    quickStartLabel: string;
     quickStartTitle: string;
     quickStartNote: string;
     humanNote: string;
@@ -137,6 +151,7 @@ export type Translation = {
     failures: readonly { component: string; behavior: string }[];
   };
   installation: {
+    browserAccessNote: string;
     headings: Record<
       | "prerequisites"
       | "telegram"

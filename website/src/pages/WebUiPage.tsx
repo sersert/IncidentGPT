@@ -1,3 +1,4 @@
+import { IncidentPreview } from "../components/IncidentPreview";
 import { Callout } from "../components/Callout";
 import { CodeBlock } from "../components/CodeBlock";
 import type { Translation } from "../i18n/types";
@@ -27,20 +28,25 @@ incidentgpt-enricher:
   env:
     redisAddr: "redis-master.infra.svc.cluster.local:6379"`;
 
-const authValues = `incidentgpt-ui:
+const authValues = `incidentgpt-backend:
+  readerAuth:
+    existingSecret: incidentgpt-reader
+
+incidentgpt-ui:
   ingress:
     enabled: true
     className: nginx
-    host: incidentgpt.example.com
-  auth:
-    enabled: true
-    username: admin
-    existingSecret: incidentgpt-ui-auth`;
+    host: incidentgpt.example.com`;
 
 export function WebUiPage({ t }: PageProps) {
   const page = t.webUi;
   const code = (value: string, language: string) => (
-    <CodeBlock code={value} language={language} copyLabel={t.common.copy} copiedLabel={t.common.copied} />
+    <CodeBlock
+      code={value}
+      language={language}
+      copyLabel={t.common.copy}
+      copiedLabel={t.common.copied}
+    />
   );
   return (
     <article className="doc-page">
@@ -88,6 +94,7 @@ export function WebUiPage({ t }: PageProps) {
       </section>
       <section id="screens">
         <h2>{page.headings.screens}</h2>
+        <IncidentPreview t={t} />
         <ul>
           {page.screens.map((screen) => (
             <li key={screen.name}>

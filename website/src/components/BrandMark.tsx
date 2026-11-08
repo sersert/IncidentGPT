@@ -1,18 +1,12 @@
-export function BrandMark({
-  size = 28,
-  className,
-}: {
-  size?: number;
-  className?: string;
-}) {
+export function BrandMark({ size = 29 }: { size?: number }) {
   return (
     <svg
       width={size}
       height={size}
+      className="brand-logo"
       viewBox="0 0 32 32"
       fill="none"
       aria-hidden="true"
-      className={className}
     >
       <path
         d="M11 4H4v24h7M21 4h7v24h-7M16 14v9"

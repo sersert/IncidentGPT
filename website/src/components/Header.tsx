@@ -36,15 +36,15 @@ export function Header({
       <a
         className="brand"
         href={buildRoute(language, "")}
-        aria-label="IncidentGPT overview"
+        aria-label={`IncidentGPT — ${t.navigation.overview}`}
       >
         <BrandMark size={26} />
         <span>IncidentGPT</span>
       </a>
-      <nav className="desktop-nav" aria-label="Primary">
+      <nav className="desktop-nav" aria-label={t.common.navigation}>
         {routes
           .filter((route) =>
-            ["installation", "architecture", "configuration"].includes(
+            ["overview", "installation", "webUi"].includes(
               route.id,
             ),
           )
@@ -53,6 +53,7 @@ export function Header({
               key={route.id}
               href={buildRoute(language, route.path)}
               className={activePage === route.id ? "active" : ""}
+              aria-current={activePage === route.id ? "page" : undefined}
             >
               {t.navigation[route.id]}
             </a>
@@ -64,6 +65,7 @@ export function Header({
           <button
             type="button"
             className={language === "ru" ? "selected" : ""}
+            aria-pressed={language === "ru"}
             onClick={() => onLanguageChange("ru")}
           >
             RU
@@ -71,6 +73,7 @@ export function Header({
           <button
             type="button"
             className={language === "en" ? "selected" : ""}
+            aria-pressed={language === "en"}
             onClick={() => onLanguageChange("en")}
           >
             EN

@@ -69,12 +69,14 @@ export function MobileNavigation({
           <X size={20} />
         </button>
       </div>
-      <nav aria-label="Mobile">
+      <div className="mobile-search"><Search t={t} language={language} onNavigate={onClose} /></div>
+      <nav aria-label={t.common.navigation}>
         {routes.map((route) => (
           <a
             key={route.id}
             href={buildRoute(language, route.path)}
             className={activePage === route.id ? "active" : ""}
+            aria-current={activePage === route.id ? "page" : undefined}
             onClick={onClose}
           >
             {t.navigation[route.id]}
@@ -90,10 +92,7 @@ export function MobileNavigation({
         </a>
       </nav>
       <div className="mobile-controls">
-        <div className="mobile-search">
-          <Search t={t} language={language} onNavigate={onClose} />
-        </div>
-        <div className="segmented">
+        <div className="segmented" aria-label={t.common.language}>
           <button
             type="button"
             className={language === "ru" ? "selected" : ""}

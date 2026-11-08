@@ -9,7 +9,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 1000 } } },
-    { name: 'mobile', use: { viewport: { width: 390, height: 844 } } },
+    { name: 'mobile', use: { isMobile: true, hasTouch: true, viewport: { width: 390, height: 844 } } },
   ],
   webServer: {
     command: 'VITE_BASE_PATH=/IncidentGPT/ npm run preview -- --port 4190 --strictPort',

@@ -43,6 +43,8 @@ export function Search({ t, language, onNavigate }: SearchProps) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t.common.search}
+          aria-label={t.common.search}
+          type="search"
         />
       </label>
       {query.trim() ? (

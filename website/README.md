@@ -47,6 +47,8 @@ The main CSS variables are in `src/styles/globals.css`:
 - `--ai`, `--k8s`, `--prom`
 - `--success`, `--warning`, `--error`
 
+The site shares the operator UI’s `[i]` mark, surface palette, blue accent and semantic status colors. The interactive incident example contains illustrative data and makes no product API calls.
+
 The site supports dark, light and system themes. The selected theme and language are stored only in localStorage.
 
 ## Ссылка на рабочий инстанс
@@ -65,5 +67,9 @@ variable `INCIDENTGPT_PRODUCT_URL` либо оставляют её пустой
 Соберите `VITE_BASE_PATH=/IncidentGPT/ npm run build`, затем выполните
 `npx playwright install chromium` и `npm run test:browser`. Проверяются прямые
 ссылки на разделы, reload/new tab, Escape и восстановление фокуса мобильного
-меню. CI использует Chromium; локально можно задать
+меню, RU/EN, все страницы, загрузка ресурсов, отсутствие горизонтального
+переполнения, вкладки примера и темы. В CI собирается отдельный статический
+кандидат с `/IncidentGPT/`, адресом продукта из настроек Pages и SHA-256
+манифестом. Bundle, результаты и снимки экрана сохраняются в артефакт на 7 дней.
+PR не публикует Pages. CI использует Chromium; локально можно задать
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` на существующий Chromium-браузер.

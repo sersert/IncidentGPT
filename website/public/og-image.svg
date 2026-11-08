@@ -1,21 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="#080B12"/>
-  <path d="M0 430C170 360 300 360 450 420s280 80 420 0 240-70 330-25v235H0Z" fill="#0F1420"/>
-  <circle cx="980" cy="115" r="190" fill="#8B5CF6" opacity=".18"/>
-  <circle cx="230" cy="510" r="210" fill="#326CE5" opacity=".16"/>
-  <text x="92" y="185" fill="#F3F6FC" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="800">IncidentGPT</text>
-  <text x="96" y="265" fill="#9AA7BA" font-family="Inter, Arial, sans-serif" font-size="34">Prometheus alerts → Kubernetes context → AI analysis</text>
-  <g transform="translate(96 352)" font-family="Inter, Arial, sans-serif" font-size="28" fill="#F3F6FC">
-    <rect width="220" height="76" rx="16" fill="#121926" stroke="#263044"/>
-    <text x="28" y="48">Alertmanager</text>
-    <path d="M230 38h70" stroke="#8B5CF6" stroke-width="4"/>
-    <rect x="310" width="180" height="76" rx="16" fill="#121926" stroke="#263044"/>
-    <text x="348" y="48">Enricher</text>
-    <path d="M500 38h70" stroke="#326CE5" stroke-width="4"/>
-    <rect x="580" width="190" height="76" rx="16" fill="#121926" stroke="#263044"/>
-    <text x="620" y="48">AI Worker</text>
-    <path d="M780 38h70" stroke="#22C55E" stroke-width="4"/>
-    <rect x="860" width="170" height="76" rx="16" fill="#121926" stroke="#263044"/>
-    <text x="900" y="48">Telegram</text>
-  </g>
-</svg>
+<rect width="1200" height="630" fill="#f7f8fa"/><path d="M64 116H1136M64 538H1136" stroke="#dde2e9"/>
+<g transform="translate(64 54)"><path d="M11 4H4v24h7M21 4h7v24h-7M16 14v9" fill="none" stroke="#3456c5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="9" r="1.5" fill="#3456c5"/></g>
+<g font-family="Arial, sans-serif" fill="#202838"><text x="112" y="80" font-size="25" font-weight="600">IncidentGPT</text><text x="64" y="232" font-size="24" fill="#4f5c70">OPEN SOURCE · KUBERNETES INCIDENT RESPONSE</text><text x="64" y="330" font-size="68" font-weight="600">From alert to a clear next step.</text><text x="64" y="405" font-size="25" fill="#4f5c70">Evidence. Investigation. Confirmed solutions. Handoffs.</text><text x="64" y="580" font-size="21" fill="#3456c5">Self-hosted with Helm · Telegram + an operator workspace</text></g></svg>

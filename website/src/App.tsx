@@ -11,6 +11,7 @@ import {
   routes,
   type PageId,
 } from "./data/navigation";
+import { readPreference, savePreference } from "./lib/preferences";
 import { detectInitialLanguage, translations } from "./i18n";
 import type { Language, ThemeMode, Translation } from "./i18n/types";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
@@ -26,7 +27,7 @@ import { WebUiPage } from "./pages/WebUiPage";
 type DocPageId = Exclude<PageId, "overview">;
 
 function getThemeFromStorage(): ThemeMode {
-  const stored = localStorage.getItem("incidentgpt-theme");
+  const stored = readPreference("incidentgpt-theme");
   return stored === "dark" || stored === "light" || stored === "system"
     ? stored
     : "system";
@@ -155,7 +156,7 @@ export default function App() {
       setLanguageState(parsed.language);
       setPath(parsed.path);
       setSection(parsed.section);
-      localStorage.setItem("incidentgpt-language", parsed.language);
+      savePreference("incidentgpt-language", parsed.language);
     }
     syncHash();
     window.addEventListener("hashchange", syncHash);
@@ -178,14 +179,14 @@ export default function App() {
       document.documentElement.dataset.theme = resolveTheme(theme);
     };
     apply();
-    localStorage.setItem("incidentgpt-theme", theme);
+    savePreference("incidentgpt-theme", theme);
     const query = window.matchMedia("(prefers-color-scheme: light)");
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, [theme]);
 
   function setLanguage(next: Language) {
-    localStorage.setItem("incidentgpt-language", next);
+    savePreference("incidentgpt-language", next);
     const targetRoute =
       routes.find((item) => item.id === route.id) ?? routes[0];
     window.location.hash = buildRoute(next, targetRoute.path, section);
@@ -199,7 +200,7 @@ export default function App() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       if (section)
-        document.getElementById(section)?.scrollIntoView({ block: "start" });
+        document.getElementById(section)?.scrollIntoView({ block: "start", behavior: "instant" });
       else window.scrollTo({ top: 0, behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
@@ -211,6 +212,7 @@ export default function App() {
 
   return (
     <>
+      <a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById("main-content")?.focus(); }}>{t.common.skip}</a>
       <Header
         t={t}
         language={language}
@@ -233,7 +235,7 @@ export default function App() {
         onLanguageChange={setLanguage}
         onThemeChange={setTheme}
       />
-      <main className={isHome ? "home-main" : "docs-shell"}>
+      <main id="main-content" tabIndex={-1} className={isHome ? "home-main" : "docs-shell"}>
         {!isHome ? (
           <DocsSidebar t={t} language={language} activePage={route.id} />
         ) : null}
