@@ -2,6 +2,7 @@
 import argparse
 import http.cookiejar
 import json
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -13,7 +14,6 @@ parser.add_argument('--verify-proof')
 parser.add_argument('--proof-output', default='/tmp/incidentgpt-evaluation-proof.json')
 args = parser.parse_args()
 BASE = 'http://127.0.0.1:8195'
-PROVIDER = 'http://127.0.0.1:8196'
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 def api(method, path, body=None, status=200, origin=BASE):
     headers = {'Origin': origin}
@@ -31,20 +31,33 @@ def api(method, path, body=None, status=200, origin=BASE):
     return json.loads(raw) if raw and status < 400 else None
 
 def calls():
-    return json.load(urllib.request.urlopen(PROVIDER + '/calls', timeout=5))
+    # Inspect the fixture inside its private network, independently of host NAT.
+    command = ['docker', 'compose', '-p', 'incidentgpt-evaluation-preview', '-f',
+               'deploy/evaluation-preview.compose.yaml', 'exec', '-T', 'provider',
+               'python', '-c', "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/calls', timeout=2).read().decode())"]
+    return json.loads(subprocess.check_output(command, timeout=10, stderr=subprocess.PIPE))
 
 for attempt in range(60):
     try:
         api('GET', '/auth/session', status=401)
+        calls()  # A running container does not yet prove HTTP readiness.
         break
-    except (OSError, AssertionError):
+    except (OSError, AssertionError, subprocess.SubprocessError):
         time.sleep(1)
 else:
     raise RuntimeError('isolated preview did not become ready')
 api('GET', '/evaluation/config', status=401)
 api('POST', '/auth/session', {'username': 'preview-operator', 'password': 'preview-only-password'})
-config = api('GET', '/evaluation/config')
-assert config['enabled'] and len(config['profiles']) == 3
+for attempt in range(60):
+    try:
+        config = api('GET', '/evaluation/config')
+        if config['enabled'] and len(config['profiles']) == 3:
+            break
+    except (OSError, AssertionError, subprocess.SubprocessError):
+        pass
+    time.sleep(1)
+else:
+    raise RuntimeError('worker profile discovery did not become ready')
 if args.verify_proof:
     proof = json.loads(Path(args.verify_proof).read_text())
     case = api('GET', '/evaluation/cases/' + proof['case_id'])

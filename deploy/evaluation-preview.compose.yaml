@@ -13,9 +13,13 @@ services:
   provider:
     image: python:3.13-alpine
     command: [python, /fixture/provider.py]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=1).read()"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
     volumes: ['./fixtures/evaluation-provider.py:/fixture/provider.py:ro']
-    ports: ['127.0.0.1:8196:8080']
-    networks: [evaluation, preview-ingress]
+    networks: [evaluation]
   sanitizer:
     build:
       context: ../sanitizer
@@ -45,7 +49,11 @@ services:
       EVALUATION_PROFILES_JSON: '[{"id":"alpha","label":"Alpha (fixture)","model":"mock/alpha","max_tokens":512},{"id":"beta","label":"Beta (fixture)","model":"mock/beta","prompt_version":"evidence-analysis/alternatives-v1","max_tokens":768},{"id":"invalid","label":"Invalid citations (fixture)","model":"mock/invalid","max_tokens":512}]'
       OPERATIONS_SERVICE_TOKEN: evaluation-preview-operations-token-32-bytes
       AI_CONTROL_URL: http://backend:8080/internal/operations/ai-control
-    depends_on: [sanitizer, provider]
+    depends_on:
+      sanitizer:
+        condition: service_healthy
+      provider:
+        condition: service_healthy
     networks: [evaluation]
   backend:
     build:
