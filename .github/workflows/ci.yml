@@ -83,6 +83,46 @@ jobs:
       - name: build and browser regressions
         run: npm run test:browser
 
+  website:
+    name: verify GitHub Pages
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          VITE_PRODUCT_URL: ${{ vars.INCIDENTGPT_PRODUCT_URL || (github.repository == 'sersert/IncidentGPT' && 'https://incidentgpt.sersert.io/') || '' }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke tests on the isolated production bundle
+        run: npm run test:browser
+      - name: Record static candidate digest
+        run: |
+          git rev-parse HEAD > candidate-commit.txt
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum > dist-sha256.txt
+          sha256sum dist-sha256.txt >> "$GITHUB_STEP_SUMMARY"
+          cat candidate-commit.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-pages-candidate
+          retention-days: 7
+          path: |
+            website/dist
+            website/dist-sha256.txt
+            website/candidate-commit.txt
+            website/test-results
+
   # Линт Dockerfile'ов по чек-листу антипаттернов.
   hadolint:
     name: hadolint

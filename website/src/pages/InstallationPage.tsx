@@ -8,7 +8,12 @@ type PageProps = { t: Translation };
 export function InstallationPage({ t }: PageProps) {
   const page = t.installation;
   const code = (value: string, language: string) => (
-    <CodeBlock code={value} language={language} copyLabel={t.common.copy} copiedLabel={t.common.copied} />
+    <CodeBlock
+      code={value}
+      language={language}
+      copyLabel={t.common.copy}
+      copiedLabel={t.common.copied}
+    />
   );
   return (
     <article className="doc-page">
@@ -19,7 +24,10 @@ export function InstallationPage({ t }: PageProps) {
             <li key={item}>{item}</li>
           ))}
         </ul>
-        {code("kubectl version --client\nhelm version\nkubectl get nodes\nkubectl get pods -n monitoring", "bash")}
+        {code(
+          "kubectl version --client\nhelm version\nkubectl get nodes\nkubectl get pods -n monitoring",
+          "bash",
+        )}
         <Callout title={page.redisCallout.title}>
           <p>{page.redisCallout.body}</p>
         </Callout>
@@ -31,8 +39,14 @@ export function InstallationPage({ t }: PageProps) {
             <li key={item}>{item}</li>
           ))}
         </ol>
-        {code("https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates", "text")}
-        {code('{\n  "message": {\n    "chat": {\n      "id": -1001234567890,\n      "type": "channel",\n      "title": "IncidentGPT"\n    }\n  }\n}', "json")}
+        {code(
+          "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates",
+          "text",
+        )}
+        {code(
+          '{\n  "message": {\n    "chat": {\n      "id": -1001234567890,\n      "type": "channel",\n      "title": "IncidentGPT"\n    }\n  }\n}',
+          "json",
+        )}
         <p className="muted">{page.telegramPrivacyNote}</p>
         <Callout title={page.telegramSecretsCallout.title} tone="warning">
           <p>{page.telegramSecretsCallout.body}</p>
@@ -40,7 +54,10 @@ export function InstallationPage({ t }: PageProps) {
       </section>
       <section id="openrouter">
         <h2>{page.headings.openrouter}</h2>
-        {code('OPENROUTER_API_KEY: ""\nOPENROUTER_MODEL: "google/gemini-2.5-flash"\nOPENROUTER_MAX_TOKENS: "2000"', "yaml")}
+        {code(
+          'OPENROUTER_API_KEY: ""\nOPENROUTER_MODEL: "google/gemini-2.5-flash"\nOPENROUTER_MAX_TOKENS: "2000"',
+          "yaml",
+        )}
         <p>{page.openrouterNote}</p>
       </section>
       <section id="secrets">
@@ -51,6 +68,19 @@ export function InstallationPage({ t }: PageProps) {
           "bash",
         )}
         <p className="muted">{page.secretsNote}</p>
+        <p>{page.browserAccessNote}</p>
+        {code(
+          "kubectl create secret generic incidentgpt-reader -n incidentgpt \\\n  --from-literal=username='admin' \\\n  --from-literal=password='replace-with-a-strong-password'",
+          "bash",
+        )}
+        <a
+          className="text-link"
+          href="https://github.com/sersert/IncidentGPT/blob/main/docs/getting-started.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          docs/getting-started.md
+        </a>
       </section>
       <section id="helm">
         <h2>{page.headings.helm}</h2>
@@ -88,10 +118,13 @@ export function InstallationPage({ t }: PageProps) {
         <h2>{page.headings.verify}</h2>
         <p>{page.verifyIntro}</p>
         {code(
-          "incidentgpt-ui:\n  ingress:\n    enabled: true\n    className: nginx\n    host: incidentgpt.example.com\n    tls:\n      secretName: incidentgpt-ui-tls\n  auth:\n    enabled: true\n    username: admin\n    existingSecret: incidentgpt-ui-auth",
+          "incidentgpt-backend:\n  readerAuth:\n    existingSecret: incidentgpt-reader\n\nincidentgpt-ui:\n  ingress:\n    enabled: true\n    className: nginx\n    host: incidentgpt.example.com\n    tls:\n      secretName: incidentgpt-ui-tls",
           "yaml",
         )}
-        {code("kubectl port-forward -n incidentgpt svc/incidentgpt-ui 8080:80", "bash")}
+        {code(
+          "kubectl port-forward -n incidentgpt svc/incidentgpt-ui 8080:80",
+          "bash",
+        )}
       </section>
     </article>
   );
