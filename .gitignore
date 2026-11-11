@@ -48,5 +48,7 @@ Thumbs.db
 # Локальные черновики PR не являются документацией проекта.
 /pr-descriptions/
 
+# Local Python verification caches
+__pycache__/
 /website/test-results/
 /website/playwright-report/

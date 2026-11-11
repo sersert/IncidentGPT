@@ -1,3 +1,12 @@
+{{- if eq (toString .Values.env.EVALUATION_ENABLED) "true" }}
+{{- if not .Values.secrets.existingSecret }}
+{{- fail "EVALUATION_ENABLED requires secrets.existingSecret with analysis-service-token" }}
+{{- end }}
+{{- $profiles := mustFromJson (.Values.env.EVALUATION_PROFILES_JSON | default "[]") }}
+{{- if or (lt (len $profiles) 1) (gt (len $profiles) 16) }}
+{{- fail "evaluation requires 1-16 configured profiles" }}
+{{- end }}
+{{- end }}
 {{- if and (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) (not .Values.operations.existingSecret) }}
 {{- fail "operations requires existingSecret" }}
 {{- end }}
@@ -70,7 +79,7 @@ spec:
                 secretKeyRef:
                   name: {{ default (printf "%s-secrets" (include "ai-worker.fullname" .)) .Values.secrets.existingSecret }}
                   key: {{ .Values.secrets.analysisServiceTokenKey }}
-                  optional: true
+                  optional: {{ ne (toString .Values.env.EVALUATION_ENABLED) "true" }}
             - name: OPENROUTER_API_KEY
               valueFrom:
                 secretKeyRef:

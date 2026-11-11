@@ -20,6 +20,7 @@ service:
   port: 8080
 
 env:
+  EVALUATION_ENABLED: "false"
   LISTEN_ADDR: ":8080"
   REPORTS_ENABLED: "false"
   # Старые API по умолчанию защищает UI Basic-auth / NetworkPolicy.

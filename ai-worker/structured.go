@@ -23,17 +23,42 @@ type structuredResponse struct {
 }
 
 func structuredProvider(ctx context.Context, input AnalysisInput) (structuredResponse, map[string]any, error) {
+	return structuredProviderProfile(ctx, input, nil)
+}
+
+func structuredProviderProfile(ctx context.Context, input AnalysisInput, profile *EvaluationProfile) (structuredResponse, map[string]any, error) {
+	model, tokens, prompt := appCfg.ORModel, appCfg.ORMaxTokens, evidenceSystemPrompt
+	if profile != nil {
+		model, tokens = profile.Model, profile.MaxTokens
+		if profile.PromptVersion == "evidence-analysis/alternatives-v1" {
+			prompt += "\nExplicitly contrast plausible competing explanations and identify the observation that would distinguish them. State when the supplied snapshot cannot distinguish them."
+		}
+	}
 	raw, _ := json.Marshal(input)
 	if len(raw) > 256<<10 {
 		return structuredResponse{}, nil, fmt.Errorf("input exceeds prompt budget")
 	}
-	payload := map[string]any{"model": appCfg.ORModel, "max_tokens": appCfg.ORMaxTokens, "messages": []map[string]string{{"role": "system", "content": evidenceSystemPrompt}, {"role": "user", "content": "<untrusted_evidence>" + string(raw) + "</untrusted_evidence>"}}}
+	payload := map[string]any{"model": model, "max_tokens": tokens, "messages": []map[string]string{{"role": "system", "content": prompt}, {"role": "user", "content": "<untrusted_evidence>" + string(raw) + "</untrusted_evidence>"}}}
 	// JSON mode is opt-in for providers with support. The default compatibility
 	// path requests strict JSON text; Markdown is never scraped into evidence.
 	if os.Getenv("STRUCTURED_OUTPUT_MODE") == "json_object" {
 		payload["response_format"] = map[string]string{"type": "json_object"}
 	}
-	message, usage, trace, err := knowledgeAwareCompletion(ctx, payload)
+	var message providerMessage
+	var usage map[string]any
+	var trace *KnowledgeTrace
+	var err error
+	if profile != nil {
+		ctx = context.WithValue(ctx, evaluationRequestKey{}, true)
+		client := *httpClient
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		message, usage, err = providerCompletionUsing(ctx, payload, &client)
+		if len(message.ToolCalls) > 0 {
+			return structuredResponse{}, nil, fmt.Errorf("evaluation tools are disabled")
+		}
+	} else {
+		message, usage, trace, err = knowledgeAwareCompletion(ctx, payload)
+	}
 	if err != nil {
 		return structuredResponse{}, nil, err
 	}
@@ -58,6 +83,11 @@ func structuredProvider(ctx context.Context, input AnalysisInput) (structuredRes
 }
 func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 	token := os.Getenv("ANALYSIS_SERVICE_TOKEN")
+	evaluation := r.URL.Path == "/v1/evaluation/analyze"
+	if evaluation && (len(token) < 32 || r.Header.Get("Origin") != "") {
+		http.Error(w, "unauthorized", 401)
+		return
+	}
 	if token == "" || !constantToken(r.Header.Get("Authorization"), "Bearer "+token) {
 		http.Error(w, "unauthorized", 401)
 		return
@@ -78,7 +108,19 @@ func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 	b, err := io.ReadAll(io.LimitReader(r.Body, 512<<10))
 	defer r.Body.Close()
 	var input AnalysisInput
-	if err != nil || json.Unmarshal(b, &input) != nil || input.Version != 1 || input.IncidentID == "" || input.AnalysisID == "" || len(input.Evidence) == 0 || len(input.Evidence) > 200 {
+	var profile *EvaluationProfile
+	if evaluation {
+		var decodeErr error
+		input, profile, decodeErr = decodeEvaluationRequest(b)
+		if decodeErr != nil {
+			http.Error(w, "evaluation disabled, invalid input or changed profile", 409)
+			return
+		}
+	} else if json.Unmarshal(b, &input) != nil {
+		http.Error(w, "invalid input", 400)
+		return
+	}
+	if err != nil || input.Version != 1 || input.IncidentID == "" || input.AnalysisID == "" || len(input.Evidence) == 0 || len(input.Evidence) > 200 {
 		http.Error(w, "invalid bounded input", 400)
 		return
 	}
@@ -104,7 +146,7 @@ func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 	safeInput.IncidentID = input.IncidentID
 	safeInput.AnalysisID = input.AnalysisID
 	started := time.Now().UTC()
-	result, usage, err := structuredProvider(ctx, safeInput)
+	result, usage, err := structuredProviderProfile(ctx, safeInput, profile)
 	if err != nil {
 		if aiRuntime.paused() {
 			http.Error(w, "AI paused or control unavailable", 423)
@@ -117,7 +159,11 @@ func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 	for _, e := range input.Evidence {
 		ids = append(ids, e.ID)
 	}
-	a := AnalysisVersion{Knowledge: result.Knowledge, Version: 1, ID: input.AnalysisID, IncidentID: input.IncidentID, EvidenceIDs: ids, Model: appCfg.ORModel, Provider: "openai-compatible", PromptVersion: evidencePromptVersion, StartedAt: started, CompletedAt: time.Now().UTC(), Status: "complete", Summary: result.Summary, Hypotheses: result.Hypotheses, Missing: result.Missing, NextChecks: result.Next, HumanConfirmation: "unconfirmed", Composition: input.Composition, Usage: usage}
+	model, promptVersion := appCfg.ORModel, evidencePromptVersion
+	if profile != nil {
+		model, promptVersion = profile.Model, profile.PromptVersion
+	}
+	a := AnalysisVersion{Knowledge: result.Knowledge, Version: 1, ID: input.AnalysisID, IncidentID: input.IncidentID, EvidenceIDs: ids, Model: model, Provider: "openai-compatible", PromptVersion: promptVersion, StartedAt: started, CompletedAt: time.Now().UTC(), Status: "complete", Summary: result.Summary, Hypotheses: result.Hypotheses, Missing: result.Missing, NextChecks: result.Next, HumanConfirmation: "unconfirmed", Composition: input.Composition, Usage: usage}
 	if validateAnalysis(a, input) != nil {
 		http.Error(w, "invalid or fabricated evidence references", 422)
 		return
@@ -132,10 +178,13 @@ func structuredAnalysisHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "sanitized contract invalid", 503)
 		return
 	}
+	if evaluation {
+		clean.Usage = evaluationUsage(usage)
+	}
 	clean.Notification = "disabled"
 	// Notification failure is visible on the result and cannot discard analysis.
 	// Retries/crashes may duplicate Telegram sends; exactly-once is not promised.
-	if appCfg.TGBotToken != "" && appCfg.TGChannelID != "" {
+	if !evaluation && appCfg.TGBotToken != "" && appCfg.TGChannelID != "" {
 		clean.Notification = "sent"
 		message := clean.Summary
 		for _, h := range clean.Hypotheses {

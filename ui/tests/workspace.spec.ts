@@ -45,6 +45,7 @@ const test = base.extend<{ apiFixture: Fixture }>({
       fixture.requests.push(`${request.method()} ${path}${url.search}`)
       let json: unknown
       if (path === '/auth/session') json = { username: 'preview-operator' }
+      else if (path === '/operations/ai-control') json = { enabled: true, revision: 1 }
       else if (path === '/dashboard/stats') json = mockDashboardStats
       else if (path === '/dashboard/active') json = [incident]
       else if (path === '/predictions') json = []

@@ -1,0 +1,20 @@
+# Overlay on a verified compatible backend/worker/UI release. No real credentials.
+incidentgpt-backend:
+  env:
+    EVALUATION_ENABLED: "true"
+    STRUCTURED_WORKER_URL: http://ai-worker:8080/v1/analyze
+    TIMELINE_READ_USER: admin
+  changes:
+    # Keys: timeline-read-password, analysis-service-token (>=32 bytes),
+    # auth-shared-secret (same sanitizer HMAC), change-ingest-token.
+    existingSecret: incidentgpt-backend-credentials
+ai-worker:
+  secrets:
+    # Existing provider/Telegram/sanitizer credentials plus analysis-service-token.
+    existingSecret: incidentgpt-ai-worker
+  env:
+    EVALUATION_ENABLED: "true"
+    # Replace model IDs with models your configured provider actually supports.
+    EVALUATION_PROFILES_JSON: >-
+      [{"id":"baseline","label":"Baseline","model":"provider/model-a","max_tokens":2000},
+       {"id":"candidate","label":"Candidate","model":"provider/model-b","prompt_version":"evidence-analysis/alternatives-v1","max_tokens":2000}]

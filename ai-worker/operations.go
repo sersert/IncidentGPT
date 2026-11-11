@@ -177,17 +177,20 @@ func (t controlledProviderTransport) RoundTrip(r *http.Request) (*http.Response,
 	if err != nil {
 		return nil, err
 	}
+	skipObservation := r.Context().Value(evaluationRequestKey{}) == true
 	resp, err := t.base.RoundTrip(r.Clone(ctx))
 	if err != nil {
 		done()
-		if aiRuntime.paused() {
-			aiRuntime.observe("unknown", "canceled_while_paused")
-		} else {
-			aiRuntime.observe("unhealthy", "request_failed")
+		if !skipObservation {
+			if aiRuntime.paused() {
+				aiRuntime.observe("unknown", "canceled_while_paused")
+			} else {
+				aiRuntime.observe("unhealthy", "request_failed")
+			}
 		}
 		return nil, err
 	}
-	resp.Body = &observedModelBody{ReadCloser: resp.Body, status: resp.StatusCode, done: done}
+	resp.Body = &observedModelBody{ReadCloser: resp.Body, status: resp.StatusCode, done: done, skipObservation: skipObservation}
 	return resp, nil
 }
 func (c *aiController) observe(status, code string) {
@@ -197,6 +200,7 @@ func (c *aiController) observe(status, code string) {
 }
 
 type observedModelBody struct {
+	skipObservation bool
 	io.ReadCloser
 	status   int
 	done     func()
@@ -218,6 +222,10 @@ func (b *observedModelBody) Close() error {
 	err := b.ReadCloser.Close()
 	b.once.Do(func() {
 		defer b.done()
+		if b.skipObservation {
+			b.data.Reset()
+			return
+		}
 		status, code := "unhealthy", fmt.Sprintf("http_%d", b.status)
 		if b.status >= 200 && b.status < 300 {
 			var result struct {

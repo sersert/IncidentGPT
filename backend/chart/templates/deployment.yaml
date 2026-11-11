@@ -1,3 +1,6 @@
+{{- if and (eq (toString .Values.env.EVALUATION_ENABLED) "true") (not .Values.changes.existingSecret) }}
+{{- fail "EVALUATION_ENABLED requires changes.existingSecret with reader, analysis and sanitizer credentials" }}
+{{- end }}
 {{- if and .Values.browserSessions.enabled (not .Values.readerAuth.existingSecret) (not .Values.changes.existingSecret) }}
 {{- fail "browserSessions.enabled requires readerAuth.existingSecret or changes.existingSecret" }}
 {{- end }}
@@ -123,7 +126,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.changes.existingSecret }}
                   key: {{ .Values.changes.analysisServiceTokenKey }}
-                  optional: {{ ne (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true" }}
+                  optional: {{ not (or (eq (toString .Values.env.GUIDED_DIAGNOSTICS_ENABLED) "true") (eq (toString .Values.env.EVALUATION_ENABLED) "true")) }}
             - name: CHANGE_INGEST_TOKEN
               valueFrom:
                 secretKeyRef:

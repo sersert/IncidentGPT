@@ -82,7 +82,9 @@ test('an expired API session returns to sign-in', async ({ page }) => {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '')
     if (path === '/operations/status') return route.fulfill({ status: 404, body: 'disabled' })
-    if (expired) return route.fulfill({ status: 401, body: 'session expired' })
+    // Expire only the resource refreshed by this test. Unrelated in-flight
+    // operations/prediction requests must not sign out before the click.
+    if (expired && path === '/dashboard/stats') return route.fulfill({ status: 401, body: 'session expired' })
     return route.fulfill({
       json:
         path === '/auth/session'
@@ -92,7 +94,10 @@ test('an expired API session returns to sign-in', async ({ page }) => {
             : [],
     })
   })
-  await page.goto('/')
+  await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/dashboard/stats' && response.status() === 200),
+    page.goto('/'),
+  ])
   await expect(
     page.getByRole('button', { name: 'Обновить', exact: true }),
   ).toBeVisible()

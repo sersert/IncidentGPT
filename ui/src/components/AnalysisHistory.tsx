@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { get } from '@/api/client'
@@ -21,6 +22,7 @@ export function AnalysisHistory({ incidentId }: { incidentId: string }) {
    <select aria-label="Версия анализа" className="mb-3 max-w-full bg-surface-tertiary p-1 text-xs" value={selected || history.data?.latest_analysis_id || ''} onChange={e => setSelected(e.target.value)}><option value="">Выберите версию</option>{history.data?.items.map(v => <option key={v.analysis_id} value={v.analysis_id}>{formatDate(v.completed_at)} · {v.analysis_id}</option>)}</select>
    {!a ? <p className="text-xs">Подтверждённой версии результата пока нет. Состояние задания показано выше.</p> : <>
     <p className="mb-2 text-xs text-text-muted">Подтверждение человеком: {a.human_confirmation}. Это гипотезы, а не установленная причина.</p>
+    <Link className="mb-3 inline-block text-xs text-accent underline" to={`/evaluation?incident_id=${encodeURIComponent(incidentId)}&analysis_id=${encodeURIComponent(a.analysis_id)}`}>Создать тестовый кейс из этой версии</Link>
     <p className="text-sm">{a.summary}</p>{a.composition_hash !== history.data?.composition_hash && <p role="status" className="mt-2 text-xs">Анализ относится к предыдущему составу инцидента. Обновите контекст.</p>}
     {a.hypotheses.map((h, i) => <div key={i} className="mt-3 border-t border-border-soft pt-3 text-xs"><p>{h.text}</p>{[['Поддерживает', h.supporting_evidence_ids], ['Противоречит', h.contradicting_evidence_ids]].map(([label, ids]) => <p key={label as string} className="mt-1">{label}: {(ids as string[]).map(id => <button key={id} className="mr-2 text-accent underline" onClick={() => setEvidenceId(id)}>{id.slice(0, 22)}…</button>)}</p>)}</div>)}
     {a.knowledge && <section aria-label="Источники базы знаний" className="mt-3 border-t border-border-soft pt-3 text-xs">

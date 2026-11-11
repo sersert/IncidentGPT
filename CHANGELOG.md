@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+- Opt-in model evaluation lab (`/evaluation`): immutable incident snapshots and
+  engineer-authored cases, explicit comparison of 1–4 allowlisted model/prompt
+  profiles, provider-reported usage and revisioned human assessments. Expected
+  causes stay outside inference. Separate bounded Redis queue, no Telegram or
+  live-analysis updates, no automatic paid retries, AI pause support and 90-day
+  retention. Configuration and verified preview: `docs/model-evaluation.md`.
 - Operations в umbrella включаются одним `global.operations.enabled`; частичная
   конфигурация отклоняется. MCP receiver policy требует отдельного opt-in и не
   создаётся только из-за mcpHealthURL. Контроль provider URL нормализован; безопасный
