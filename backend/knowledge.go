@@ -145,7 +145,7 @@ func handleResolution(w http.ResponseWriter, r *http.Request) {
 	record.Revision++
 	record.Schema = 1
 	record.IncidentID = id
-	record.Actor, _, _ = r.BasicAuth()
+	record.Actor = verifiedActor(r)
 	record.At = time.Now().UTC()
 	record.ClusterID = incidentCluster(inc)
 	record.Composition = incidentComposition(inc)

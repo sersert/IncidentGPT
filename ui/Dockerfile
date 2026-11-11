@@ -23,8 +23,14 @@ LABEL org.opencontainers.image.source="https://github.com/sersert/IncidentGPT" \
       org.opencontainers.image.licenses="MIT"
 
 COPY --from=build /app/dist /usr/share/nginx/html
-ENV NGINX_RESOLVER=10.96.0.10 \
+ENV AUTH_MODE=basic \
+    AUTH_BASIC_ENABLED=true \
+    AUTH_REAL_IP_HEADER=X-Forwarded-For \
+    AUTH_TRUSTED_PROXY_CIDRS="" \
+    AUTH_LOGIN_BURST=20 \
+    NGINX_RESOLVER=10.96.0.10 \
     BACKEND_URL=http://incidentgpt-backend.incidentgpt.svc.cluster.local:8080
 COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY --chmod=755 19-incidentgpt-auth.sh /docker-entrypoint.d/19-incidentgpt-auth.sh
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

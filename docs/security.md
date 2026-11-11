@@ -137,15 +137,18 @@ Graph/regroup требуют JSON и проверяют browser Origin; прои
 
 Query и документы проходят fail-closed Sanitizer, ссылки/версии проверяются, произвольные адреса модели не запрашиваются, provider redirects не следуются. Документы не исполняются и не считаются подтверждением причины/восстановления; ссылки на них не проходят как incident evidence IDs. Бюджеты запросов, TLS/CA, дополнительные права egress и ротация Secrets описаны в [руководстве MCP](mcp-knowledge.md).
 
-## Browser sessions
+## Браузерные сессии
 
-The public sign-in shell contains no operational data. Nginx authenticates all API
-and WebSocket paths through a backend subrequest, including API URLs ending in
-static-file extensions. Passwords are never stored in browser storage or cookies.
-Session cookies are opaque, HttpOnly, Secure by default, SameSite=Strict and expire
-after eight hours. Login/logout require a trusted browser Origin. Logout deletes
-the server session; credential rotation invalidates existing sessions. Redis stores
-only token hashes and expires sessions automatically. The bounded in-memory fallback
-is intended for one backend process. Keep Redis private and persistent across replicas.
-Session endpoints return no-store responses without a browser Basic challenge.
-See [deployment and upgrade requirements](web-ui.md#доступ).
+По умолчанию nginx сохраняет Basic и htpasswd. Сессии включаются явно через
+`incidentgpt-ui.authMode=session` и `incidentgpt-backend.browserSessions.enabled=true`.
+Нужны совместимые образы и reader Secret. Cookie случайная, HttpOnly, Secure,
+SameSite=Strict, TTL восемь часов. Auth/audit получают из контекста только имя,
+пароль не подставляется в Authorization. Cookie-мутации требуют доверенный Origin.
+В Redis лежат SHA-256 токена, привязанное к токену HMAC-доказательство credentials
+и срок действия; пароль или самостоятельный password verifier не сохраняются.
+Выход и смена credentials отзывают сессию. При настроенном недоступном Redis —
+503 без memory fallback; клиент переподключается независимо от durable-очереди.
+Nginx защищает все API/WS, включая URL с расширениями статики. В session входящий
+X-Auth-User удаляется; в basic nginx передаёт remote_user. Доверять forwarded IP
+можно только от явно заданных `trustedProxyCIDRs`; пустой список безопасен по умолчанию.
+Контракт, обновление и откат: [доступ](web-ui.md#доступ).

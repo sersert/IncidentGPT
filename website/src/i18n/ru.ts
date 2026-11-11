@@ -447,7 +447,7 @@ export const ru = {
     alertmanagerNote:
       "Имя в route.receiver должно точно совпадать с receivers[].name. continue: true оставляет рабочими Slack, PagerDuty и остальные ресиверы.",
     verifyIntro:
-      "Интерфейс публикуется своим Ingress. Страница входа использует учётную запись backend из reader Secret; nginx проверяет сессию перед доступом к /api/ и /ws/. Для production используйте HTTPS.",
+      "По умолчанию интерфейс сохраняет Basic-вход nginx. Страница с сессиями включается явно через authMode=session и browserSessions.enabled; ей нужен reader Secret backend и HTTPS.",
   },
   configuration: {
     headings: {
@@ -727,9 +727,9 @@ export const ru = {
       body: "Сервис всё равно работает, но держит состояние в памяти: любой рестарт пода очищает историю. Для чего-то серьёзнее демо под архив нужна нормальная база.",
     },
     accessIntro:
-      "Вход использует серверную сессию на восемь часов и HttpOnly/Secure cookie. Задайте backend reader Secret с исходными username/password. Старый htpasswd не используется; UI и backend обновляются вместе.",
+      "По умолчанию работает Basic/htpasswd. Для серверных сессий на восемь часов задайте authMode=session, browserSessions.enabled=true и reader Secret backend. UI и backend обновляются вместе.",
     accessProbe:
-      "/healthz остаётся публичным для kubelet. Nginx удаляет входящий X-Auth-User; backend восстанавливает проверенную личность для журнала действий. Это общая administrator-учётная запись, без индивидуальных ролей и SSO.",
+      "/healthz остаётся публичным для kubelet — иначе он получал бы 401 и под никогда не становился ready. Nginx удаляет входящий X-Auth-User: в basic имя подтверждает nginx, в session backend восстанавливает проверенную личность для журнала действий. Это общая administrator-учётная запись, без индивидуальных ролей и SSO.",
     screens: [
       {
         name: "Обзор дежурства",
@@ -1006,7 +1006,7 @@ export const ru = {
     },
     security: {
       behavior:
-        "страница входа создаёт серверную сессию. Nginx проверяет доступ к /api/ и /ws/, а backend получает подтверждённую личность для журнала действий.",
+        "по умолчанию Basic/htpasswd; opt-in страница входа создаёт серверную сессию. Nginx проверяет доступ к /api/ и /ws/, а backend получает подтверждённую личность для журнала действий.",
       risk: "одна общая учётная запись, без ролей, SSO и отдельных аккаунтов инженеров.",
       recommended:
         "поставить перед Ingress авторизующий прокси, если истории инцидентов нужен настоящий контроль доступа.",

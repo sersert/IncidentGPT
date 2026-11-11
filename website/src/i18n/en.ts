@@ -447,7 +447,7 @@ export const en = {
     alertmanagerNote:
       "route.receiver and receivers[].name must match exactly. continue: true keeps existing Slack, PagerDuty or other receivers active.",
     verifyIntro:
-      "The UI has its own Ingress. Sign-in uses the backend account from a reader Secret; nginx checks the session before granting access to /api/ and /ws/. Use HTTPS in production.",
+      "The UI retains nginx Basic authentication by default. Session sign-in is opt-in through authMode=session and browserSessions.enabled; it requires a backend reader Secret and HTTPS.",
   },
   configuration: {
     headings: {
@@ -740,9 +740,9 @@ export const en = {
       body: "The service still runs and keeps state in memory, but any pod restart wipes the history. For anything beyond a demo an archive needs a real database.",
     },
     accessIntro:
-      "Sign-in uses an eight-hour server session and an HttpOnly/Secure cookie. Configure a backend reader Secret with the original username/password. Legacy htpasswd is unused; upgrade UI and backend together.",
+      "Basic/htpasswd remains the default. Enable eight-hour server sessions with authMode=session, browserSessions.enabled=true and a backend reader Secret. Upgrade UI and backend together.",
     accessProbe:
-      "/healthz remains public for kubelet. Nginx clears incoming X-Auth-User; backend restores a verified identity for the action log. This is a shared administrator account, without individual roles or SSO.",
+      "/healthz remains public for kubelet — otherwise it would get a 401 and the pod would never become ready. Nginx clears incoming X-Auth-User: Basic identity is verified by nginx, session identity is restored by the backend for the action log. This is a shared administrator account, without individual roles or SSO.",
     screens: [
       {
         name: "On-call overview",
@@ -1020,7 +1020,7 @@ export const en = {
     },
     security: {
       behavior:
-        "sign-in creates a server session. Nginx checks access to /api/ and /ws/, and the backend restores the verified identity for the action log.",
+        "Basic/htpasswd remains the default. Opt-in sign-in creates a server session: nginx checks access to /api/ and /ws/, and the backend restores the verified identity for the action log.",
       risk: "one shared account, no roles, no SSO, no per-user audit beyond that header.",
       recommended:
         "put an authenticating proxy in front of the Ingress when the incident history needs real access control.",

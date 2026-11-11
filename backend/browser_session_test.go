@@ -9,6 +9,8 @@ import (
 )
 
 func TestBrowserSessionLifecycle(t *testing.T) {
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "true")
+	t.Setenv("REDIS_ADDR", "")
 	t.Setenv("TIMELINE_READ_USER", "operator")
 	t.Setenv("TIMELINE_READ_PASSWORD", "test-password")
 	t.Setenv("BROWSER_SESSION_SECURE", "true")
@@ -54,9 +56,8 @@ func TestBrowserSessionLifecycle(t *testing.T) {
 	}
 	// Existing handlers receive a verified Basic principal, preserving their auth and audit checks.
 	probe := browserSessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, password, ok := r.BasicAuth()
-		if !ok || user != "operator" || password != "test-password" {
-			t.Error("missing verified principal")
+		if r.Header.Get("Authorization") != "" || browserPrincipal(r) != "operator" || verifiedActor(r) != "operator" {
+			t.Error("session leaked credentials or lost verified actor")
 		}
 		if !changeReadAuth(w, r) {
 			t.Error("existing authorization rejected session")
@@ -82,7 +83,7 @@ func TestBrowserSessionLifecycle(t *testing.T) {
 	login = call("POST", `{"username":"operator","password":"test-password"}`, "https://preview.example", nil)
 	cookie = login.Result().Cookies()[0]
 	browserSessions.Lock()
-	browserSessions.entries[sessionKey(cookie.Value)] = browserSession{Credential: credentialFingerprint(), Expires: time.Now().Add(-time.Minute)}
+	browserSessions.entries[sessionKey(cookie.Value)] = browserSession{Credential: credentialProof(cookie.Value), Expires: time.Now().Add(-time.Minute)}
 	browserSessions.Unlock()
 	if got := call("GET", "", "", cookie); got.Code != 401 {
 		t.Fatalf("expired cookie accepted: %d", got.Code)
@@ -96,6 +97,8 @@ func TestBrowserSessionLifecycle(t *testing.T) {
 }
 
 func TestBasicAccessDoesNotRestoreBrowserSession(t *testing.T) {
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "true")
+	t.Setenv("REDIS_ADDR", "")
 	t.Setenv("TIMELINE_READ_USER", "operator")
 	t.Setenv("TIMELINE_READ_PASSWORD", "test-password")
 	for _, path := range []string{"session", "check"} {
@@ -110,5 +113,46 @@ func TestBasicAccessDoesNotRestoreBrowserSession(t *testing.T) {
 		if response.Code != expected {
 			t.Fatalf("%s: %d", path, response.Code)
 		}
+	}
+}
+
+func TestBrowserSessionsAreOptIn(t *testing.T) {
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "false")
+	for _, path := range []string{"session", "check"} {
+		response := httptest.NewRecorder()
+		backendHandler().ServeHTTP(response, httptest.NewRequest("GET", "https://preview.example/api/v1/auth/"+path, nil))
+		if response.Code != 404 {
+			t.Fatalf("%s enabled by default: %d", path, response.Code)
+		}
+	}
+}
+func TestConfiguredUnavailableRedisCannotUseMemorySessions(t *testing.T) {
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "true")
+	t.Setenv("REDIS_ADDR", "127.0.0.1:1")
+	t.Setenv("TIMELINE_READ_USER", "operator")
+	t.Setenv("TIMELINE_READ_PASSWORD", "test-password")
+	old := store.disk
+	store.disk = nil
+	defer func() { store.disk = old }()
+	request := httptest.NewRequest("POST", "https://preview.example/api/v1/auth/session", strings.NewReader(`{"username":"operator","password":"test-password"}`))
+	request.Header.Set("Origin", "https://preview.example")
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	backendHandler().ServeHTTP(response, request)
+	if response.Code != 503 || len(response.Result().Cookies()) != 0 {
+		t.Fatalf("Redis failure fell back to local sessions: %d", response.Code)
+	}
+}
+func TestSessionProofDependsOnCookieAndCredentialRotation(t *testing.T) {
+	t.Setenv("TIMELINE_READ_USER", "operator")
+	t.Setenv("TIMELINE_READ_PASSWORD", "test-password")
+	first := credentialProof("first-random-cookie")
+	second := credentialProof("second-random-cookie")
+	if first == second {
+		t.Fatal("Redis exposes a reusable password verifier")
+	}
+	t.Setenv("TIMELINE_READ_PASSWORD", "rotated-password")
+	if first == credentialProof("first-random-cookie") {
+		t.Fatal("rotation did not invalidate proof")
 	}
 }

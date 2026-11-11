@@ -788,7 +788,7 @@ func strVal(m map[string]any, key string) string {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.Header.Get("Authorization") == "" {
+		if r.Method == http.MethodGet && r.Header.Get("Authorization") == "" && browserPrincipal(r) == "" {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		} else if trustedBrowserOrigin(r) {
 			w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
@@ -1130,6 +1130,9 @@ func handleIncidentPatch(w http.ResponseWriter, r *http.Request) {
 // requestUser достаёт имя из заголовка, который проставляет nginx после
 // basic-авторизации. Без него журнал был бы анонимным.
 func requestUser(r *http.Request) string {
+	if user := browserPrincipal(r); user != "" {
+		return user
+	}
 	if u := r.Header.Get("X-Auth-User"); u != "" {
 		return u
 	}
@@ -1630,11 +1633,14 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func handleReady(w http.ResponseWriter, r *http.Request) {
-	if durableEnabled() {
+	if durableEnabled() || operationsEnabled() {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		if store.disk == nil || store.disk.rdb.Ping(ctx).Err() != nil {
-			http.Error(w, "durable storage unavailable", http.StatusServiceUnavailable)
+		store.mu.RLock()
+		disk := store.disk
+		store.mu.RUnlock()
+		if disk == nil || disk.rdb.Ping(ctx).Err() != nil {
+			http.Error(w, "persistent storage unavailable", http.StatusServiceUnavailable)
 			return
 		}
 	}

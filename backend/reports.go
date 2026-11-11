@@ -245,7 +245,7 @@ func handleReports(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "report generation disabled", 503)
 			return
 		}
-		actor, _, _ := r.BasicAuth()
+		actor := verifiedActor(r)
 		source, err := buildReportSource(ctx, inc, kind, actor)
 		if err != nil {
 			http.Error(w, "report sources unavailable or exceed snapshot budget", 503)
@@ -418,7 +418,7 @@ func editReport(ctx context.Context, w http.ResponseWriter, r *http.Request, inc
 		http.Error(w, "report changed; reload before saving", 409)
 		return
 	}
-	actor, _, _ := r.BasicAuth()
+	actor := verifiedActor(r)
 	now := time.Now().UTC()
 	report.Markdown = edit.Markdown
 	if cut := strings.Index(report.Markdown, "\n## Reviewed action items\n"); cut >= 0 {

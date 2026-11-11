@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -24,13 +26,14 @@ type modelObservation struct {
 	CheckedAt time.Time `json:"checked_at"`
 }
 type aiController struct {
-	mu      sync.Mutex
-	state   controlState
-	known   bool
-	checked time.Time
-	active  map[uint64]context.CancelFunc
-	next    uint64
-	model   modelObservation
+	refreshMu sync.Mutex
+	mu        sync.Mutex
+	state     controlState
+	known     bool
+	checked   time.Time
+	active    map[uint64]context.CancelFunc
+	next      uint64
+	model     modelObservation
 }
 
 var aiRuntime = &aiController{active: map[uint64]context.CancelFunc{}}
@@ -40,12 +43,12 @@ var errAIPaused = fmt.Errorf("ai_paused_or_control_unavailable")
 func controlRequired() bool { return strings.TrimSpace(os.Getenv("AI_CONTROL_URL")) != "" }
 func (c *aiController) apply(state controlState, err error) {
 	c.mu.Lock()
-	if err == nil && state.Revision < c.state.Revision {
+	if err == nil && state.Revision < c.state.Revision && (state.Enabled == nil || *state.Enabled) {
 		err = errAIPaused // A restored/lost Redis record must never reopen the provider.
 	}
 	c.checked = time.Now().UTC()
 	c.known = err == nil
-	if err == nil && state.Revision >= c.state.Revision {
+	if err == nil {
 		c.state = state
 	}
 	stop := err != nil || c.state.Enabled == nil || !*c.state.Enabled
@@ -61,6 +64,8 @@ func (c *aiController) apply(state controlState, err error) {
 	}
 }
 func (c *aiController) refresh(ctx context.Context) error {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
 	if !controlRequired() {
 		return nil
 	}
@@ -113,7 +118,7 @@ func (c *aiController) begin(ctx context.Context) (context.Context, func(), erro
 	c.active[id] = cancel
 	return child, func() { cancel(); c.mu.Lock(); delete(c.active, id); c.mu.Unlock() }, nil
 }
-func startAIControlPolling() {
+func startAIControlPolling(ctx context.Context) {
 	if !controlRequired() {
 		return
 	}
@@ -121,16 +126,51 @@ func startAIControlPolling() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
-			_ = aiRuntime.refresh(context.Background())
-			<-ticker.C
+			if ctx.Err() != nil {
+				return
+			}
+			_ = aiRuntime.refresh(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	}()
+}
+
+// Сравнение нормализует регистр схемы/хоста и стандартный порт. Query не
+// освобождает тот же provider endpoint от guard, redirect также проверяет origin.
+func isProviderURL(u *url.URL) bool {
+	target, err := url.Parse(strings.TrimSpace(appCfg.ORBaseURL))
+	if err != nil || target.Hostname() == "" {
+		return true
+	}
+	port := func(v *url.URL) string {
+		if v.Port() != "" {
+			return v.Port()
+		}
+		if strings.EqualFold(v.Scheme, "https") {
+			return "443"
+		}
+		if strings.EqualFold(v.Scheme, "http") {
+			return "80"
+		}
+		return ""
+	}
+	path := func(v *url.URL) string {
+		if v.Path == "" {
+			return "/"
+		}
+		return v.Path
+	}
+	return strings.EqualFold(u.Scheme, target.Scheme) && strings.EqualFold(strings.TrimSuffix(u.Hostname(), "."), strings.TrimSuffix(target.Hostname(), ".")) && port(u) == port(target) && path(u) == path(target)
 }
 
 type controlledProviderTransport struct{ base http.RoundTripper }
 
 func (t controlledProviderTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if !controlRequired() || r.Method != "POST" || r.URL.String() != appCfg.ORBaseURL {
+	if !controlRequired() || r.Method != "POST" || !isProviderURL(r.URL) {
 		return t.base.RoundTrip(r)
 	}
 	ctx, done, err := aiRuntime.begin(r.Context())
@@ -275,14 +315,6 @@ func workerModelProbe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "AI control is not configured", 503)
 		return
 	}
-	modelProbeLimit.Lock()
-	if time.Since(modelProbeLimit.at) < time.Minute {
-		modelProbeLimit.Unlock()
-		http.Error(w, "probe limited to once per minute", 429)
-		return
-	}
-	modelProbeLimit.at = time.Now()
-	modelProbeLimit.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	if aiRuntime.refresh(ctx) != nil {
@@ -307,9 +339,24 @@ func workerModelProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Authorization", "Bearer "+appCfg.ORAPIKey)
 	req.Header.Set("Content-Type", "application/json")
+	modelProbeLimit.Lock()
+	if time.Since(modelProbeLimit.at) < time.Minute {
+		modelProbeLimit.Unlock()
+		http.Error(w, "probe limited to once per minute", 429)
+		return
+	}
+	modelProbeLimit.at = time.Now()
+	modelProbeLimit.Unlock()
 	started := time.Now()
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		if errors.Is(err, errAIPaused) {
+			modelProbeLimit.Lock()
+			modelProbeLimit.at = time.Time{}
+			modelProbeLimit.Unlock()
+			http.Error(w, "AI paused or control unavailable", 423)
+			return
+		}
 		http.Error(w, "probe failed or AI paused", 502)
 		return
 	}

@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+- Operations в umbrella включаются одним `global.operations.enabled`; частичная
+  конфигурация отклоняется. MCP receiver policy требует отдельного opt-in и не
+  создаётся только из-за mcpHealthURL. Контроль provider URL нормализован; безопасный
+  сброс в paused позволяет восстановиться после потери Redis-ключа без рестарта.
+  Worker 423 не расходует attempts при любой конфигурации backend. Снимок мониторинга
+  собирается независимо от браузерного контекста, параллельно и с общим бюджетом 4s.
+
 - Opt-in `/operations`: реальные health checks важных компонентов, свежесть
   последнего inference, явный ограниченный платный probe; автообновление без LLM.
 - Сохранённая в Redis пауза AI: общий guard всех provider POST, отмена текущих
@@ -16,6 +23,22 @@
   `igpt:operations:model-probe:limit` (TTL 60s). Совместимость/rollback и Secret
   opt-in описаны в `docs/operations.md`; первоначальное состояние — пауза.
 - Добавлен отдельный MCP-сервер для read-only поиска по разрешённым Confluence spaces и каталогам GitHub/GitLab. При явной настройке AI worker сам вызывает поиск по необходимости (не более двух обращений), сохраняя default-поведение без MCP. Запросы и документы проходят fail-closed санитизацию. Sanitizer сохраняет непрозрачные 40-символьные Git SHA, продолжая маскировать credentials и телефоны. Версии structured-анализа получают additive metadata `knowledge` и `knowledge_reference_ids`; старые записи совместимы, новых Redis keys и миграций нет. Подробнее: [mcp-knowledge.md](docs/mcp-knowledge.md).
+
+- Сохранён Basic/htpasswd по умолчанию. Страница входа — opt-in `authMode=session` +
+  `browserSessions.enabled=true`; umbrella проверяет reader Secret и совместимую
+  конфигурацию. Обновляйте UI/backend вместе; session UI со старым backend даёт
+  ошибку auth-check. Для rollback верните basic и сохранённый htpasswd Secret.
+- Новые маршруты: публичный `/auth-config.json` (только режим), backend
+  `GET/POST/DELETE /api/v1/auth/session`, `GET /api/v1/auth/check` (nginx subrequest),
+  включены только при `BROWSER_SESSIONS_ENABLED=true`. В basic контракт прежний;
+  в session Basic API-клиенты используют `TIMELINE_READ_*`, X-Auth-User удаляется,
+  а auth/audit получают principal без переноса пароля в заголовки.
+- Новый Redis-контракт `igpt:session:<SHA256(cookie)>`, JSON `credential` (HMAC от
+  случайного cookie с ключом user\0password), `expires`, TTL 8h. Старые preview
+  `browser-session:*` не читаются и истекают сами; инциденты не мигрируют. Клиент
+  сессий повторяет соединение независимо от durable и не заменяет настроенный
+  Redis памятью. `trustedProxyCIDRs`/`realIpHeader` задают доверие к ingress IP,
+  `loginBurst` — burst POST-входов; по умолчанию forwarded IP не доверяем.
 
 - Исправлена публикация postmortem: additive ключ `igpt:incident:postmortem:{id}`
   (без TTL, удалять вместе с incident) исключает порчу JSON через Lua cjson;

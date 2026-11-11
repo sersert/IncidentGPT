@@ -82,3 +82,15 @@ func trustedBrowserOrigin(r *http.Request) bool {
 	expected, err := normalizedOrigin(u.Scheme + "://" + r.Host)
 	return (err == nil && expected == origin) || allowed[origin]
 }
+
+// Имя используется только после проверки доступа; заголовок X-Auth-User
+// не может подменить Basic principal или подтверждённую серверную сессию.
+type verifiedPrincipalKey struct{}
+
+func verifiedActor(r *http.Request) string {
+	if user, _ := r.Context().Value(verifiedPrincipalKey{}).(string); user != "" {
+		return user
+	}
+	user, _, _ := r.BasicAuth()
+	return user
+}

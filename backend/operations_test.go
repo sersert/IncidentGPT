@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -247,5 +248,150 @@ func TestOperationsMutationAndServiceAuth(t *testing.T) {
 	handleWorkerAIControl(w, r)
 	if w.Code != 401 {
 		t.Fatal("browser origin allowed on internal control")
+	}
+}
+
+func TestMonitoringCollectionSurvivesCallerCancelAndProbesLogsConcurrently(t *testing.T) {
+	setupOperations(t)
+	workerStarted := make(chan struct{})
+	logsStarted := make(chan struct{})
+	var once sync.Once
+	worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/readyz" {
+			once.Do(func() { close(workerStarted) })
+			select {
+			case <-logsStarted:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		writeJSON(w, 200, map[string]any{"service": "ai-worker", "managed": true})
+	}))
+	defer worker.Close()
+	logs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(logsStarted); w.WriteHeader(200) }))
+	defer logs.Close()
+	t.Setenv("OPERATIONS_WORKER_URL", worker.URL)
+	t.Setenv("LOGS_STORE_URL", logs.URL)
+	t.Setenv("LOGS_KIND", "opensearch")
+	t.Setenv("OPERATIONS_ENRICHER_URL", "")
+	t.Setenv("SANITIZER_URL", "")
+	t.Setenv("OPERATIONS_MCP_HEALTH_URL", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	abandoned := make(chan struct{})
+	go func() { collectOperations(ctx); close(abandoned) }()
+	select {
+	case <-workerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("collection never started")
+	}
+	cancel()
+	<-abandoned
+	snapshot := collectOperations(context.Background())
+	statuses := map[string]string{}
+	for _, check := range snapshot.Components {
+		statuses[check.ID] = check.Status
+	}
+	if statuses["worker"] != "healthy" || statuses["logs"] != "healthy" {
+		t.Fatalf("caller canceled shared collection or logs ran too late: %+v", statuses)
+	}
+	if statuses["enricher"] != "not_configured" {
+		t.Fatalf("missing endpoint was not classified: %+v", statuses)
+	}
+	if !collectOperations(context.Background()).CheckedAt.Equal(snapshot.CheckedAt) {
+		t.Fatal("shared snapshot was not cached")
+	}
+}
+func TestWorkerPauseDefersAnalysisEvenWithoutBackendOperationsFlag(t *testing.T) {
+	t.Setenv("OPERATIONS_ENABLED", "false")
+	worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(423) }))
+	defer worker.Close()
+	t.Setenv("STRUCTURED_WORKER_URL", worker.URL)
+	_, err := executeAnalysis(context.Background(), &jobEnvelope{})
+	if err == nil || err.Error() != "ai_paused" {
+		t.Fatalf("worker pause consumes retry budget: %v", err)
+	}
+}
+
+func TestProbePreflightFailureDoesNotExhaustLimiterOrReturnBrowser401(t *testing.T) {
+	addr := os.Getenv("INCIDENTGPT_TEST_REDIS_ADDR")
+	if addr == "" {
+		t.Skip("requires dedicated Redis")
+	}
+	setupOperations(t)
+	old := store
+	defer func() { store = old }()
+	disk := NewStorage(addr, "")
+	if disk == nil {
+		t.Fatal("Redis unavailable")
+	}
+	defer disk.rdb.Close()
+	store = &Store{disk: disk}
+	ctx := context.Background()
+	keys := []string{aiControlKey, "igpt:operations:model-probe:limit"}
+	originals := map[string]string{}
+	for _, key := range keys {
+		if value, err := disk.rdb.Get(ctx, key).Result(); err == nil {
+			originals[key] = value
+		}
+		disk.rdb.Del(ctx, key)
+	}
+	defer func() {
+		for _, key := range keys {
+			if value, ok := originals[key]; ok {
+				disk.rdb.Set(ctx, key, value, 0)
+			} else {
+				disk.rdb.Del(ctx, key)
+			}
+		}
+	}()
+	value, _ := json.Marshal(AIControlState{Schema: 1, Enabled: true, Revision: 1, UpdatedAt: time.Now().UTC(), UpdatedBy: "operator"})
+	disk.rdb.Set(ctx, aiControlKey, value, 0)
+	var status atomic.Int32
+	worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if status.Load() != 200 {
+			w.WriteHeader(int(status.Load()))
+			return
+		}
+		writeJSON(w, 200, map[string]any{"success": true, "latency_ms": 1})
+	}))
+	defer worker.Close()
+	t.Setenv("OPERATIONS_WORKER_URL", worker.URL)
+	for _, code := range []int{401, 423, 503} {
+		status.Store(int32(code))
+		response := httptest.NewRecorder()
+		handleModelProbe(response, operationsRequest("POST", "/api/v1/operations/model-probe", "{}", true))
+		want := code
+		if code == 401 {
+			want = 502
+		}
+		if response.Code != want {
+			t.Fatalf("internal status %d became browser %d", code, response.Code)
+		}
+		if disk.rdb.Exists(ctx, "igpt:operations:model-probe:limit").Val() != 0 {
+			t.Fatal("preflight rejection consumed paid probe budget")
+		}
+	}
+	status.Store(200)
+	response := httptest.NewRecorder()
+	handleModelProbe(response, operationsRequest("POST", "/api/v1/operations/model-probe", "{}", true))
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	handleModelProbe(response, operationsRequest("POST", "/api/v1/operations/model-probe", "{}", true))
+	if response.Code != 429 {
+		t.Fatal("successful probe did not consume limiter")
+	}
+}
+
+func TestOperationsCannotStartInPermanentMemoryFallback(t *testing.T) {
+	t.Setenv("OPERATIONS_ENABLED", "true")
+	t.Setenv("DURABLE_ANALYSIS_ENABLED", "false")
+	t.Setenv("REDIS_ADDR", "")
+	old := store
+	store = &Store{}
+	defer func() { store = old }()
+	if err := awaitDurableStorage(context.Background()); err == nil || !strings.Contains(err.Error(), "operations requires REDIS_ADDR") {
+		t.Fatalf("operations silently started without persistent control: %v", err)
 	}
 }
