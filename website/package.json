@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -b",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run src/test",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^26.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

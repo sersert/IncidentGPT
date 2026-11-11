@@ -1,4 +1,9 @@
-import type { AiWorkerEnvName, BackendEnvName, EnricherEnvName, MetricName } from "../data/configuration";
+import type {
+  AiWorkerEnvName,
+  BackendEnvName,
+  EnricherEnvName,
+  MetricName,
+} from "../data/configuration";
 
 export type Language = "ru" | "en";
 export type ThemeMode = "system" | "dark" | "light";
@@ -27,8 +32,26 @@ export type Translation = {
     title: string;
     description: string;
   };
-  navigation: Record<"overview" | "architecture" | "installation" | "configuration" | "webUi" | "logs" | "examples" | "troubleshooting" | "limitations", string>;
+  navigation: Record<
+    | "overview"
+    | "architecture"
+    | "installation"
+    | "configuration"
+    | "webUi"
+    | "logs"
+    | "examples"
+    | "troubleshooting"
+    | "limitations",
+    string
+  >;
   common: {
+    signIn: string;
+    mobileNavigation: string;
+    tableOfContents: string;
+    navigation: string;
+    openMenu: string;
+    closeMenu: string;
+    skip: string;
     copy: string;
     copied: string;
     download: string;
@@ -55,35 +78,71 @@ export type Translation = {
     githubButton: string;
     architectureLink: string;
     demoNote: string;
-    steps: readonly string[];
+    caption: string;
+  };
+  demo: {
+    label: string;
+    queue: string;
+    severity: string;
+    status: string;
+    title: string;
+    summary: string;
+    tabsLabel: string;
+    tabs: readonly string[];
+    evidence: string;
+    footer: string;
+    panels: readonly {
+      title: string;
+      body: string;
+      items: readonly string[];
+    }[];
   };
   home: {
-    terminalTitle: string;
-    resultTitle: string;
+    workflowLabel: string;
+    workflowTitle: string;
+    workflow: readonly { title: string; body: string }[];
+    featuresLabel: string;
     featuresTitle: string;
     featuresSubtitle: string;
-    compareTitle: string;
-    regularApproach: string;
-    incidentgptApproach: string;
-    compareConclusion: string;
+    optInNote: string;
     reliabilityTitle: string;
     reliabilityBody: string;
+    quickStartLabel: string;
     quickStartTitle: string;
     quickStartNote: string;
     humanNote: string;
     features: readonly { title: string; body: string }[];
-    basicPromptItems: readonly string[];
-    contextItems: readonly string[];
   };
-  pages: Record<"architecture" | "installation" | "configuration" | "webUi" | "logs" | "examples" | "troubleshooting" | "limitations", {
-    title: string;
-    description: string;
-  }>;
+  pages: Record<
+    | "architecture"
+    | "installation"
+    | "configuration"
+    | "webUi"
+    | "logs"
+    | "examples"
+    | "troubleshooting"
+    | "limitations",
+    {
+      title: string;
+      description: string;
+    }
+  >;
   architecture: {
-    headings: Record<"systemMap" | "alertFlow" | "sequence" | "correlation" | "sanitization" | "failures", string>;
+    headings: Record<
+      | "systemMap"
+      | "alertFlow"
+      | "sequence"
+      | "correlation"
+      | "sanitization"
+      | "failures",
+      string
+    >;
     diagramTitles: { system: string; sequence: string };
     alertFlowSteps: readonly string[];
-    flowLabels: Record<"input" | "action" | "output" | "dependency" | "error", string>;
+    flowLabels: Record<
+      "input" | "action" | "output" | "dependency" | "error",
+      string
+    >;
     flowSteps: readonly FlowStepText[];
     correlationFacts: readonly { term: string; value: string }[];
     correlationCallout: { title: string; body: string };
@@ -92,7 +151,18 @@ export type Translation = {
     failures: readonly { component: string; behavior: string }[];
   };
   installation: {
-    headings: Record<"prerequisites" | "telegram" | "openrouter" | "secrets" | "helm" | "images" | "alertmanager" | "verify", string>;
+    browserAccessNote: string;
+    headings: Record<
+      | "prerequisites"
+      | "telegram"
+      | "openrouter"
+      | "secrets"
+      | "helm"
+      | "images"
+      | "alertmanager"
+      | "verify",
+      string
+    >;
     prerequisites: readonly string[];
     redisCallout: { title: string; body: string };
     telegramSteps: readonly string[];
@@ -110,8 +180,20 @@ export type Translation = {
     verifyIntro: string;
   };
   configuration: {
-    headings: Record<"upgrade" | "enricherEnv" | "aiWorkerEnv" | "backendEnv" | "promql" | "runbooks" | "generator", string>;
-    tableHeaders: Record<"variable" | "default" | "example" | "purpose", string>;
+    headings: Record<
+      | "upgrade"
+      | "enricherEnv"
+      | "aiWorkerEnv"
+      | "backendEnv"
+      | "promql"
+      | "runbooks"
+      | "generator",
+      string
+    >;
+    tableHeaders: Record<
+      "variable" | "default" | "example" | "purpose",
+      string
+    >;
     upgradeCallout: { title: string; body: string };
     backendIntro: string;
     promqlIntro: string;
@@ -122,16 +204,28 @@ export type Translation = {
       aiWorker: Record<AiWorkerEnvName, EnvText>;
       backend: Record<BackendEnvName, EnvText>;
     };
-    metrics: Record<MetricName, {
-      description: string;
-      unit: string;
-      series: string;
-      trend: string;
-      risk: string;
-    }>;
+    metrics: Record<
+      MetricName,
+      {
+        description: string;
+        unit: string;
+        series: string;
+        trend: string;
+        risk: string;
+      }
+    >;
   };
   webUi: {
-    headings: Record<"components" | "wiring" | "alertsVsIncidents" | "storage" | "access" | "screens" | "dataSources", string>;
+    headings: Record<
+      | "components"
+      | "wiring"
+      | "alertsVsIncidents"
+      | "storage"
+      | "access"
+      | "screens"
+      | "dataSources",
+      string
+    >;
     componentsIntro: string;
     components: readonly { name: string; body: string }[];
     componentsDisable: string;
@@ -148,11 +242,18 @@ export type Translation = {
     screens: readonly { name: string; body: string }[];
     dataSourcesIntro: string;
     dataSourceHeaders: Record<"category" | "type" | "worksWith", string>;
-    dataSources: readonly { category: string; type: string; worksWith: string }[];
+    dataSources: readonly {
+      category: string;
+      type: string;
+      worksWith: string;
+    }[];
     dataSourcesOutside: string;
   };
   logs: {
-    headings: Record<"why" | "requirements" | "wiring" | "collector" | "prompt", string>;
+    headings: Record<
+      "why" | "requirements" | "wiring" | "collector" | "prompt",
+      string
+    >;
     whyParagraphs: readonly string[];
     requirementsIntro: string;
     fieldHeaders: { field: string; content: string };
@@ -169,7 +270,10 @@ export type Translation = {
     promptCounter: string;
   };
   examples: {
-    headings: Record<"direct" | "cascade" | "prometheusRule" | "production" | "telegramMock", string>;
+    headings: Record<
+      "direct" | "cascade" | "prometheusRule" | "production" | "telegramMock",
+      string
+    >;
     cascadeNote: string;
     prometheusRuleNote: string;
     environments: readonly string[];
@@ -180,14 +284,26 @@ export type Translation = {
     cards: readonly ProblemCardText[];
   };
   limitations: {
-    headings: Record<"correlation" | "llm" | "storage" | "security" | "scaling", string>;
-    correlation: { behavior: string; risk: string; recommended: string; items: readonly string[] };
+    headings: Record<
+      "correlation" | "llm" | "storage" | "security" | "scaling",
+      string
+    >;
+    correlation: {
+      behavior: string;
+      risk: string;
+      recommended: string;
+      items: readonly string[];
+    };
     llmItems: readonly string[];
     llmCallout: { title: string };
     storage: { behavior: string; risk: string; recommended: string };
     securityCallout: { title: string; body: string };
     security: { behavior: string; risk: string; recommended: string };
-    scaling: readonly { title: string; behavior: string; recommended: string }[];
+    scaling: readonly {
+      title: string;
+      behavior: string;
+      recommended: string;
+    }[];
   };
   generator: {
     title: string;

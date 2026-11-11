@@ -18,6 +18,14 @@ export const en = {
     limitations: "Limitations",
   },
   common: {
+    tableOfContents: "On this page",
+    mobileNavigation: "Navigation",
+    signIn: "Sign in",
+    navigation: "Navigation",
+    openMenu: "Open menu",
+    closeMenu: "Close menu",
+    skip: "Skip to content",
+
     copy: "Copy",
     copied: "Copied",
     download: "Download",
@@ -37,109 +45,166 @@ export const en = {
     potentialRisk: "Potential risk",
   },
   hero: {
-    title: "Understand incidents before the alert storm ends",
-    eyebrow: "Prometheus → Kubernetes → Logs → Telegram & Web UI",
+    title: "From alert to a clear next step.",
+    eyebrow: "Open source · Kubernetes incident response",
     description:
-      "IncidentGPT enriches Prometheus alerts with Kubernetes context and log excerpts, groups an event cascade into one incident, and delivers an engineering analysis draft to Telegram and the web UI.",
-    installButton: "Start installation",
-    githubButton: "Open GitHub",
-    architectureLink: "View architecture",
+      "Bring alerts, logs and infrastructure context into one incident. Investigate with evidence, review the AI analysis and hand over a clear record of what happened.",
+    installButton: "Deploy IncidentGPT",
+    githubButton: "Source on GitHub",
+    architectureLink: "Follow the alert path",
     demoNote:
-      "This is a demonstration. Real output depends on alerts, metrics, Kubernetes context, logs and the selected model. The draft is in Russian because the ai-worker system prompt is written in Russian — change the prompt in the source to answer in another language.",
-    steps: ["Alertmanager", "Enricher", "Correlation", "Sanitizer", "AI Worker", "Telegram + Web UI"],
+      "Illustrative data. Explore the four incident views; available features depend on deployment settings.",
+    caption: "Self-hosted with Helm. Telegram + an operator workspace.",
   },
-  home: {
-    terminalTitle: "Enricher logs",
-    resultTitle: "Analysis draft",
-    featuresTitle: "Core capabilities",
-    featuresSubtitle: "Context, correlation and delivery into the on-call channel engineers already use.",
-    compareTitle: "Why not just paste an alert into ChatGPT",
-    regularApproach: "Basic prompt",
-    incidentgptApproach: "IncidentGPT",
-    compareConclusion:
-      "AI-assisted analysis is only as useful as the context it receives. IncidentGPT collects that context automatically.",
-    reliabilityTitle: "Raw alert first. AI analysis second.",
-    reliabilityBody:
-      "IncidentGPT publishes the raw alert first. Only then does it call the model and publish analysis. The LLM must not become an alerting failure point.",
-    quickStartTitle: "Quick start",
-    quickStartNote: "Before deploying, fill Helm values and create Kubernetes Secrets.",
-    humanNote:
-      "IncidentGPT creates an engineering draft. The final decision always belongs to a human.",
-    features: [
+  demo: {
+    label: "Interactive example",
+    queue: "Incident queue",
+    severity: "Critical",
+    status: "Investigating",
+    title: "Checkout error rate is rising",
+    summary: "3 related alerts · production-eu · checkout-api",
+    tabsLabel: "Example incident views",
+    tabs: ["Overview", "Investigation", "Runbooks", "Handoff"],
+    evidence: "Example evidence",
+    footer: "Evidence stays attached to the incident",
+    panels: [
       {
-        title: "Alert enrichment",
-        body: "Prometheus range queries, Kubernetes objects, pod and node status, events and optional runbook links.",
+        title: "Working hypothesis",
+        body: "Errors began after the checkout rollout. A database connection limit may be contributing; verify the evidence before acting.",
+        items: [
+          "HighErrorRate · firing",
+          "Connection pool exhausted · log excerpt",
+          "checkout-api · rollout observed",
+        ],
       },
       {
-        title: "Logs in the prompt",
-        body: "An error excerpt travels with the alert: repeats collapsed, a ×N counter for scale, INFO dropped. So the model names the error instead of asking someone to look it up.",
+        title: "Build the timeline",
+        body: "Review changes, run read-only checks and inspect declared dependencies alongside Kubernetes observations.",
+        items: [
+          "Deployment update · 14:32",
+          "Database reachability · check result",
+          "checkout-api → orders-db · declared",
+        ],
       },
       {
-        title: "Incident correlation",
-        body: "Groups alert cascades from the same namespace inside a bounded time window. One group is one incident with one analysis.",
+        title: "Compare a confirmed solution",
+        body: "Review the environment and version differences before applying a previous resolution.",
+        items: [
+          "Connection pool limits · runbook",
+          "Previous resolution · confirmed by engineer",
+          "Production configuration · review required",
+        ],
       },
       {
-        title: "AI-assisted analysis",
-        body: "The LLM receives labels, annotations, metrics, logs and Kubernetes context, not just an alert name, and reports its confidence as a number.",
-      },
-      {
-        title: "Telegram and web UI",
-        body: "Raw alerts are published first, followed by a grouped summary and analysis. The optional web UI adds group members, discarded noise, context, an action log and forecasts.",
-      },
-      {
-        title: "Sanitization and degradation",
-        body: "Sanitizer masks secrets and personal data before anything leaves the cluster. If Redis is unavailable, alerts fall back to single-alert delivery; LLM failure does not hide the raw alert.",
+        title: "Prepare the next shift",
+        body: "Draft a postmortem or handoff from incident evidence, then review and edit it before export.",
+        items: [
+          "Impact and timeline · draft",
+          "Open checks · owner to confirm",
+          "Review and export · engineer action",
+        ],
       },
     ],
-    basicPromptItems: ["Alert name", "Summary", "Severity"],
-    contextItems: [
-      "Alert labels",
-      "Annotations",
-      "Prometheus metrics",
-      "Metric trends",
-      "Pod state",
-      "Container status",
-      "Node state",
-      "Kubernetes Events",
-      "Deployments scaled to zero",
-      "Log error excerpt",
-      "Related alerts",
-      "Runbook URL",
-      "Cluster name",
+  },
+  home: {
+    workflowLabel: "The response path",
+    workflowTitle: "Context first. Then a decision.",
+    workflow: [
+      {
+        title: "Collect the evidence",
+        body: "Alertmanager triggers enrichment with metrics, Kubernetes events and optional log excerpts.",
+      },
+      {
+        title: "Investigate one incident",
+        body: "Group related signals, inspect the timeline and compare the analysis with its supporting evidence.",
+      },
+      {
+        title: "Keep the resolution",
+        body: "Record confirmed decisions, review a handoff and keep the next engineer in context.",
+      },
+    ],
+    featuresLabel: "The operator workspace",
+    featuresTitle: "One place to work through an incident.",
+    featuresSubtitle:
+      "Alerts, changes, checks and confirmed decisions stay connected throughout the response.",
+    optInNote:
+      "Advanced investigation, knowledge, reports and operations controls require explicit configuration. The default delivery path remains available.",
+    reliabilityTitle: "Raw alerts keep moving.",
+    reliabilityBody:
+      "Model failure does not hide the original alert. With managed AI control enabled, pausing analysis preserves raw ingestion and ordinary Telegram notifications.",
+    quickStartLabel: "Run it in your cluster",
+    quickStartTitle: "Start with a configured deployment.",
+    quickStartNote:
+      "The installation guide covers required Secrets, reader credentials, Helm values and a first test alert. Prepare these before running the commands.",
+    humanNote:
+      "AI proposes an analysis. An engineer verifies the evidence and decides what to do.",
+    features: [
+      {
+        title: "An actionable incident queue",
+        body: "Review active incidents by severity, filter the queue and share a link with its search conditions.",
+      },
+      {
+        title: "Investigation with context",
+        body: "Inspect recent changes, read-only diagnostics, declared dependencies and observed Kubernetes relationships.",
+      },
+      {
+        title: "Analysis you can inspect",
+        body: "Keep evidence and analysis history together. Review missing data and hypotheses before taking action.",
+      },
+      {
+        title: "Confirmed solutions",
+        body: "Look up previous resolutions and runbooks, with environment and version differences visible during review.",
+      },
+      {
+        title: "Postmortems and handoffs",
+        body: "Create versioned drafts, edit the narrative, review the result and export it for the next shift.",
+      },
+      {
+        title: "Pipeline visibility",
+        body: "Check component status and explicitly pause or resume AI calls when managed operations are enabled.",
+      },
     ],
   },
   pages: {
     architecture: {
       title: "Architecture",
-      description: "Components, alert flow, Redis correlation, sanitization boundary and failure scenarios.",
+      description:
+        "Components, alert flow, Redis correlation, sanitization boundary and failure scenarios.",
     },
     installation: {
       title: "Installation",
-      description: "A Kubernetes deployment guide covering the umbrella chart, Telegram, OpenRouter, secrets and Alertmanager.",
+      description:
+        "A Kubernetes deployment guide covering the umbrella chart, Telegram, OpenRouter, secrets and Alertmanager.",
     },
     configuration: {
       title: "Configuration",
-      description: "Environment variables for every component, PromQL templates, runbooks and a values generator.",
+      description:
+        "Environment variables for every component, PromQL templates, runbooks and a values generator.",
     },
     webUi: {
       title: "Web UI",
-      description: "Backend and UI components, alerts versus incidents, storage, access control and the analysis callback.",
+      description:
+        "Backend and UI components, alerts versus incidents, storage, access control and the analysis callback.",
     },
     logs: {
       title: "Logs enrichment",
-      description: "Attaching a log excerpt to an alert: store requirements, settings and what reaches the model.",
+      description:
+        "Attaching a log excerpt to an alert: store requirements, settings and what reaches the model.",
     },
     examples: {
       title: "Examples",
-      description: "Webhook payloads, cascade tests, PrometheusRule usage and production configuration.",
+      description:
+        "Webhook payloads, cascade tests, PrometheusRule usage and production configuration.",
     },
     troubleshooting: {
       title: "Troubleshooting",
-      description: "How to inspect Alertmanager, Redis, Telegram, OpenRouter, RBAC, the web UI and service logs.",
+      description:
+        "How to inspect Alertmanager, Redis, Telegram, OpenRouter, RBAC, the web UI and service logs.",
     },
     limitations: {
       title: "Limitations",
-      description: "Clear boundaries for correlation, LLM output, storage, security and scaling.",
+      description:
+        "Clear boundaries for correlation, LLM output, storage, security and scaling.",
     },
   },
   architecture: {
@@ -151,7 +216,10 @@ export const en = {
       sanitization: "Sanitization boundary",
       failures: "Failure scenarios",
     },
-    diagramTitles: { system: "Architecture diagram", sequence: "Sequence diagram" },
+    diagramTitles: {
+      system: "Architecture diagram",
+      sequence: "Sequence diagram",
+    },
     alertFlowSteps: [
       "Prometheus evaluates an alerting rule.",
       "Alertmanager sends a webhook to /alert.",
@@ -186,8 +254,10 @@ export const en = {
       {
         title: "Enrichment",
         input: "Labels, annotations, startsAt, generatorURL",
-        action: "Run Prometheus range queries, Kubernetes API reads and a log store search",
-        output: "PromSample, K8sContext, collapsed log excerpt, notes and hints",
+        action:
+          "Run Prometheus range queries, Kubernetes API reads and a log store search",
+        output:
+          "PromSample, K8sContext, collapsed log excerpt, notes and hints",
         dependency: "Prometheus API, ServiceAccount RBAC, optional log store",
         error: "Partial context with warnings in Enricher logs",
       },
@@ -195,7 +265,8 @@ export const en = {
         title: "Correlation",
         input: "Enriched alert with namespace and fingerprint",
         action: "HSet into grp:{namespace}; wait CORR_SETTLE",
-        output: "One group payload for backend, or for ai-worker when backend is disabled",
+        output:
+          "One group payload for backend, or for ai-worker when backend is disabled",
         dependency: "Redis",
         error: "Fallback to direct single-alert send",
       },
@@ -218,43 +289,107 @@ export const en = {
       {
         title: "Final message",
         input: "Model answer",
-        action: "Telegram reply or separate message, plus a callback to backend",
+        action:
+          "Telegram reply or separate message, plus a callback to backend",
         output: "Engineering draft in the channel and in the web UI",
         dependency: "Telegram API, ANALYSIS_CALLBACK_URL for the web UI",
         error: "Log error; human still has raw alert",
       },
     ],
     correlationFacts: [
-      { term: "Correlation key", value: "grp:{namespace}" },
-      { term: "Membership", value: "same namespace + received during settle interval" },
-      { term: "Redis field", value: "alert fingerprint" },
-      { term: "Lifetime", value: "CORR_WINDOW" },
-      { term: "Debounce", value: "CORR_SETTLE" },
+      {
+        term: "Default",
+        value: "namespace + time window",
+      },
+      {
+        term: "Deduplication",
+        value: "Alert fingerprint",
+      },
+      {
+        term: "Durable mode",
+        value: "Redis buffer and delivery, opt-in",
+      },
+      {
+        term: "Dependencies",
+        value: "One declared hop, opt-in",
+      },
+      {
+        term: "Membership",
+        value: "Manual alert regrouping, opt-in",
+      },
     ],
     correlationCallout: {
-      title: "Deterministic, not causal",
-      body: "This is not a dependency graph. Two unrelated incidents in the same namespace may be grouped, and cross-namespace cascades may be missed. The model chooses the probable root after the group is formed.",
+      title: "Correlation modes",
+      body: "The example above shows the baseline legacy algorithm. The current version also supports durable correlation, a declared dependency graph and manual incident membership. These require opt-in, compatible components and Redis. A relationship graph does not prove the cause of a failure.",
     },
     sanitizationParagraphs: [
       "Data Sanitizer is a separate Go service that masks secrets and personal data before anything reaches the external LLM, Telegram, logs or webhooks: sensitive keys, Bearer/Basic/JWT tokens, connection string credentials, Kubernetes Secrets, optionally emails, phones and IP addresses. The model answer passes through it again on the way back.",
       "Enricher and ai-worker authenticate to it with a shared HMAC key (SANITIZER_AUTH_SHARED_SECRET, identical in all three components). Production keeps SANITIZER_FAIL_CLOSED=true: if Sanitizer rejects a payload or is unavailable, the original data is not sent onwards.",
     ],
-    failureHeaders: { component: "Component unavailable", behavior: "Current behavior from code or chart" },
+    failureHeaders: {
+      component: "Component unavailable",
+      behavior: "Current behavior from code or chart",
+    },
     failures: [
-      { component: "OpenRouter or LLM", behavior: "Raw alert is already posted; ai-worker logs the error and skips analysis." },
-      { component: "Redis", behavior: "Enricher logs a warning and falls back to single-alert delivery; backend keeps incidents in memory until the pod restarts." },
-      { component: "Prometheus API", behavior: "Metric query warnings are logged; enrichment continues with remaining context." },
-      { component: "Kubernetes API", behavior: "Client init or reads can fail; Enricher continues without K8s context." },
-      { component: "Log store", behavior: "The enrichment step is skipped silently; the alert travels without a log excerpt." },
-      { component: "Sanitizer", behavior: "With SANITIZER_FAIL_CLOSED=true the original payload is not sent to the LLM or Telegram." },
-      { component: "Telegram", behavior: "ai-worker returns telegram_error for sync sends and logs async send failures." },
-      { component: "Enricher", behavior: "Alertmanager cannot deliver to IncidentGPT." },
-      { component: "Backend", behavior: "The group path breaks: no incident in the web UI, and the body is not forwarded to ai-worker." },
-      { component: "AI Worker", behavior: "Enricher or backend cannot post the prepared incident; the failure is logged." },
-      { component: "Web UI", behavior: "Only the interface is lost; alerts and analysis keep flowing to Telegram." },
+      {
+        component: "OpenRouter or LLM",
+        behavior:
+          "Raw alert is already posted; ai-worker logs the error and skips analysis.",
+      },
+      {
+        component: "Redis",
+        behavior:
+          "Legacy mode can fall back to individual delivery and in-memory state. Durable mode requires Redis: queue guarantees are unavailable during an outage; check readiness and recovery.",
+      },
+      {
+        component: "Prometheus API",
+        behavior:
+          "Metric query warnings are logged; enrichment continues with remaining context.",
+      },
+      {
+        component: "Kubernetes API",
+        behavior:
+          "Client init or reads can fail; Enricher continues without K8s context.",
+      },
+      {
+        component: "Log store",
+        behavior:
+          "The enrichment step is skipped silently; the alert travels without a log excerpt.",
+      },
+      {
+        component: "Sanitizer",
+        behavior:
+          "With SANITIZER_FAIL_CLOSED=true the original payload is not sent to the LLM or Telegram.",
+      },
+      {
+        component: "Telegram",
+        behavior:
+          "ai-worker returns telegram_error for sync sends and logs async send failures.",
+      },
+      {
+        component: "Enricher",
+        behavior: "Alertmanager cannot deliver to IncidentGPT.",
+      },
+      {
+        component: "Backend",
+        behavior:
+          "The group path breaks: no incident in the web UI, and the body is not forwarded to ai-worker.",
+      },
+      {
+        component: "AI Worker",
+        behavior:
+          "Enricher or backend cannot post the prepared incident; the failure is logged.",
+      },
+      {
+        component: "Web UI",
+        behavior:
+          "Only the interface is lost; alerts and analysis keep flowing to Telegram.",
+      },
     ],
   },
   installation: {
+    browserAccessNote:
+      "Browser access uses the backend reader Secret with username/password, not a legacy htpasswd file. Use compatible UI and backend images from the same verified version.",
     headings: {
       prerequisites: "Step 0. Prerequisites",
       telegram: "Step 1. Telegram",
@@ -287,7 +422,8 @@ export const en = {
       "Add the bot as an administrator in both places.",
       "Send a test message and inspect getUpdates for channel and group IDs.",
     ],
-    telegramPrivacyNote: "Privacy mode can stay enabled: ai-worker does not read ordinary group messages.",
+    telegramPrivacyNote:
+      "Privacy mode can stay enabled: ai-worker does not read ordinary group messages.",
     telegramSecretsCallout: {
       title: "Secrets",
       body: "Never publish a real TELEGRAM_BOT_TOKEN in Git, Helm values or documentation.",
@@ -298,12 +434,16 @@ export const en = {
       "Sanitizer and its clients share one HMAC key, so the sanitizer Secret is created once and referenced by enricher and ai-worker.",
     secretsNote:
       "The values generator on the Configuration page produces values that reference these Secrets through existingSecret and never contain the secrets themselves.",
-    helmIntro: "All five components install with one release: enricher, ai-worker, sanitizer, backend and ui, plus Redis.",
+    helmIntro:
+      "All five components install with one release: enricher, ai-worker, sanitizer, backend and ui, plus Redis.",
     helmDisableNote:
       "Backend and ui are disabled with enabled: false on both. In that case return the enricher group path to ai-worker: incidentgpt-enricher.env.groupBackendUrl pointing at /incident-group.",
-    imagesIntro: "Images are published to ghcr.io on every v* tag, so nothing needs to be built to try the project out.",
-    imagesBuildNote: "Building your own is still supported — point the image repositories in values at your registry.",
-    imagesArchNote: "Multi-arch builds can be attempted with linux/amd64,linux/arm64, but test the resulting images in your cluster.",
+    imagesIntro:
+      "Images are published to ghcr.io on every v* tag, so nothing needs to be built to try the project out.",
+    imagesBuildNote:
+      "Building your own is still supported — point the image repositories in values at your registry.",
+    imagesArchNote:
+      "Multi-arch builds can be attempted with linux/amd64,linux/arm64, but test the resulting images in your cluster.",
     alertmanagerNote:
       "route.receiver and receivers[].name must match exactly. continue: true keeps existing Slack, PagerDuty or other receivers active.",
     verifyIntro:
@@ -319,7 +459,12 @@ export const en = {
       runbooks: "Runbooks",
       generator: "Helm values generator",
     },
-    tableHeaders: { variable: "Variable", default: "Default", example: "Example", purpose: "Purpose" },
+    tableHeaders: {
+      variable: "Variable",
+      default: "Default",
+      example: "Example",
+      purpose: "Purpose",
+    },
     upgradeCallout: {
       title: "Log store settings were renamed",
       body: "ELASTICSEARCH_URL, ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD and ELASTICSEARCH_INDEX became LOGS_STORE_*; in values elasticsearchUrl became logsStoreUrl and the elasticsearch block became logsStore. There are no aliases: the old keys are not read and log enrichment silently turns off. Image defaults also moved to ghcr.io/sersert/incidentgpt-* and tag 0.2.0.",
@@ -330,27 +475,45 @@ export const en = {
       "Metric templates use Go template placeholders such as {{ .Namespace }}, {{ .Cluster }}, {{ .Service }}, {{ .Node }}, {{ .Instance }} and, since 0.2.0, {{ .Pod }} and {{ .Container }} — so a query can be pinned to the failing pod instead of the whole namespace.",
     runbooksIntro:
       "RUNBOOK_BASE_URL is trimmed on the right and the lowercase alertname is appended. KubePodCrashLooping becomes https://runbooks.example.com/alerts/kubepodcrashlooping.",
-    metricLabels: { unit: "Unit", trend: "Trend", series: "Series", cardinality: "Cardinality" },
+    metricLabels: {
+      unit: "Unit",
+      trend: "Trend",
+      series: "Series",
+      cardinality: "Cardinality",
+    },
     env: {
       enricher: {
-        PROMETHEUS_URL: { description: "Prometheus HTTP API base URL. Enricher calls /api/v1/query_range." },
+        PROMETHEUS_URL: {
+          description:
+            "Prometheus HTTP API base URL. Enricher calls /api/v1/query_range.",
+        },
         PYTHON_BACKEND_URL: {
-          description: "Single-alert fallback endpoint used when Redis correlation is disabled or fails.",
+          description:
+            "Single-alert fallback endpoint used when Redis correlation is disabled or fails.",
           note: "The code name is legacy; Helm points it to ai-worker.",
         },
         GROUP_BACKEND_URL: {
           description: "Endpoint for a flushed Redis group.",
           note: "Since 0.2.0 the umbrella chart points it at backend, which stores the incident and forwards the body to ai-worker. With backend disabled, point it back at /incident-group.",
         },
-        RAW_BACKEND_URL: { description: "Endpoint used for immediate raw alert delivery while the group window is still open." },
-        CLUSTER_NAME: { description: "Cluster label included in enriched payloads and metric templates." },
-        ENVIRONMENT: { description: "Environment label added to the incident context." },
+        RAW_BACKEND_URL: {
+          description:
+            "Endpoint used for immediate raw alert delivery while the group window is still open.",
+        },
+        CLUSTER_NAME: {
+          description:
+            "Cluster label included in enriched payloads and metric templates.",
+        },
+        ENVIRONMENT: {
+          description: "Environment label added to the incident context.",
+        },
         REDIS_ADDR: {
           description: "Redis address for namespace-window correlation.",
           note: "Redis ships inside the chart since 0.2.0, where this is incidentgpt-redis:6379. An external one is set here and in incidentgpt-backend.env.REDIS_ADDR: the two components reach Redis independently.",
         },
         REDIS_PASSWORD: {
-          description: "Redis password. The chart renders it as a plain env value.",
+          description:
+            "Redis password. The chart renders it as a plain env value.",
           note: "Recommended improvement: secretKeyRef support for production.",
         },
         CORR_WINDOW: { description: "Redis TTL for grp:{namespace}." },
@@ -358,36 +521,84 @@ export const en = {
           description: "Debounce interval before a group is flushed.",
           note: "Helm values ship 40s, which covers the spread between rule types.",
         },
-        RAW_DEDUP_TTL: { description: "TTL for Redis SetNX based raw-alert deduplication by fingerprint. 0s disables the dedup key." },
-        PROM_RANGE_BEFORE: { description: "Metrics window before alert startsAt." },
-        PROM_RANGE_AFTER: { description: "Metrics window after alert startsAt." },
+        RAW_DEDUP_TTL: {
+          description:
+            "TTL for Redis SetNX based raw-alert deduplication by fingerprint. 0s disables the dedup key.",
+        },
+        PROM_RANGE_BEFORE: {
+          description: "Metrics window before alert startsAt.",
+        },
+        PROM_RANGE_AFTER: {
+          description: "Metrics window after alert startsAt.",
+        },
         LOGS_STORE_URL: {
-          description: "Search API of the log store. Empty value silently skips the log enrichment step.",
+          description:
+            "Search API of the log store. Empty value silently skips the log enrichment step.",
           note: "Renamed from ELASTICSEARCH_URL in 0.2.0. The old names are not read, and there are no aliases.",
         },
-        LOGS_STORE_USER: { description: "Log store user. The password comes from LOGS_STORE_PASSWORD via logsStore.existingSecret." },
-        LOGS_STORE_INDEX: { description: "Index pattern searched for alert-related log lines." },
-        LOGS_RANGE_BEFORE: { description: "How far before the alert log lines are collected." },
-        LOGS_RANGE_AFTER: { description: "How far after the alert log lines are collected." },
-        LOGS_MAX_LINES: { description: "How many collapsed log groups are placed into the prompt." },
+        LOGS_STORE_USER: {
+          description:
+            "Log store user. The password comes from LOGS_STORE_PASSWORD via logsStore.existingSecret.",
+        },
+        LOGS_STORE_INDEX: {
+          description: "Index pattern searched for alert-related log lines.",
+        },
+        LOGS_RANGE_BEFORE: {
+          description: "How far before the alert log lines are collected.",
+        },
+        LOGS_RANGE_AFTER: {
+          description: "How far after the alert log lines are collected.",
+        },
+        LOGS_MAX_LINES: {
+          description:
+            "How many collapsed log groups are placed into the prompt.",
+        },
         LOGS_BASE_URL: {
-          description: "Base for a human-facing log UI link added to the alert.",
+          description:
+            "Base for a human-facing log UI link added to the alert.",
           note: "Not the same as LOGS_STORE_URL: this one is only a link for an engineer, not an API the enricher calls.",
         },
-        SANITIZER_URL: { description: "Sanitizer service that masks secrets and personal data before the payload leaves the cluster." },
-        SANITIZER_AUTH_SHARED_SECRET: { description: "HMAC key for requests to Sanitizer. Must match the key configured in sanitizer and ai-worker." },
-        RUNBOOK_BASE_URL: { description: "Base URL used to create runbook_url as base/lowercase-alertname." },
-        ENRICH_CLUSTER_CONTEXT: { description: "Enables cluster-level PromQL templates." },
-        ENRICH_NODE_CONTEXT: { description: "Enables node-level PromQL templates." },
-        ENRICH_WORKLOAD_CONTEXT: { description: "Enables workload-level PromQL templates." },
-        ENRICH_EXTERNAL_CONTEXT: { description: "Enables external dependency PromQL templates." },
-        ENRICH_K8S_CONTEXT: { description: "Enables in-cluster Kubernetes API enrichment." },
+        SANITIZER_URL: {
+          description:
+            "Sanitizer service that masks secrets and personal data before the payload leaves the cluster.",
+        },
+        SANITIZER_AUTH_SHARED_SECRET: {
+          description:
+            "HMAC key for requests to Sanitizer. Must match the key configured in sanitizer and ai-worker.",
+        },
+        RUNBOOK_BASE_URL: {
+          description:
+            "Base URL used to create runbook_url as base/lowercase-alertname.",
+        },
+        ENRICH_CLUSTER_CONTEXT: {
+          description: "Enables cluster-level PromQL templates.",
+        },
+        ENRICH_NODE_CONTEXT: {
+          description: "Enables node-level PromQL templates.",
+        },
+        ENRICH_WORKLOAD_CONTEXT: {
+          description: "Enables workload-level PromQL templates.",
+        },
+        ENRICH_EXTERNAL_CONTEXT: {
+          description: "Enables external dependency PromQL templates.",
+        },
+        ENRICH_K8S_CONTEXT: {
+          description: "Enables in-cluster Kubernetes API enrichment.",
+        },
       },
       aiWorker: {
-        LISTEN_ADDR: { description: "HTTP listen address for /healthz, /incident, /incident-raw and /incident-group." },
-        OPENROUTER_API_KEY: { description: "Required. API key for OpenRouter or another OpenAI-compatible chat completions endpoint." },
+        LISTEN_ADDR: {
+          description:
+            "HTTP listen address for /healthz, /incident, /incident-raw and /incident-group.",
+        },
+        OPENROUTER_API_KEY: {
+          description:
+            "Required. API key for OpenRouter or another OpenAI-compatible chat completions endpoint.",
+        },
         OPENROUTER_BASE_URL: { description: "Chat completions endpoint." },
-        OPENROUTER_MODEL: { description: "Model sent in the chat completions payload." },
+        OPENROUTER_MODEL: {
+          description: "Model sent in the chat completions payload.",
+        },
         OPENROUTER_TIMEOUT_SECONDS: {
           description: "HTTP timeout for the LLM request.",
           note: "The older values key REQUEST_TIMEOUT_SECONDS is not read by the Go code.",
@@ -396,36 +607,65 @@ export const en = {
           description: "Maximum model response tokens.",
           note: "Helm values ship 2000.",
         },
-        TELEGRAM_BOT_TOKEN: { description: "Required. Bot token from @BotFather." },
-        TELEGRAM_CHANNEL_ID: { description: "Required. Channel receiving raw alerts, summaries and analysis messages." },
-        TELEGRAM_THREAD_CHAT_ID: {
-          description: "Discussion group ID stored in config. Replies are sent to the channel post and appear in the linked discussion group when Telegram is configured that way.",
+        TELEGRAM_BOT_TOKEN: {
+          description: "Required. Bot token from @BotFather.",
         },
-        TELEGRAM_PARSE_MODE: { description: "Telegram parse mode used for sendMessage." },
+        TELEGRAM_CHANNEL_ID: {
+          description:
+            "Required. Channel receiving raw alerts, summaries and analysis messages.",
+        },
+        TELEGRAM_THREAD_CHAT_ID: {
+          description:
+            "Discussion group ID stored in config. Replies are sent to the channel post and appear in the linked discussion group when Telegram is configured that way.",
+        },
+        TELEGRAM_PARSE_MODE: {
+          description: "Telegram parse mode used for sendMessage.",
+        },
         ANALYSIS_CALLBACK_URL: {
-          description: "Where the finished analysis is posted back so the web UI can show it.",
+          description:
+            "Where the finished analysis is posted back so the web UI can show it.",
           note: "New in 0.2.0. Without it the analysis goes to Telegram only and the incident stays in the waiting state in the web UI.",
         },
-        SANITIZER_URL: { description: "Sanitizer masks the prompt before the LLM call and the model answer before Telegram." },
+        SANITIZER_URL: {
+          description:
+            "Sanitizer masks the prompt before the LLM call and the model answer before Telegram.",
+        },
         SANITIZER_AUTH_SHARED_SECRET: {
-          description: "HMAC key shared with sanitizer and enricher. All three components must carry the same value.",
+          description:
+            "HMAC key shared with sanitizer and enricher. All three components must carry the same value.",
           note: "Sanitizer itself keeps SANITIZER_FAIL_CLOSED=true by default: if it rejects a payload or is unavailable, the original data is not sent to the LLM or Telegram.",
         },
       },
       backend: {
-        LISTEN_ADDR: { description: "HTTP listen address for the incident API consumed by the UI." },
+        LISTEN_ADDR: {
+          description:
+            "HTTP listen address for the incident API consumed by the UI.",
+        },
         AI_WORKER_URL: {
-          description: "Where the group body is forwarded after the incident is stored.",
+          description:
+            "Where the group body is forwarded after the incident is stored.",
           note: "The path is required. Without it the forward hits the root and gets a 404; Helm values set /incident-group.",
         },
-        FORWARD_TO_AI_WORKER: { description: "Keeps the Telegram path working: backend passes the group body through unchanged." },
+        FORWARD_TO_AI_WORKER: {
+          description:
+            "Keeps the Telegram path working: backend passes the group body through unchanged.",
+        },
         REDIS_ADDR: {
-          description: "Incident storage. Without Redis the service keeps state in memory and any pod restart wipes the history.",
+          description:
+            "Incident storage. Without Redis the service keeps state in memory and any pod restart wipes the history.",
           note: "Helm values ship incidentgpt-redis:6379.",
         },
-        PROMETHEUS_URL: { description: "Metrics source for the dashboard and per-node forecasts." },
-        LOGS_STORE_URL: { description: "Log store for the Logs tab of an incident. Empty value leaves the tab unfilled." },
-        LOGS_STORE_INDEX: { description: "Index pattern used by the Logs tab." },
+        PROMETHEUS_URL: {
+          description:
+            "Metrics source for the dashboard and per-node forecasts.",
+        },
+        LOGS_STORE_URL: {
+          description:
+            "Log store for the Logs tab of an incident. Empty value leaves the tab unfilled.",
+        },
+        LOGS_STORE_INDEX: {
+          description: "Index pattern used by the Logs tab.",
+        },
       },
     },
     metrics: {
@@ -433,21 +673,24 @@ export const en = {
         description: "CPU usage around the alert start time.",
         unit: "CPU cores",
         series: "One or more series per namespace/pod after aggregation.",
-        trend: "rising means the second half of the sampled range is at least 15% above the first half.",
+        trend:
+          "rising means the second half of the sampled range is at least 15% above the first half.",
         risk: "High cardinality if pod/container labels are not aggregated before storage in the alert context.",
       },
       workload_memory_working_set: {
         description: "Working set memory for pods in the alert namespace.",
         unit: "bytes",
         series: "Usually one series per pod after sum by pod.",
-        trend: "falling means the later samples are at least 15% lower than the earlier samples.",
+        trend:
+          "falling means the later samples are at least 15% lower than the earlier samples.",
         risk: "Memory metrics can be noisy during pod churn; keep namespace scoped.",
       },
       workload_pod_restarts: {
         description: "Recent container restarts in the namespace.",
         unit: "restart count",
         series: "One series per pod/container unless aggregated.",
-        trend: "spike is detected when the last point is more than twice the average.",
+        trend:
+          "spike is detected when the last point is more than twice the average.",
         risk: "Container-level output can be large in busy namespaces; aggregate when possible.",
       },
     },
@@ -465,22 +708,31 @@ export const en = {
     componentsIntro:
       "Incidents can be inspected in a browser, not only in Telegram. Two components handle that, both part of the umbrella chart:",
     components: [
-      { name: "backend", body: "accepts alert groups from enricher, stores incidents and forwards the body to ai-worker." },
-      { name: "ui", body: "the interface itself: nginx serving static files and proxying /api/ to backend." },
+      {
+        name: "backend",
+        body: "accepts alert groups from enricher, stores incidents and forwards the body to ai-worker.",
+      },
+      {
+        name: "ui",
+        body: "the interface itself: nginx serving static files and proxying /api/ to backend.",
+      },
     ],
     componentsDisable:
-      "Both are switched off with enabled: false, which leaves the 0.1.0 delivery path with Telegram output only.",
-    wiringIntro: "Backend sits in the middle of the group path, while the raw feed goes straight to ai-worker:",
+      "Disable backend and UI with enabled: false for Telegram-only delivery.",
+    wiringIntro:
+      "Default legacy path: backend accepts groups while raw alerts go directly to ai-worker. The advanced durable mode is enabled separately.",
     wiringPassthrough:
       "Backend passes the body through unchanged, to the same endpoint enricher used to call directly, so Telegram analysis keeps working. Without ANALYSIS_CALLBACK_URL the analysis reaches Telegram only and the incident stays in the waiting state in the UI.",
-    wiringNote: "The umbrella values already wire both settings; they matter when components are installed separately.",
+    wiringNote:
+      "The umbrella values already wire both settings; they matter when components are installed separately.",
     alertsVsIncidents: [
-      "An alert is a unit of the raw Alertmanager feed. An incident is a group of related alerts with a single analysis. They do not map one to one: an incident can hold two dozen alerts, and the analysis marks some of them as noise. Before 0.2.0 a group of 8 alerts turned into 8 incidents.",
-      "The UI keeps them in two sections, so it is visible which alert joined which group and which was never grouped at all.",
+      "An alert is a single Alertmanager signal. An incident brings related signals, context and analysis history together.",
+      "Group membership depends on the configured correlation mode. With manual regrouping enabled, an engineer can move one alert while preserving history.",
     ],
     storageIntro:
       "Incidents live in the same Redis the enricher uses for correlation. It ships as the incidentgpt-redis subchart: one node, no replication or sentinel, 2 Gi disk.",
-    storageAddress: "The address is set in two places: enricher and backend reach Redis independently.",
+    storageAddress:
+      "The address is set in two places: enricher and backend reach Redis independently.",
     storageEviction:
       "Eviction is deliberately off — maxmemory-policy stays noeviction. Any allkeys-* policy would drop incidents under load, and this is storage, not a cache.",
     storageCallout: {
@@ -490,22 +742,52 @@ export const en = {
     accessIntro:
       "Basic/htpasswd remains the default. Enable eight-hour server sessions with authMode=session, browserSessions.enabled=true and a backend reader Secret. Upgrade UI and backend together.",
     accessProbe:
-      "The readiness probe is served from /healthz without auth — otherwise kubelet would get a 401 and the pod would never become ready. Basic identity is verified by nginx; session identity is passed through backend context for the action log.",
+      "/healthz remains public for kubelet — otherwise it would get a 401 and the pod would never become ready. Nginx clears incoming X-Auth-User: Basic identity is verified by nginx, session identity is restored by the backend for the action log. This is a shared administrator account, without individual roles or SSO.",
     screens: [
-      { name: "Incidents", body: "groups with the number of merged alerts and the short verdict of the analysis." },
-      { name: "Incident", body: "group members, discarded noise with a reason, the full analysis, logs from the store, context (namespace, pod, node, deployment) and the action log." },
-      { name: "Alerts", body: "the raw feed and its mapping to incidents." },
-      { name: "Dashboard", body: "what is burning, where to go first, whether the AI pipeline is alive, storm or normal." },
-      { name: "Analytics", body: "alert flow, the noisiest sources, analysis quality." },
-      { name: "Forecasts", body: "resources that will hit a limit if the trend holds (computed in Prometheus with deriv()), and node load per node: a cluster average hides a single saturated node." },
+      {
+        name: "On-call overview",
+        body: "Available measurements and up to 10 active incidents. API failures are shown as unknown state.",
+      },
+      {
+        name: "Incident queue",
+        body: "Search, status and severity filters, and pages of 25 records. Conditions stay in the URL.",
+      },
+      {
+        name: "Incident detail",
+        body: "Four views: overview and analysis, investigation, solutions and runbooks, reports and handoff.",
+      },
+      {
+        name: "Alerts, analytics and forecasts",
+        body: "Raw signals, noisy sources, analysis quality and resource trends. Forecasts do not guarantee future load.",
+      },
+      {
+        name: "Component status",
+        body: "With opt-in enabled: source and component checks, AI state and a Redis-backed pause.",
+      },
+      {
+        name: "Guide and themes",
+        body: "An embedded operator guide, light and dark modes, mobile navigation and keyboard support.",
+      },
     ],
     dataSourcesIntro:
-      "Configured in the Integrations section of the UI, grouped by purpose and API compatibility rather than by product name.",
-    dataSourceHeaders: { category: "Category", type: "Type", worksWith: "Works with" },
+      "Integration forms describe sources by API type. Saving a form does not enable collection: a compatible, configured backend/enricher and a reachable source are required.",
+    dataSourceHeaders: {
+      category: "Category",
+      type: "Type",
+      worksWith: "Works with",
+    },
     dataSources: [
-      { category: "Metrics", type: "Prometheus API", worksWith: "Prometheus, VictoriaMetrics, Thanos, Mimir" },
+      {
+        category: "Metrics",
+        type: "Prometheus API",
+        worksWith: "Prometheus, VictoriaMetrics, Thanos, Mimir",
+      },
       { category: "Metrics", type: "Zabbix API", worksWith: "Zabbix" },
-      { category: "Logs", type: "OpenSearch / Elasticsearch API", worksWith: "OpenSearch, ELK" },
+      {
+        category: "Logs",
+        type: "OpenSearch / Elasticsearch API",
+        worksWith: "OpenSearch, ELK",
+      },
       { category: "Logs", type: "Loki API", worksWith: "Loki" },
     ],
     dataSourcesOutside:
@@ -520,10 +802,11 @@ export const en = {
       prompt: "What reaches the model",
     },
     whyParagraphs: [
-      "Besides metrics and Kubernetes context, enricher can attach a log excerpt to an alert. Without logs the model writes \"check the pod logs\"; with logs it names the actual error. Since 0.2.0 the analysis is not allowed to hand data collection back to the engineer: collecting data is the system's job, and when it is missing the model writes \"Не хватает данных:\" — a signal to widen collection, not a task for a human.",
+      'Besides metrics and Kubernetes context, enricher can attach a log excerpt to an alert. Without logs the model writes "check the pod logs"; with logs it names the actual error. Since 0.2.0 the analysis is not allowed to hand data collection back to the engineer: collecting data is the system\'s job, and when it is missing the model writes "Не хватает данных:" — a signal to widen collection, not a task for a human.',
       "Log collection is not part of the chart: clusters usually already run a stack, and a second one is pointless. Any store with an OpenSearch or Elasticsearch compatible search API works.",
     ],
-    requirementsIntro: "Enricher sends a plain _search and expects documents with these fields:",
+    requirementsIntro:
+      "Enricher sends a plain _search and expects documents with these fields:",
     fieldHeaders: { field: "Field", content: "Content" },
     fields: [
       { field: "@timestamp", content: "line timestamp" },
@@ -547,7 +830,8 @@ export const en = {
       "A DaemonSet reads logs from the nodes. Filtering by file path is better than filtering later — unwanted logs are never read from disk:",
     collectorNote:
       "For Elasticsearch use Name es instead of Name opensearch. The collector needs a hostPath to /var/log; policies such as Kyverno disallow-host-path will complain, and for a log-collecting DaemonSet that is unavoidable.",
-    promptIntro: "Hundreds of lines cannot go into the prompt: it inflates, costs more and drowns what matters. So enricher:",
+    promptIntro:
+      "Hundreds of lines cannot go into the prompt: it inflates, costs more and drowns what matters. So enricher:",
     promptRules: [
       "drops INFO — causes are found in errors;",
       "collapses repeats — timestamps, numbers and hashes are stripped, and the rest counts as one error;",
@@ -555,7 +839,8 @@ export const en = {
       "takes logs from the whole namespace but puts the alert pod first: the cause often sits with a neighbour.",
     ],
     promptResult: "Five hundred lines turn into a couple of dozen:",
-    promptCounter: "The ×N counter is a signal in itself: a single failure or a storm.",
+    promptCounter:
+      "The ×N counter is a signal in itself: a single failure or a storm.",
   },
   examples: {
     headings: {
@@ -565,8 +850,10 @@ export const en = {
       production: "Production configuration",
       telegramMock: "Telegram output mockup",
     },
-    cascadeNote: "All alerts share the same namespace and are sent inside CORR_SETTLE, so they should be grouped into one Redis key.",
-    prometheusRuleNote: "The existing sample uses release: kps. Adjust it to the label selected by your Prometheus.",
+    cascadeNote:
+      "All alerts share the same namespace and are sent inside CORR_SETTLE, so they should be grouped into one Redis key.",
+    prometheusRuleNote:
+      "The existing sample uses release: kps. Adjust it to the label selected by your Prometheus.",
     environments: ["Development", "Staging", "Production"],
     productionItems: [
       "Use non-latest image tags and pinned chart versions; the release tag is 0.2.0.",
@@ -587,47 +874,109 @@ export const en = {
     cards: [
       {
         title: "Alertmanager does not send webhook",
-        checks: ["receiver name mismatch", "wrong service DNS or namespace", "port 9099 or path /alert", "NetworkPolicy or missing endpoints"],
+        checks: [
+          "receiver name mismatch",
+          "wrong service DNS or namespace",
+          "port 9099 or path /alert",
+          "NetworkPolicy or missing endpoints",
+        ],
       },
       {
         title: "PrometheusRule does not fire",
-        checks: ["wrong release label", "Prometheus rule selector does not match", "PromQL returns no series", "for duration too long", "wrong namespace"],
+        checks: [
+          "wrong release label",
+          "Prometheus rule selector does not match",
+          "PromQL returns no series",
+          "for duration too long",
+          "wrong namespace",
+        ],
       },
       {
         title: "Enricher receives no Prometheus metrics",
-        checks: ["Prometheus URL", "service endpoints", "NetworkPolicy", "PromQL syntax", "auth proxy in front of Prometheus"],
+        checks: [
+          "Prometheus URL",
+          "service endpoints",
+          "NetworkPolicy",
+          "PromQL syntax",
+          "auth proxy in front of Prometheus",
+        ],
       },
       {
         title: "No Kubernetes context",
-        checks: ["ServiceAccount name", "ClusterRoleBinding", "pods/events/nodes permissions", "ENRICH_K8S_CONTEXT"],
+        checks: [
+          "ServiceAccount name",
+          "ClusterRoleBinding",
+          "pods/events/nodes permissions",
+          "ENRICH_K8S_CONTEXT",
+        ],
       },
       {
         title: "Redis connection refused",
-        checks: ["redis service name", "endpoints", "password", "NetworkPolicy", "address set in both enricher and backend"],
+        checks: [
+          "redis service name",
+          "endpoints",
+          "password",
+          "NetworkPolicy",
+          "address set in both enricher and backend",
+        ],
       },
       {
         title: "Alerts are not grouped",
-        checks: ["same namespace", "fingerprint present or stable labels", "Redis works", "sent inside CORR_SETTLE", "look for ALERT_BUFFERED and GROUP_SENT"],
+        checks: [
+          "same namespace",
+          "fingerprint present or stable labels",
+          "Redis works",
+          "sent inside CORR_SETTLE",
+          "look for ALERT_BUFFERED and GROUP_SENT",
+        ],
       },
       {
         title: "Telegram returns an error",
-        checks: ["bot token", "channel ID starts with -100", "discussion group linked", "bot administrator rights", "Telegram API response in logs"],
+        checks: [
+          "bot token",
+          "channel ID starts with -100",
+          "discussion group linked",
+          "bot administrator rights",
+          "Telegram API response in logs",
+        ],
       },
       {
         title: "Web UI answers 502 on every request",
-        checks: ["backend deployment is running", "backend service is named incidentgpt-backend", "nginx in ui proxies /api/ to that exact name", "fullnameOverride was not changed"],
+        checks: [
+          "backend deployment is running",
+          "backend service is named incidentgpt-backend",
+          "nginx in ui proxies /api/ to that exact name",
+          "fullnameOverride was not changed",
+        ],
       },
       {
         title: "Incidents stay in the waiting-for-analysis state",
-        checks: ["ANALYSIS_CALLBACK_URL is set on ai-worker", "enricher groupBackendUrl points at backend ingest", "backend forwards to ai-worker with FORWARD_TO_AI_WORKER", "AI_WORKER_URL includes the /incident-group path"],
+        checks: [
+          "ANALYSIS_CALLBACK_URL is set on ai-worker",
+          "enricher groupBackendUrl points at backend ingest",
+          "backend forwards to ai-worker with FORWARD_TO_AI_WORKER",
+          "AI_WORKER_URL includes the /incident-group path",
+        ],
       },
       {
         title: "No logs in the incident or in the prompt",
-        checks: ["LOGS_STORE_URL is empty, so the step is skipped silently", "index pattern does not match", "old ELASTICSEARCH_* names still in values", "store credentials", "term queries need the .keyword subfield"],
+        checks: [
+          "LOGS_STORE_URL is empty, so the step is skipped silently",
+          "index pattern does not match",
+          "old ELASTICSEARCH_* names still in values",
+          "store credentials",
+          "term queries need the .keyword subfield",
+        ],
       },
       {
         title: "OpenRouter returns 401",
-        checks: ["wrong key", "Secret not mounted", "newline in value", "wrong endpoint", "variable missing in pod"],
+        checks: [
+          "wrong key",
+          "Secret not mounted",
+          "newline in value",
+          "wrong endpoint",
+          "variable missing in pod",
+        ],
       },
     ],
   },
@@ -640,15 +989,15 @@ export const en = {
       scaling: "Scaling",
     },
     correlation: {
-      behavior: "same namespace + time window. Redis key is grp:namespace and field is fingerprint.",
-      risk: "independent incidents in one namespace can be grouped; cross-namespace cascades can be missed.",
-      recommended: "add topology, service catalog data, deployment correlation, traces or causal graph support when the project needs stronger grouping.",
+      behavior:
+        "The default uses namespace and a time window. Durable correlation and grouping by declared dependencies are separate opt-ins.",
+      risk: "Declared dependencies can become stale; ownership and placement do not prove causality. Missing data triggers a bounded fallback.",
+      recommended:
+        "Review declaration freshness and group membership. Enable new modes only after verifying an isolated candidate.",
       items: [
-        "No service dependency graph.",
-        "No semantic similarity.",
-        "No alert inhibition awareness.",
-        "No historical similarity search.",
-        "No ownership model beyond labels.",
+        "Declared-dependency traversal is limited to one hop.",
+        "Graph and manual regrouping are disabled by default.",
+        "Confirmed solutions and MCP require separate configuration.",
       ],
     },
     llmItems: [
@@ -659,55 +1008,50 @@ export const en = {
     ],
     llmCallout: { title: "Human decision" },
     storage: {
-      behavior: "incidents and alerts live in Redis — a single node, no replication or sentinel, 2 Gi disk, eviction disabled on purpose.",
+      behavior:
+        "incidents and alerts live in Redis — a single node, no replication or sentinel, 2 Gi disk, eviction disabled on purpose.",
       risk: "without Redis the backend keeps state in memory and any pod restart wipes the history; a full disk stops accepting new incidents rather than dropping old ones.",
-      recommended: "a real database for an archive and for training on past incidents.",
+      recommended:
+        "a real database for an archive and for training on past incidents.",
     },
     securityCallout: {
       title: "Sensitive data",
       body: "Sanitizer masks secrets, tokens and personal data before anything leaves the cluster, but it is a filter with rules, not a guarantee. Treat the model as an external party: do not widen enrichment to full configuration dumps or Kubernetes Secrets and expect masking to catch everything.",
     },
     security: {
-      behavior: "Basic/htpasswd remains the default. Opt-in session sign-in protects /api/ and /ws/ through nginx, and the backend retains the verified identity for the action log.",
+      behavior:
+        "Basic/htpasswd remains the default. Opt-in sign-in creates a server session: nginx checks access to /api/ and /ws/, and the backend restores the verified identity for the action log.",
       risk: "one shared account, no roles, no SSO, no per-user audit beyond that header.",
-      recommended: "put an authenticating proxy in front of the Ingress when the incident history needs real access control.",
+      recommended:
+        "put an authenticating proxy in front of the Ingress when the incident history needs real access control.",
     },
     scaling: [
       {
-        title: "Local timers",
-        behavior: "groupTimers is process-local; multiple Enricher replicas can schedule independent flushes for the same Redis key.",
-        recommended: "Use a distributed lock, queue or stream consumer.",
+        title: "Legacy and durable modes",
+        behavior:
+          "Legacy timers are process-local. Durable mode stores buffering and delivery state in Redis.",
+        recommended:
+          "Select the mode explicitly; drain older writers and queues before switching.",
       },
       {
-        title: "Redis group competition",
-        behavior: "HSet deduplicates by fingerprint, but flush reads and deletes the whole key.",
-        recommended: "Make flush idempotent and observable.",
+        title: "Redis without HA",
+        behavior:
+          "The bundled Redis is a single primary. History, queues and AI control depend on its availability and persistence.",
+        recommended: "Test backup restoration and define an archive policy.",
       },
       {
-        title: "Webhook redelivery",
-        behavior: "Fingerprint dedupe helps, but there is no full delivery idempotency contract.",
-        recommended: "Track processed alert/group IDs.",
-      },
-      {
-        title: "Rate limits",
-        behavior: "Telegram and LLM calls can be rate-limited under large storms.",
-        recommended: "Add queueing, backoff and rate controls.",
-      },
-      {
-        title: "Payload size",
-        behavior: "/incident-group reads up to 8 MiB; high-cardinality metrics and log excerpts can produce large prompts.",
-        recommended: "Cap metric series, lower LOGS_MAX_LINES and summarize before sending.",
-      },
-      {
-        title: "Cost",
-        behavior: "One LLM call per group can still be expensive during noisy incidents.",
-        recommended: "Budget model choice and max_tokens per environment.",
+        title: "Throughput and cost",
+        behavior:
+          "Telegram and provider limits, plus context size, constrain throughput.",
+        recommended:
+          "Bound context size and verify queues, retries and spending under load.",
       },
     ],
   },
   generator: {
     title: "Helm values generator",
-    description: "Secrets are not requested. Create a Kubernetes Secret separately and reference it with existingSecret.",
+    description:
+      "Secrets are not requested. Create a Kubernetes Secret separately and reference it with existingSecret.",
     umbrella: "values-incidentgpt.yaml",
     alertmanager: "Alertmanager snippet",
     fields: {

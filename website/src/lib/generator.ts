@@ -74,6 +74,8 @@ incidentgpt-sanitizer:
 
 incidentgpt-backend:
   enabled: true
+  readerAuth:
+    existingSecret: incidentgpt-reader
   image:
     repository: ${values.registry}/incidentgpt-backend
     tag: "${values.imageVersion}"
@@ -93,10 +95,6 @@ incidentgpt-ui:
     enabled: true
     className: nginx
     host: ${values.uiHost}
-  auth:
-    enabled: true
-    username: admin
-    existingSecret: incidentgpt-ui-auth
 
 incidentgpt-redis:
   enabled: true
