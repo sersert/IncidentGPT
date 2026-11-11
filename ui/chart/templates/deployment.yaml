@@ -1,3 +1,6 @@
+{{- if not (has .Values.authMode (list "basic" "session")) }}
+{{- fail "authMode must be basic or session" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,6 +27,16 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: AUTH_MODE
+              value: {{ .Values.authMode | quote }}
+            - name: AUTH_BASIC_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
+            - name: AUTH_REAL_IP_HEADER
+              value: {{ .Values.realIpHeader | quote }}
+            - name: AUTH_TRUSTED_PROXY_CIDRS
+              value: {{ join " " .Values.trustedProxyCIDRs | quote }}
+            - name: AUTH_LOGIN_BURST
+              value: {{ .Values.loginBurst | quote }}
             - name: NGINX_RESOLVER
               value: {{ .Values.dnsResolver | quote }}
             - name: BACKEND_URL
@@ -53,13 +66,13 @@ spec:
             limits:
               cpu: 100m
               memory: 64Mi
-          {{- if .Values.auth.enabled }}
+          {{- if and .Values.auth.enabled (eq .Values.authMode "basic") }}
           volumeMounts:
             - name: auth
               mountPath: /etc/nginx/secrets
               readOnly: true
           {{- end }}
-      {{- if .Values.auth.enabled }}
+      {{- if and .Values.auth.enabled (eq .Values.authMode "basic") }}
       volumes:
         - name: auth
           secret:

@@ -1,3 +1,7 @@
+# Браузерные сессии включаются вместе с incidentgpt-ui.authMode=session.
+browserSessions:
+  enabled: false
+
 replicaCount: 1
 
 image:
@@ -97,6 +101,9 @@ readerAuth:
 
 # Общий operational token — только из существующего Secret.
 operations:
+  # Не создаём политику на чужом получателе без отдельного согласования.
+  mcpNetworkPolicy:
+    enabled: false
   enabled: false
   existingSecret: ""
   tokenKey: operations-service-token

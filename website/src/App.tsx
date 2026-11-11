@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DocsSidebar } from "./components/DocsSidebar";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { MobileNavigation } from "./components/MobileNavigation";
 import { TableOfContents, type TocItem } from "./components/TableOfContents";
-import { getRouteByPath, routes, type PageId } from "./data/navigation";
+import {
+  buildRoute,
+  getRouteByPath,
+  parseRouteHash,
+  routes,
+  type PageId,
+} from "./data/navigation";
+import { readPreference, savePreference } from "./lib/preferences";
 import { detectInitialLanguage, translations } from "./i18n";
 import type { Language, ThemeMode, Translation } from "./i18n/types";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
@@ -19,28 +26,18 @@ import { WebUiPage } from "./pages/WebUiPage";
 
 type DocPageId = Exclude<PageId, "overview">;
 
-type ParsedHash = {
-  language: Language;
-  path: string;
-};
-
-function parseHash(fallbackLanguage: Language): ParsedHash {
-  const raw = window.location.hash.replace(/^#\/?/, "");
-  const [first = "", ...rest] = raw.split("/").filter(Boolean);
-  if (first === "ru" || first === "en") {
-    return { language: first, path: rest.join("/") };
-  }
-  return { language: fallbackLanguage, path: raw };
-}
-
 function getThemeFromStorage(): ThemeMode {
-  const stored = localStorage.getItem("incidentgpt-theme");
-  return stored === "dark" || stored === "light" || stored === "system" ? stored : "system";
+  const stored = readPreference("incidentgpt-theme");
+  return stored === "dark" || stored === "light" || stored === "system"
+    ? stored
+    : "system";
 }
 
 function resolveTheme(theme: ThemeMode): "dark" | "light" {
   if (theme === "system") {
-    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    return window.matchMedia("(prefers-color-scheme: light)").matches
+      ? "light"
+      : "dark";
   }
   return theme;
 }
@@ -140,19 +137,26 @@ function renderPage(page: PageId, t: Translation, language: Language) {
 }
 
 export default function App() {
-  const [language, setLanguageState] = useState<Language>(() => detectInitialLanguage());
-  const [theme, setThemeState] = useState<ThemeMode>(() => getThemeFromStorage());
+  const [language, setLanguageState] = useState<Language>(() =>
+    detectInitialLanguage(),
+  );
+  const [theme, setThemeState] = useState<ThemeMode>(() =>
+    getThemeFromStorage(),
+  );
   const [path, setPath] = useState("");
+  const [section, setSection] = useState("");
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const route = getRouteByPath(path);
   const t = translations[language];
 
   useEffect(() => {
     function syncHash() {
-      const parsed = parseHash(language);
+      const parsed = parseRouteHash(window.location.hash, language);
       setLanguageState(parsed.language);
       setPath(parsed.path);
-      localStorage.setItem("incidentgpt-language", parsed.language);
+      setSection(parsed.section);
+      savePreference("incidentgpt-language", parsed.language);
     }
     syncHash();
     window.addEventListener("hashchange", syncHash);
@@ -162,7 +166,9 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = language;
     document.title = t.meta.title;
-    const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const description = document.querySelector<HTMLMetaElement>(
+      'meta[name="description"]',
+    );
     if (description) {
       description.content = t.meta.description;
     }
@@ -173,16 +179,17 @@ export default function App() {
       document.documentElement.dataset.theme = resolveTheme(theme);
     };
     apply();
-    localStorage.setItem("incidentgpt-theme", theme);
+    savePreference("incidentgpt-theme", theme);
     const query = window.matchMedia("(prefers-color-scheme: light)");
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, [theme]);
 
   function setLanguage(next: Language) {
-    localStorage.setItem("incidentgpt-language", next);
-    const targetRoute = routes.find((item) => item.id === route.id) ?? routes[0];
-    window.location.hash = `/${next}${targetRoute.path ? `/${targetRoute.path}` : ""}`;
+    savePreference("incidentgpt-language", next);
+    const targetRoute =
+      routes.find((item) => item.id === route.id) ?? routes[0];
+    window.location.hash = buildRoute(next, targetRoute.path, section);
     setLanguageState(next);
   }
 
@@ -190,12 +197,22 @@ export default function App() {
     setThemeState(next);
   }
 
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (section)
+        document.getElementById(section)?.scrollIntoView({ block: "start", behavior: "instant" });
+      else window.scrollTo({ top: 0, behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [path, section]);
+
   const toc = useMemo(() => pageToc(route.id, t), [route.id, t]);
   const isHome = route.id === "overview";
   const docPage = isHome ? null : (route.id as DocPageId);
 
   return (
     <>
+      <a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById("main-content")?.focus(); }}>{t.common.skip}</a>
       <Header
         t={t}
         language={language}
@@ -204,9 +221,12 @@ export default function App() {
         onLanguageChange={setLanguage}
         onThemeChange={setTheme}
         onMenuOpen={() => setMenuOpen(true)}
+        menuButtonRef={menuButtonRef}
+        menuOpen={menuOpen}
       />
       <MobileNavigation
         open={menuOpen}
+        triggerRef={menuButtonRef}
         t={t}
         language={language}
         theme={theme}
@@ -215,23 +235,46 @@ export default function App() {
         onLanguageChange={setLanguage}
         onThemeChange={setTheme}
       />
-      <main className={isHome ? "home-main" : "docs-shell"}>
-        {!isHome ? <DocsSidebar t={t} language={language} activePage={route.id} /> : null}
+      <main id="main-content" tabIndex={-1} className={isHome ? "home-main" : "docs-shell"}>
+        {!isHome ? (
+          <DocsSidebar t={t} language={language} activePage={route.id} />
+        ) : null}
         <div className="content-column">
           {!isHome ? (
             <header className="page-header">
-              <p className="breadcrumbs">{t.common.breadcrumbsHome} / {t.navigation[route.id]}</p>
+              <p className="breadcrumbs">
+                {t.common.breadcrumbsHome} / {t.navigation[route.id]}
+              </p>
               <h1>{t.pages[docPage!].title}</h1>
               <p>{t.pages[docPage!].description}</p>
             </header>
           ) : null}
           {renderPage(route.id, t, language)}
         </div>
-        {!isHome && toc.length ? <TableOfContents items={toc} /> : null}
+        {!isHome && toc.length ? (
+          <TableOfContents
+            items={toc}
+            language={language}
+            path={path}
+            label={t.common.tableOfContents}
+          />
+        ) : null}
       </main>
-      <a className="back-to-top" href="#top">
+      <button
+        type="button"
+        className="back-to-top"
+        onClick={() =>
+          window.scrollTo({
+            top: 0,
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+              .matches
+              ? "instant"
+              : "smooth",
+          })
+        }
+      >
         {t.common.top}
-      </a>
+      </button>
       <Footer t={t} language={language} />
     </>
   );

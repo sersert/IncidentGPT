@@ -28,8 +28,22 @@ export const routes: Route[] = [
   { id: "limitations", path: "limitations" },
 ];
 
-export function buildRoute(language: Language, path: string): string {
-  return `#/${language}${path ? `/${path}` : ""}`;
+export function buildRoute(
+  language: Language,
+  path: string,
+  section?: string,
+): string {
+  return `#/${language}${path ? `/${path}` : ""}${section ? `?s=${encodeURIComponent(section)}` : ""}`;
+}
+
+export function parseRouteHash(hash: string, fallbackLanguage: Language) {
+  const raw = hash.replace(/^#\/?/, "");
+  const [route, query = ""] = raw.split("?", 2);
+  const [first = "", ...rest] = route.split("/").filter(Boolean);
+  const language: Language =
+    first === "ru" || first === "en" ? first : fallbackLanguage;
+  const path = first === "ru" || first === "en" ? rest.join("/") : route;
+  return { language, path, section: new URLSearchParams(query).get("s") ?? "" };
 }
 
 export function getRouteByPath(path: string): Route {

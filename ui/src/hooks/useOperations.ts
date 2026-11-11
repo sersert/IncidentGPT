@@ -11,5 +11,9 @@ export type OperationsStatus = {
   worker?: { managed?: boolean; control_known?: boolean; control?: { enabled?: boolean; revision?: number }; active_provider_requests?: number }
 }
 export function useOperations() {
-  return useQuery({ queryKey: ['operations'], queryFn: () => get<OperationsStatus>('/operations/status'), retry: false, refetchInterval: query => query.state.error instanceof ApiError && query.state.error.status === 404 ? false : 10_000, staleTime: 5_000 })
+  return useQuery({ queryKey: ['operations'], queryFn: () => get<OperationsStatus>('/operations/status'), retry: false, refetchInterval: query => {
+    const error = query.state.error
+    if (error instanceof ApiError && [401, 403, 404].includes(error.status)) return false
+    return error ? 60_000 : 10_000
+  }, staleTime: 5_000 })
 }

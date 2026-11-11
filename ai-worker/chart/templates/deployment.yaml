@@ -7,10 +7,10 @@
 {{- fail "evaluation requires 1-16 configured profiles" }}
 {{- end }}
 {{- end }}
-{{- if and .Values.operations.enabled (not .Values.operations.existingSecret) }}
+{{- if and (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) (not .Values.operations.existingSecret) }}
 {{- fail "operations requires existingSecret" }}
 {{- end }}
-{{- if and .Values.operations.enabled (not .Values.operations.controlURL) }}
+{{- if and (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) (not .Values.operations.controlURL) }}
 {{- fail "operations requires controlURL" }}
 {{- end }}
 {{- if and .Values.knowledgeMCP.enabled (not .Values.knowledgeMCP.existingSecret) }}
@@ -56,7 +56,7 @@ spec:
             - containerPort: 8080
               name: http
           env:
-            {{- if .Values.operations.enabled }}
+            {{- if (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) }}
             - name: AI_CONTROL_URL
               value: {{ .Values.operations.controlURL | quote }}
             - name: OPERATIONS_SERVICE_TOKEN

@@ -14,6 +14,7 @@ const snapshot = (enabled = true, revision = 1) => ({
 
 // Workspace is behind AuthGate (main): answer the session probe so /operations renders.
 test.beforeEach(async ({ page }) => {
+  await page.route('**/auth-config.json', route => route.fulfill({ json: { mode: 'session' } }))
   await page.route('**/api/v1/auth/session', route => route.fulfill({ json: { username: 'operator' } }))
 })
 

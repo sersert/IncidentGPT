@@ -22,7 +22,7 @@
 {{- end }}
 {{- end }}
 {{- end }}
-{{- if and .Values.operations.enabled (not .Values.operations.existingSecret) }}
+{{- if and (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) (not .Values.operations.existingSecret) }}
 {{- fail "operations requires existingSecret" }}
 {{- end }}
 apiVersion: apps/v1
@@ -57,7 +57,7 @@ spec:
             - containerPort: 9099
               name: http
           env:
-            {{- if .Values.operations.enabled }}
+            {{- if (or .Values.operations.enabled (dig "operations" "enabled" false (.Values.global | default dict))) }}
             - name: OPERATIONS_ENABLED
               value: "true"
             - name: OPERATIONS_SERVICE_TOKEN

@@ -99,7 +99,7 @@ func handleInvestigations(w http.ResponseWriter, r *http.Request) {
 		checks = []string{"pod_restarts", "logs"}
 	}
 	// Per-incident queue limit is set atomically below. No model chooses tools.
-	actor, _, _ := r.BasicAuth()
+	actor := verifiedActor(r)
 	aid, jid := newStableID("analysis"), newStableID("job")
 	op := &DiagnosticOperation{ID: jid, IncidentID: id, Actor: actor, Action: request.Action, Question: request.Question, Scope: scope, Checks: checks, Status: "queued", CreatedAt: time.Now().UTC(), EvidenceIDs: nil}
 	input := AnalysisInput{Version: 1, IncidentID: id, AnalysisID: aid, ClusterID: scope.ClusterID, JobKind: "diagnostics", Operation: op, Evidence: nil, Composition: incidentComposition(inc)}

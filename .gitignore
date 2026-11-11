@@ -50,3 +50,5 @@ Thumbs.db
 
 # Local Python verification caches
 __pycache__/
+/website/test-results/
+/website/playwright-report/

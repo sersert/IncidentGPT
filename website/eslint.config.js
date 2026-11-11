@@ -7,7 +7,8 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   { ignores: ["dist", "node_modules", "eslint.config.js"] },
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+  { files: ["public/**/*.js"], languageOptions: { globals: globals.browser } },
+  ...tseslint.configs.recommendedTypeChecked.map(config => ({ ...config, files: ["**/*.{ts,tsx}"] })),
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
