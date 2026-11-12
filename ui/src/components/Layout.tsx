@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { BookOpen, ChevronRight, Menu, X } from 'lucide-react'
-import { LogoutButton } from './AuthGate'
+import { LogoutButton, useAuthRole } from './AuthGate'
 import { ThemeToggle } from './ThemeToggle'
 import { Sidebar } from './Sidebar.tsx'
 import { useDashboardStats } from '@/hooks/useDashboard.ts'
@@ -22,6 +22,7 @@ export function Layout() {
   const { data: stats, isError } = useDashboardStats()
   const { data: predictions, isError: predictionsError } = usePredictions()
   const { pathname, hash } = useLocation()
+  const role = useAuthRole()
   const [menuOpen, setMenuOpen] = useState(false)
   const dialog = useRef<HTMLDialogElement>(null)
   const section = names[pathname.split('/')[1]] ?? 'Обзор'
@@ -108,6 +109,14 @@ export function Layout() {
             <span className="truncate text-text-primary">{section}</span>
           </nav>
           <div className="ml-auto flex items-center gap-1 sm:gap-3">
+            {role === 'viewer' && (
+              <span
+                title="Учётная запись только для просмотра: изменения отклоняются"
+                className="rounded-md border border-border-default px-2 py-1 text-[11px] text-text-muted"
+              >
+                Только просмотр
+              </span>
+            )}
             <ThemeToggle />
             <LogoutButton />
             <Link

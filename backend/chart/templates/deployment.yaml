@@ -88,7 +88,7 @@ spec:
             - name: BROWSER_SESSIONS_ENABLED
               value: {{ .Values.browserSessions.enabled | quote }}
             {{- range $key, $value := .Values.env }}
-            {{- if not (or (hasPrefix "OPERATIONS_" $key) (eq $key "BROWSER_SESSIONS_ENABLED") (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
+            {{- if not (or (hasPrefix "OPERATIONS_" $key) (eq $key "BROWSER_SESSIONS_ENABLED") (and (eq $key "TIMELINE_READ_USER") $.Values.readerAuth.existingSecret (not $.Values.changes.existingSecret)) (and (hasPrefix "VIEWER_" $key) $.Values.viewerAuth.existingSecret) (and (eq $key "SERVICE_GRAPH_FILE") $.Values.serviceGraph.existingConfigMap)) }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
@@ -105,6 +105,20 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.readerAuth.existingSecret }}
                   key: {{ .Values.readerAuth.passwordKey }}
+                  optional: false
+            {{- end }}
+            {{- if .Values.viewerAuth.existingSecret }}
+            - name: VIEWER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.viewerAuth.existingSecret }}
+                  key: {{ .Values.viewerAuth.usernameKey }}
+                  optional: false
+            - name: VIEWER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.viewerAuth.existingSecret }}
+                  key: {{ .Values.viewerAuth.passwordKey }}
                   optional: false
             {{- end }}
             {{- if .Values.serviceGraph.existingConfigMap }}

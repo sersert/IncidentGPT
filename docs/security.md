@@ -120,7 +120,9 @@ Deletion/archival must consider both. Read the [workflow-specific limits and rol
 
 `TIMELINE_READ_*` — историческое имя общей administrator-пары, а не отдельная
 read-only роль. Она авторизует новые graph/regroup/diagnostics API; разделения
-операторов и tenancy пока нет. Нельзя выдавать эти credentials как read-only.
+операторов и tenancy пока нет. Нельзя выдавать эти credentials как read-only; для
+просмотра есть отдельная пара `VIEWER_USER`/`VIEWER_PASSWORD` (`viewerAuth.existingSecret`):
+backend отклоняет её мутации `/api/` с 403, чтение — в том же объёме, что у administrator.
 Имя в audit берётся из проверенного Basic principal, включая восстановленный из сессии. `X-Auth-User` от прямого
 клиента не является доказательством другой личности и не может подменять actor.
 

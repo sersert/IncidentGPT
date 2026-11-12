@@ -48,6 +48,13 @@
 - Auth и audit читают verified principal из context; пароль в Authorization не копируется.
   UI и backend session-режима обновляются вместе. Basic-контракт и htpasswd сохранены.
 - Real IP доверяется только явно заданным CIDR ingress, пустой список — default.
+- Viewer (`VIEWER_USER`/`VIEWER_PASSWORD`, `viewerAuth.existingSecret`): вторая пара,
+  роль `viewer` в сессии (`role` в Redis-записи и в ответе auth/session) и в context
+  (`verifiedRoleKey`). `browserSessionMiddleware` отвечает 403 на любой не-GET/HEAD/OPTIONS
+  к `/api/` кроме `/api/v1/auth/session` — и для cookie, и для Basic с парой viewer.
+  Cookie viewer понижает роль при любом постороннем Authorization (nginx пропускает
+  такой запрос по cookie). `VIEWER_USER == TIMELINE_READ_USER` → viewer выключен.
+  Чтение идёт через `browserPrincipal` как у administrator. HMAC-proof viewer на его паре.
 
 ## 1. HTTP-маршруты и кто их закрывает
 
