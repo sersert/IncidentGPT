@@ -1662,6 +1662,9 @@ func intQuery(r *http.Request, key string, def int) int {
 // ── Router ──────────────────────────────────────────────────────────────────
 
 func backendHandler() http.Handler {
+	if viewerMisconfigured() {
+		log.Print("WARN: VIEWER_USER equals TIMELINE_READ_USER; viewer account disabled")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/auth/session", handleBrowserSession)
 	mux.HandleFunc("GET /api/v1/auth/check", handleBrowserAccess)

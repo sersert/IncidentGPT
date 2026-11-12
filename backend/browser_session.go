@@ -53,9 +53,20 @@ func credentialProofFor(token, role string) string {
 
 func roleCredentials(role string) (string, string) {
 	if role == roleViewer {
-		return env("VIEWER_USER", ""), env("VIEWER_PASSWORD", "")
+		user := env("VIEWER_USER", "")
+		// Одинаковые имена сделали бы audit неразличимым, а при равных паролях
+		// viewer молча стал бы administrator — такой viewer считается выключенным.
+		if user == "" || user == env("TIMELINE_READ_USER", "") {
+			return "", ""
+		}
+		return user, env("VIEWER_PASSWORD", "")
 	}
 	return env("TIMELINE_READ_USER", ""), env("TIMELINE_READ_PASSWORD", "")
+}
+
+func viewerMisconfigured() bool {
+	user := env("VIEWER_USER", "")
+	return user != "" && user == env("TIMELINE_READ_USER", "")
 }
 
 // browserCredentialRole сверяет пару с administrator, затем с viewer.
@@ -77,14 +88,14 @@ func viewerRequest(r *http.Request) bool {
 	return role == roleViewer
 }
 
-// Viewer не может ничего менять: любой не-GET запрос к API, кроме входа/выхода,
+// Viewer не может ничего менять: любой не-GET запрос к /api/, кроме входа/выхода,
 // отклоняется до обработчика. Старые API не проверяют логин сами, поэтому
 // граница именно здесь, а не в отдельных handler'ах.
 func viewerMutation(r *http.Request) bool {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 		return false
 	}
-	return r.URL.Path != "/api/v1/auth/session"
+	return strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/v1/auth/session"
 }
 
 func withVerifiedRole(r *http.Request, role string) *http.Request {
@@ -275,9 +286,18 @@ func handleBrowserSession(w http.ResponseWriter, r *http.Request) {
 // В контексте хранится только подтверждённое имя и роль, без пароля и нового
 // Basic заголовка. Сервисные Bearer/Basic запросы сохраняют прежний контракт;
 // Basic с парой viewer получает ту же read-only границу, что и его сессия.
+// Cookie viewer понижает роль при любом постороннем Authorization: nginx
+// пропускает такой запрос по cookie, и без этого заголовок Bearer обошёл бы 403
+// на маршрутах, которые сами логин не проверяют.
 func browserSessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if browserSessionsEnabled() && r.Header.Get("Authorization") == "" {
+		user, password, hasBasic := r.BasicAuth()
+		basicRole, basicValid := browserCredentialRole(user, password)
+		if hasBasic && basicValid {
+			if basicRole == roleViewer {
+				r = withVerifiedRole(r, roleViewer)
+			}
+		} else if browserSessionsEnabled() {
 			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			valid, role, err := loadBrowserSession(r.WithContext(ctx))
 			cancel()
@@ -285,15 +305,13 @@ func browserSessionMiddleware(next http.Handler) http.Handler {
 				http.Error(w, "session storage unavailable", 503)
 				return
 			}
-			if valid {
+			if valid && role == roleViewer {
+				r = withVerifiedRole(r, role)
+			} else if valid && r.Header.Get("Authorization") == "" {
 				if r.Method != "GET" && r.Method != "HEAD" && !trustedBrowserOrigin(r) {
 					http.Error(w, "trusted Origin required", 403)
 					return
 				}
-				r = withVerifiedRole(r, role)
-			}
-		} else if user, password, ok := r.BasicAuth(); ok {
-			if role, ok := browserCredentialRole(user, password); ok && role == roleViewer {
 				r = withVerifiedRole(r, role)
 			}
 		}

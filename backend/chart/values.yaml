@@ -101,7 +101,9 @@ readerAuth:
 
 # Необязательная вторая учётная запись «только просмотр»: читает всё, любые
 # мутации /api/ получают 403. Действует для session-входа и Basic-запросов к
-# backend; в режиме basic nginx её нужно добавить и в htpasswd.
+# backend; в режиме basic nginx её нужно добавить и в htpasswd с тем же паролем,
+# иначе пропущенный nginx пользователь считается administrator. Имя не должно
+# совпадать с TIMELINE_READ_USER — такой viewer выключается.
 viewerAuth:
   existingSecret: ""
   usernameKey: username

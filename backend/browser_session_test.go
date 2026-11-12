@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -184,14 +185,34 @@ func TestViewerRoleIsReadOnly(t *testing.T) {
 	if got := call("GET", "/api/v1/dashboard/stats", "", viewer, none); got.Code != 200 {
 		t.Fatalf("viewer read: %d", got.Code)
 	}
-	for _, mutation := range [][2]string{{"PATCH", "/api/v1/incidents/INC-1"}, {"PUT", "/api/v1/settings/llm"}, {"POST", "/api/v1/incidents/INC-1/investigations"}, {"PUT", "/api/v1/operations/ai-control"}} {
+	mutations := [][2]string{{"PATCH", "/api/v1/incidents/INC-1"}, {"POST", "/api/v1/incidents/INC-1/feedback"}, {"PUT", "/api/v1/settings/integrations/slack"}, {"PUT", "/api/v1/settings/llm"}, {"POST", "/api/v1/incidents/INC-1/investigations"}, {"PUT", "/api/v1/operations/ai-control"}}
+	for _, mutation := range mutations {
 		if got := call(mutation[0], mutation[1], `{}`, viewer, none); got.Code != 403 {
 			t.Fatalf("viewer session %s %s: %d", mutation[0], mutation[1], got.Code)
 		}
 		if got := call(mutation[0], mutation[1], `{}`, nil, [2]string{"view", "view-password"}); got.Code != 403 {
 			t.Fatalf("viewer basic %s %s: %d", mutation[0], mutation[1], got.Code)
 		}
+		// nginx пропускает cookie-запрос с любым Authorization; роль должна остаться viewer.
+		for _, header := range []string{"Bearer forged", "Basic " + base64.StdEncoding.EncodeToString([]byte("view:wrong"))} {
+			req := httptest.NewRequest(mutation[0], "https://preview.example"+mutation[1], strings.NewReader(`{}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", "https://preview.example")
+			req.Header.Set("Authorization", header)
+			req.AddCookie(viewer)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+			if response.Code != 403 {
+				t.Fatalf("viewer cookie with %q %s %s: %d", header, mutation[0], mutation[1], response.Code)
+			}
+		}
 	}
+	// Basic-режим без сессий: пара viewer всё равно read-only.
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "false")
+	if got := call("PATCH", "/api/v1/incidents/INC-1", `{}`, nil, [2]string{"view", "view-password"}); got.Code != 403 {
+		t.Fatalf("viewer basic without sessions: %d", got.Code)
+	}
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "true")
 	if got := call("GET", "/api/v1/auth/check", "", nil, [2]string{"view", "view-password"}); got.Code != 204 {
 		t.Fatalf("viewer basic access check: %d", got.Code)
 	}
@@ -222,6 +243,12 @@ func TestViewerRoleIsReadOnly(t *testing.T) {
 	t.Setenv("VIEWER_PASSWORD", "")
 	if got := call("POST", "/api/v1/auth/session", `{"username":"view","password":"view-password"}`, nil, none); got.Code != 401 {
 		t.Fatalf("viewer without password accepted: %d", got.Code)
+	}
+	// Совпадение имени с administrator выключает viewer, а не даёт полный доступ.
+	t.Setenv("VIEWER_USER", "operator")
+	t.Setenv("VIEWER_PASSWORD", "viewer-password")
+	if got := call("POST", "/api/v1/auth/session", `{"username":"operator","password":"viewer-password"}`, nil, none); got.Code != 401 {
+		t.Fatalf("viewer with administrator name accepted: %d", got.Code)
 	}
 }
 
