@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+- Вторая учётная запись «только просмотр»: `incidentgpt-backend.viewerAuth.existingSecret`
+  (`VIEWER_USER`/`VIEWER_PASSWORD`). Viewer читает всё, мутации `/api/` получают 403
+  в backend по cookie и по Basic; ответ `auth/session` получает additive поле `role`,
+  Redis-запись сессии — `role`. Без Secret поведение прежнее.
 - Opt-in model evaluation lab (`/evaluation`): immutable incident snapshots and
   engineer-authored cases, explicit comparison of 1–4 allowlisted model/prompt
   profiles, provider-reported usage and revisioned human assessments. Expected

@@ -175,6 +175,15 @@ Reader Secret содержит исходные `username` и `password` для 
 Umbrella-чарт отклоняет session без backend, включённого browserSessions и reader
 credentials. Сами значения ключей Secret проверит Kubernetes при запуске pod.
 
+Вторая учётная запись «только просмотр» — опционально: `incidentgpt-backend.viewerAuth.existingSecret`
+с ключами `username`/`password` (`VIEWER_USER`/`VIEWER_PASSWORD`). Viewer входит
+на той же странице, видит всё, что administrator, а любой не-GET запрос к `/api/`,
+кроме входа и выхода, получает 403 в backend — и по cookie, и по Basic. Ответ
+`/auth/session` содержит `role: "viewer"`, UI показывает «Только просмотр»; кнопки
+действий остаются, но их запросы отклоняются. В режиме basic viewer нужно добавить
+и в htpasswd nginx. Смена пароля viewer отзывает только его сессии. Это не разделение
+tenancy: viewer читает те же инциденты, настройки и evidence, что administrator.
+
 В session HTML/стили/скрипты публичны, `/api/` и `/ws/` закрыты `auth_request`.
 Случайная HttpOnly/Secure/SameSite=Strict cookie действует восемь часов. Пароль
 не записывается в браузер и не подставляется в Authorization внутренних запросов:

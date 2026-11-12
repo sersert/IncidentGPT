@@ -99,6 +99,14 @@ readerAuth:
   usernameKey: username
   passwordKey: password
 
+# Необязательная вторая учётная запись «только просмотр»: читает всё, любые
+# мутации /api/ получают 403. Действует для session-входа и Basic-запросов к
+# backend; в режиме basic nginx её нужно добавить и в htpasswd.
+viewerAuth:
+  existingSecret: ""
+  usernameKey: username
+  passwordKey: password
+
 # Общий operational token — только из существующего Secret.
 operations:
   # Не создаём политику на чужом получателе без отдельного согласования.

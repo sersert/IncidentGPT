@@ -72,6 +72,9 @@ incidentgpt-backend:
   # При внешнем htpasswd нужен отдельный Secret с исходными username/password.
   readerAuth:
     existingSecret: ""
+  # Вторая учётная запись «только просмотр» (username/password) — опционально.
+  viewerAuth:
+    existingSecret: ""
   image:
     repository: ghcr.io/sersert/incidentgpt-backend
     tag: "0.2.0"

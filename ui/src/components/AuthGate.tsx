@@ -14,11 +14,17 @@ import { BrandMark } from './BrandMark'
 
 type AuthMode = 'basic' | 'session'
 const AuthModeContext = createContext<AuthMode>('basic')
+// Роль из ответа backend: 'viewer' — только просмотр, мутации получают 403.
+const AuthRoleContext = createContext<string>('')
+export function useAuthRole() {
+  return useContext(AuthRoleContext)
+}
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const modeRef = useRef<AuthMode>('basic')
   const [mode, setMode] = useState<AuthMode>('basic')
+  const [role, setRole] = useState('')
   const [state, setState] = useState<'loading' | 'signed-out' | 'signed-in'>(
     'loading',
   )
@@ -55,6 +61,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
           signal: controller.signal,
           cache: 'no-store',
         })
+        if (response.ok)
+          setRole((await response.json().catch(() => ({}))).role ?? '')
         setState(response.ok ? 'signed-in' : 'signed-out')
       } catch {
         if (!controller.signal.aborted) {
@@ -90,6 +98,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         )
         return
       }
+      setRole((await response.json().catch(() => ({}))).role ?? '')
       setPassword('')
       setState('signed-in')
     } catch {
@@ -101,7 +110,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (state === 'signed-in')
     return (
       <AuthModeContext.Provider value={mode}>
-        {children}
+        <AuthRoleContext.Provider value={role}>{children}</AuthRoleContext.Provider>
       </AuthModeContext.Provider>
     )
   return (

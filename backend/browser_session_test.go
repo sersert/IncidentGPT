@@ -143,6 +143,88 @@ func TestConfiguredUnavailableRedisCannotUseMemorySessions(t *testing.T) {
 		t.Fatalf("Redis failure fell back to local sessions: %d", response.Code)
 	}
 }
+func TestViewerRoleIsReadOnly(t *testing.T) {
+	t.Setenv("BROWSER_SESSIONS_ENABLED", "true")
+	t.Setenv("REDIS_ADDR", "")
+	t.Setenv("TIMELINE_READ_USER", "operator")
+	t.Setenv("TIMELINE_READ_PASSWORD", "test-password")
+	t.Setenv("VIEWER_USER", "view")
+	t.Setenv("VIEWER_PASSWORD", "view-password")
+	old := store.disk
+	store.disk = nil
+	defer func() { store.disk = old }()
+	handler := backendHandler()
+	call := func(method, path, body string, cookie *http.Cookie, basic [2]string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, "https://preview.example"+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "https://preview.example")
+		if cookie != nil {
+			req.AddCookie(cookie)
+		}
+		if basic[0] != "" {
+			req.SetBasicAuth(basic[0], basic[1])
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	none := [2]string{}
+	login := call("POST", "/api/v1/auth/session", `{"username":"view","password":"view-password"}`, nil, none)
+	if login.Code != 200 || !strings.Contains(login.Body.String(), `"role":"viewer"`) {
+		t.Fatalf("viewer login: %d %s", login.Code, login.Body.String())
+	}
+	viewer := login.Result().Cookies()[0]
+	if got := call("GET", "/api/v1/auth/session", "", viewer, none); got.Code != 200 || !strings.Contains(got.Body.String(), `"username":"view"`) {
+		t.Fatalf("viewer session: %d %s", got.Code, got.Body.String())
+	}
+	if got := call("GET", "/api/v1/auth/check", "", viewer, none); got.Code != 204 {
+		t.Fatalf("viewer access check: %d", got.Code)
+	}
+	if got := call("GET", "/api/v1/dashboard/stats", "", viewer, none); got.Code != 200 {
+		t.Fatalf("viewer read: %d", got.Code)
+	}
+	for _, mutation := range [][2]string{{"PATCH", "/api/v1/incidents/INC-1"}, {"PUT", "/api/v1/settings/llm"}, {"POST", "/api/v1/incidents/INC-1/investigations"}, {"PUT", "/api/v1/operations/ai-control"}} {
+		if got := call(mutation[0], mutation[1], `{}`, viewer, none); got.Code != 403 {
+			t.Fatalf("viewer session %s %s: %d", mutation[0], mutation[1], got.Code)
+		}
+		if got := call(mutation[0], mutation[1], `{}`, nil, [2]string{"view", "view-password"}); got.Code != 403 {
+			t.Fatalf("viewer basic %s %s: %d", mutation[0], mutation[1], got.Code)
+		}
+	}
+	if got := call("GET", "/api/v1/auth/check", "", nil, [2]string{"view", "view-password"}); got.Code != 204 {
+		t.Fatalf("viewer basic access check: %d", got.Code)
+	}
+	probe := browserSessionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if verifiedActor(r) != "view" || !viewerRequest(r) || !changeReadAuth(w, r) {
+			t.Error("viewer principal or read access lost")
+		}
+	}))
+	request := httptest.NewRequest("GET", "https://preview.example/api/v1/incidents/INC-1/analyses", nil)
+	request.AddCookie(viewer)
+	probe.ServeHTTP(httptest.NewRecorder(), request)
+	// Administrator keeps mutations; viewer rotation revokes only viewer sessions.
+	admin := call("POST", "/api/v1/auth/session", `{"username":"operator","password":"test-password"}`, nil, none).Result().Cookies()[0]
+	if got := call("PATCH", "/api/v1/incidents/INC-1", `{}`, admin, none); got.Code == 403 {
+		t.Fatalf("administrator session blocked: %d", got.Code)
+	}
+	if got := call("DELETE", "/api/v1/auth/session", "", viewer, none); got.Code != 204 {
+		t.Fatalf("viewer logout: %d", got.Code)
+	}
+	viewer = call("POST", "/api/v1/auth/session", `{"username":"view","password":"view-password"}`, nil, none).Result().Cookies()[0]
+	t.Setenv("VIEWER_PASSWORD", "rotated")
+	if got := call("GET", "/api/v1/auth/session", "", viewer, none); got.Code != 401 {
+		t.Fatalf("viewer rotation did not revoke cookie: %d", got.Code)
+	}
+	if got := call("GET", "/api/v1/auth/session", "", admin, none); got.Code != 200 {
+		t.Fatalf("viewer rotation revoked administrator: %d", got.Code)
+	}
+	t.Setenv("VIEWER_PASSWORD", "")
+	if got := call("POST", "/api/v1/auth/session", `{"username":"view","password":"view-password"}`, nil, none); got.Code != 401 {
+		t.Fatalf("viewer without password accepted: %d", got.Code)
+	}
+}
+
 func TestSessionProofDependsOnCookieAndCredentialRotation(t *testing.T) {
 	t.Setenv("TIMELINE_READ_USER", "operator")
 	t.Setenv("TIMELINE_READ_PASSWORD", "test-password")
