@@ -18,7 +18,8 @@ export function formatTime(date: string): string {
 }
 
 export function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds} с`
+  // Среднее от backend приходит дробным (3.88454…) — секунды округляем, как и остальные ветки.
+  if (seconds < 60) return `${Math.round(seconds)} с`
   if (seconds < 3600) return `${Math.floor(seconds / 60)} мин`
   if (seconds < 86400) {
     const h = Math.floor(seconds / 3600)
